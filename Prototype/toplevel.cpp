@@ -23,6 +23,7 @@ class Vector {
 		uint8 mag();
 		void normalise();
 		void bound(uint8 n);
+		bool empty();
 
 		// FIXME: Not working
 		friend std::ostream& operator<<(std::ostream& os, const Vector& v);
@@ -56,9 +57,9 @@ class Boid {
 void setupEnvironment(uint32 *data);
 void calcNeighbours(Boid* b);
 uint8 calcDistance(Boid* b1, Boid* b2);
-Vector align(Boid* b);
-Vector group(Boid* b);
-Vector repel(Boid* b);
+Vector alignment(Boid* b);
+Vector cohesion(Boid* b);
+Vector separation(Boid* b);
 
 // Parameter string
 Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
@@ -105,7 +106,7 @@ void Vector::div(uint8 n) {
 }
 
 uint8 Vector::mag() {
-	return sqrt(double(x*x + y*y + z*z));
+	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
 }
 
 void Vector::normalise() {
@@ -118,6 +119,16 @@ void Vector::bound(uint8 n) {
 	if(x > n) x = n;
 	if(y > n) y = n;
 	if(z > n) z = n;
+}
+
+bool Vector::empty() {
+	bool result = true;
+
+	if(x) result = false;
+	else if(y) result = false;
+	else if(z) result = false;
+
+	return result;
 }
 
 //FIXME: Not currently working
@@ -175,13 +186,13 @@ void Boid::resetNeighbours() {
 }
 
 void Boid::updateVelocity(Vector newVelocity) {
-	std::cout << "Boid " << id << " changed velocity from [" << velocity.x <<
-		", " << velocity.y << ", " << velocity.z << "] to [";
+//	std::cout << "Boid " << id << " changed velocity from [" << velocity.x <<
+//		", " << velocity.y << ", " << velocity.z << "] to [";
 
 	velocity = newVelocity;
 
-	std::cout << velocity.x << ", " << velocity.y << ", " << velocity.z <<
-		"]" << std::endl;
+//	std::cout << velocity.x << ", " << velocity.y << ", " << velocity.z <<
+//		"]" << std::endl;
 }
 
 void Boid::updatePosition(Vector newPosition) {
@@ -225,13 +236,10 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 	// Setup the environment
 	setupEnvironment(paramData);
-//	for(int i = 0; i < paramData[0]; i++) {
-//		boidList[i]->printBoidInfo();
-//	}
 
 	// While....
 	uint8 loopCounter = 1;
-	uint8 loopLimit = 3;
+	uint8 loopLimit = 10;
 	while(loopCounter <= loopLimit) {
 		std::cout << "-" << loopCounter <<
 				"----------------------------------------------" << std::endl;
@@ -240,26 +248,36 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 			Boid* bob = boidList[b];
 			calcNeighbours(bob);
 
-			// Calculate the modifications to the boid
-			Vector alignMod = align(bob);
-			Vector groupMod = group(bob);
-			Vector repelMod = repel(bob);
+			// If the boid has any neighbours calculate the modifications to
+			// the boid's position and velocity
+			if(bob->getNeighbourCount() > 0) {
+				Vector alignMod = alignment(bob);
+				Vector groupMod = cohesion(bob);
+				Vector repelMod = separation(bob);
 
-			// Cap values and apply the modifications
-			Vector totalMod;
-			totalMod.add(alignMod);
-			totalMod.add(groupMod);
-			totalMod.add(repelMod);
+				// Cap values and apply the modifications
+				Vector totalMod;
+				totalMod.add(alignMod);
+				totalMod.add(groupMod);
+				totalMod.add(repelMod);
 
-			//TODO: Should this be here or in each function?
-			totalMod.bound(MAXSPEED);
+				if(!totalMod.empty()) {
+					//TODO: Should this be here or in each function?
+					totalMod.bound(MAXSPEED);
 
-			bob->updateVelocity(totalMod);
-			bob->updatePosition(totalMod);
-			bob->resetNeighbours();
+					bob->updateVelocity(totalMod);
+					bob->updatePosition(totalMod);
+				}
+
+				bob->resetNeighbours();
+			}
 		}
 
 		loopCounter++;
+	}
+
+	for(int i = 0; i < paramData[0]; i++) {
+		boidList[i]->printBoidInfo();
 	}
 }
 
@@ -332,13 +350,18 @@ uint8 calcDistance(Boid* b1, Boid* b2) {
 }
 
 /**
- * Iterate through a boid's neighbours, summing their velocities. Then divide
- * by the number of neighbours and normalise.
+ * Alignment: iterate through a boid's neighbours, summing their velocities.
+ * Then divide by the number of neighbours and normalise.
+ *
+ * 1) Search for neighbouring boids
+ * 2) Average the velocity of these boids
+ * 3) The steering vector is the difference between the average and the current
+ * 		boid's velocity
  */
-Vector align(Boid* b) {
+Vector alignment(Boid* b) {
 	Vector alignment;
 	for (int i = 0; i < b->getNeighbourCount(); i++) {
-		alignment.add(boidList[b->getNeighbour(i)]->getVelocity());
+		alignment.add(boidList[(b->getNeighbour(i)) - 1]->getVelocity());
 	}
 
 	alignment.div(b->getNeighbourCount());
@@ -349,11 +372,15 @@ Vector align(Boid* b) {
 /**
  * Cohesion: causes the boids to steer towards one another. Sum the position of
  * all the neighbouring boids, divide by neighbour count, process and normalise.
+ *
+ * 1) Search for neighbouring boids
+ * 2) Compute the average position of these boids
+ * 3) Subtract the current boid position from the average
  */
-Vector group(Boid* b) {
+Vector cohesion(Boid* b) {
 	Vector cohesion;
 	for (int i = 0; i < b->getNeighbourCount(); i++) {
-		cohesion.add(boidList[b->getNeighbour(i)]->getPosition());
+		cohesion.add(boidList[(b->getNeighbour(i)) - 1]->getPosition());
 	}
 
 	cohesion.div(b->getNeighbourCount());
@@ -366,12 +393,19 @@ Vector group(Boid* b) {
  * Separation: causes the boid to steer away from its neighbours, i.e. it needs
  * to be close, but not too close. The distance between neighbouring boids is
  * added to the computation vector
+ *
+ * 1) Search for neighbouring boids
+ * 2) For each neighbouring boid:
+ * 	a) Subtract the position of the current boid and the neighbouring boid
+ * 	b) Normalise
+ * 	c) Apply a 1/r weighting (the position offset vector scaled by 1/r^2)
+ * 3) Sum these values to produce the overall steering force
  */
-Vector repel(Boid* b) {
+Vector separation(Boid* b) {
 	Vector separation;
 	Vector dist;
 	for (int i = 0; i < b->getNeighbourCount(); i++) {
-		dist = boidList[b->getNeighbour(i)]->getPosition();
+		dist = boidList[(b->getNeighbour(i)) - 1]->getPosition();
 		dist.sub(b->getPosition());
 		separation.add(dist);
 	}
