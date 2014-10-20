@@ -1,23 +1,21 @@
 #include "toplevel.h"
 
-#define PARAMLEN 3
-#define DIMENSIONS 3
-
+#define MAXPARAMCOUNT 20
 #define MAXBOIDS 10
 #define MAXNEIGHBOURS 20
 
 #define VISIONRADIUS 3
-#define MAXSPEED 3
+#define MAXSPEED 5
 
 // Class
 class Vector {
 	public:
-		uint8 x;
-		uint8 y;
-		uint8 z;
+		int8 x;
+		int8 y;
+		int8 z;
 
 		Vector();
-		Vector(uint8 x_, uint8 y_, uint8 z_);
+		Vector(int8 x_, int8 y_, int8 z_);
 		void add(Vector v);
 		void sub(Vector v);
 		void mul(uint8 n);
@@ -49,6 +47,7 @@ class Boid {
 		void updateVelocity(Vector newVelocity);
 		void updatePosition(Vector newPosition);
 		void addNeighbour(uint8 neighbourID);
+		void resetNeighbours();
 
 		void printBoidInfo();
 };
@@ -62,7 +61,6 @@ Vector group(Boid* b);
 Vector repel(Boid* b);
 
 // Parameter string
-uint32 paramData[PARAMLEN];
 Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
 Boid* neighbours[MAXNEIGHBOURS];
 
@@ -74,7 +72,7 @@ Vector::Vector() {
 	z = 0;
 }
 
-Vector::Vector(uint8 x_, uint8 y_, uint8 z_) {
+Vector::Vector(int8 x_, int8 y_, int8 z_) {
 	x = x_;
 	y = y_;
 	z = z_;
@@ -116,7 +114,10 @@ void Vector::normalise() {
 }
 
 void Vector::bound(uint8 n) {
-	//TODO: Bound the speed somehow
+	//TODO: The is technically not binding the speed, which is the magnitude
+	if(x > n) x = n;
+	if(y > n) y = n;
+	if(z > n) z = n;
 }
 
 //FIXME: Not currently working
@@ -169,11 +170,15 @@ void Boid::addNeighbour(uint8 neighbourID) {
 	nCount++;
 }
 
+void Boid::resetNeighbours() {
+	nCount = 0;
+}
+
 void Boid::updateVelocity(Vector newVelocity) {
 	std::cout << "Boid " << id << " changed velocity from [" << velocity.x <<
 		", " << velocity.y << ", " << velocity.z << "] to [";
 
-	velocity.add(newVelocity);
+	velocity = newVelocity;
 
 	std::cout << velocity.x << ", " << velocity.y << ", " << velocity.z <<
 		"]" << std::endl;
@@ -211,18 +216,25 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
 	// Read in parameter string
-	paramloop: for(int i = 0; i < PARAMLEN; i++) {
+	uint8 paramCount = input.read();
+	uint32 paramData[MAXPARAMCOUNT];
+
+	paramloop: for(int i = 0; i < paramCount; i++) {
 		paramData[i] = input.read();
 	}
 
 	// Setup the environment
 	setupEnvironment(paramData);
-	for(int i = 0; i < paramData[0]; i++) {
-		boidList[i]->printBoidInfo();
-	}
+//	for(int i = 0; i < paramData[0]; i++) {
+//		boidList[i]->printBoidInfo();
+//	}
 
 	// While....
-//	while(1) {
+	uint8 loopCounter = 1;
+	uint8 loopLimit = 3;
+	while(loopCounter <= loopLimit) {
+		std::cout << "-" << loopCounter <<
+				"----------------------------------------------" << std::endl;
 		for(uint8 b = 0; b < MAXBOIDS; b++) {
 			// Calculate the boid's neighbours
 			Boid* bob = boidList[b];
@@ -239,14 +251,16 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 			totalMod.add(groupMod);
 			totalMod.add(repelMod);
 
+			//TODO: Should this be here or in each function?
 			totalMod.bound(MAXSPEED);
 
 			bob->updateVelocity(totalMod);
-
-//			totalMod.add(bob->getVelocity());
-//			bob->updatePosition(totalMod);
+			bob->updatePosition(totalMod);
+			bob->resetNeighbours();
 		}
-//	}
+
+		loopCounter++;
+	}
 }
 
 void setupEnvironment(uint32 *data) {
@@ -261,16 +275,25 @@ void setupEnvironment(uint32 *data) {
 //		boidList[i]->printBoidInfo();
 //	}
 
-	boidList[0] = new Boid(Vector(2,13,0), Vector(1,1,0), 1);
-	boidList[1] = new Boid(Vector(6,12,0), Vector(0,1,0), 2);
-	boidList[2] = new Boid(Vector(5,10,0), Vector(1,0,0), 3);
-	boidList[3] = new Boid(Vector(9,8,0), Vector(2,0,0), 4);
-	boidList[4] = new Boid(Vector(8,7,0), Vector(2,2,0), 5);
-	boidList[5] = new Boid(Vector(7,5,0), Vector(2,1,0), 6);
-	boidList[6] = new Boid(Vector(11,6,0), Vector(1,0,0), 7);
-	boidList[7] = new Boid(Vector(10,5,0), Vector(1,2,0), 8);
-	boidList[8] = new Boid(Vector(11,4,0), Vector(1,2,0), 9);
-	boidList[9] = new Boid(Vector(4,3,0), Vector(1,1,0), 10);
+	// Boids can have no initial velocity as the attraction and repulsion rules
+	// will provide initial velocities
+	Vector initVel = Vector(0, 0, 0);
+
+	boidList[0] = new Boid(Vector(2,13,0), initVel, 1);
+	boidList[1] = new Boid(Vector(6,12,0), initVel, 2);
+	boidList[2] = new Boid(Vector(5,10,0), initVel, 3);
+	boidList[3] = new Boid(Vector(9,8,0), initVel, 4);
+	boidList[4] = new Boid(Vector(8,7,0), initVel, 5);
+	boidList[5] = new Boid(Vector(7,5,0), initVel, 6);
+	boidList[6] = new Boid(Vector(11,6,0), initVel, 7);
+	boidList[7] = new Boid(Vector(10,5,0), initVel, 8);
+	boidList[8] = new Boid(Vector(11,4,0), initVel, 9);
+	boidList[9] = new Boid(Vector(4,3,0), initVel, 10);
+
+	std::cout << "===============================================" << std::endl;
+	std::cout << data[0] << " boids initialised in grid of size " << data[1] <<
+		" by " << data[2] << std::endl;
+	std::cout << "===============================================" << std::endl;
 }
 
 void calcNeighbours(Boid* b) {
@@ -287,7 +310,8 @@ void calcNeighbours(Boid* b) {
 	}
 
 	// Display neighbouring boids
-	std::cout << "Boid " << b->getID() << " has neighbours: ";
+	std::cout << "Boid " << b->getID() << " has " << b->getNeighbourCount() <<
+		" neighbours: ";
 	for (int i = 0; i < b->getNeighbourCount(); i++) {
 		std::cout << b->getNeighbour(i) << ", ";
 	}

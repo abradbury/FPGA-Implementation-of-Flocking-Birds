@@ -1,16 +1,19 @@
 #include "toplevel.h"
 
-#define PARAMLEN 3
+#define PARAMCOUNT 3
 
 int main() {
     hls::stream<uint32> to_hw, from_hw;
 
     ///////////////////////////////////
     // Number of boids, grid width, grid height
-    uint32 paramData[PARAMLEN] = {10, 15, 15};
+    uint32 paramData[] = {10, 15, 15};
 
-    // Write parameter data
-	for(int i = 0; i < PARAMLEN; i++) {
+    // Write the number of parameters
+    to_hw.write(PARAMCOUNT);
+
+    // Then write the parameters themselves
+	for(int i = 0; i < PARAMCOUNT; i++) {
 		to_hw.write(paramData[i]);
 	}
 

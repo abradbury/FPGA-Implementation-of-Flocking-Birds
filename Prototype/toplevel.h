@@ -11,6 +11,7 @@ typedef ap_uint<32> uint32;
 typedef ap_int<32> int32;
 
 typedef ap_uint<8> uint8;
+typedef ap_int<8> int8;
 
 //Prototypes
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
