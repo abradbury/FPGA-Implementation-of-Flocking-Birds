@@ -13,6 +13,8 @@ class Vector {
 		int8 x;
 		int8 y;
 		int8 z;
+		// FIXME: Perhaps the boids are not working because the values are all
+		//  having to be rounded to ints?
 
 		Vector();
 		Vector(int8 x_, int8 y_, int8 z_);
@@ -45,11 +47,12 @@ class Boid {
 		uint8 getNeighbour(uint8 neighbourID);
 		uint8 getNeighbourCount();
 
-		void updateVelocity(Vector newVelocity);
-		void updatePosition(Vector newPosition);
+		void setVelocity(Vector newVelocity);
+		void update(Vector velocity);
 		void addNeighbour(uint8 neighbourID);
 		void resetNeighbours();
 
+		void draw();
 		void printBoidInfo();
 };
 
@@ -148,6 +151,10 @@ Boid::Boid(Vector pos, Vector vel, uint8 id_) {
 	nCount = 0;
 }
 
+//Boid::Boid() {
+//	//TODO: Implement random functionality for initial params
+//}
+
 // Getters /////////////////////////////////////////////////////////////////////
 uint8 Boid::getID () {
 	int i = 0;
@@ -185,7 +192,7 @@ void Boid::resetNeighbours() {
 	nCount = 0;
 }
 
-void Boid::updateVelocity(Vector newVelocity) {
+void Boid::setVelocity(Vector newVelocity) {
 //	std::cout << "Boid " << id << " changed velocity from [" << velocity.x <<
 //		", " << velocity.y << ", " << velocity.z << "] to [";
 
@@ -195,17 +202,22 @@ void Boid::updateVelocity(Vector newVelocity) {
 //		"]" << std::endl;
 }
 
-void Boid::updatePosition(Vector newPosition) {
+void Boid::update(Vector velocity) {
 	std::cout << "Boid " << id << " moved from [" << position.x << ", " <<
 		position.y << ", " << position.z << "] to [";
 
-	position.add(newPosition);
+	position.add(velocity);
 
 	std::cout << position.x << ", " << position.y << ", " << position.z <<
 		"]" << std::endl;
 }
 
 // Other ///////////////////////////////////////////////////////////////////////
+void Boid::draw() {
+	//TODO: Implement draw routine
+	//TODO: Only use in inefficient version, drawing should be done elsewhere
+}
+
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
 	std::cout << "Boid Velocity: [" << velocity.x << ", " << velocity.y <<
@@ -239,7 +251,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 	// While....
 	uint8 loopCounter = 1;
-	uint8 loopLimit = 10;
+	uint8 loopLimit = 30;
 	while(loopCounter <= loopLimit) {
 		std::cout << "-" << loopCounter <<
 				"----------------------------------------------" << std::endl;
@@ -265,8 +277,9 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 					//TODO: Should this be here or in each function?
 					totalMod.bound(MAXSPEED);
 
-					bob->updateVelocity(totalMod);
-					bob->updatePosition(totalMod);
+					bob->setVelocity(totalMod);
+					bob->update(totalMod);
+					bob->draw();
 				}
 
 				bob->resetNeighbours();
@@ -328,12 +341,12 @@ void calcNeighbours(Boid* b) {
 	}
 
 	// Display neighbouring boids
-	std::cout << "Boid " << b->getID() << " has " << b->getNeighbourCount() <<
-		" neighbours: ";
-	for (int i = 0; i < b->getNeighbourCount(); i++) {
-		std::cout << b->getNeighbour(i) << ", ";
-	}
-	std::endl (std::cout);
+//	std::cout << "Boid " << b->getID() << " has " << b->getNeighbourCount() <<
+//		" neighbours: ";
+//	for (int i = 0; i < b->getNeighbourCount(); i++) {
+//		std::cout << b->getNeighbour(i) << ", ";
+//	}
+//	std::endl (std::cout);
 }
 
 /**
