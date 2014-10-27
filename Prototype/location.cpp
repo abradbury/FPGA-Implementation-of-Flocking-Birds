@@ -7,7 +7,7 @@
 #define VISIONRADIUS 3
 #define MAXSPEED 5
 
-// Class Definitions ===========================================================
+// Class Headers ===============================================================
 class Vector {
 	public:
 		int8 x;
@@ -57,7 +57,15 @@ class Boid {
 //==============================================================================
 
 
-// Prototypes ==================================================================
+// Function Headers ============================================================
+void sendPingReply();
+void initialise(uint32 *data);
+
+void calcNextBoidPositions();
+
+void sendLoadInfo();
+
+
 void setupEnvironment(uint32 *data);
 void calcNeighbours(Boid* b);
 uint8 calcDistance(Vector p1, Vector p2);
@@ -72,7 +80,7 @@ uint8 boidCount;
 //==============================================================================
 
 
-// Class Details ===============================================================
+// Classes =====================================================================
 // Constructors ////////////////////////////////////////////////////////////////
 Vector::Vector() {
 	x = 0;
