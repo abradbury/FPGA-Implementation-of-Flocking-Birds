@@ -13,11 +13,10 @@ class Vector {
 		int8 x;
 		int8 y;
 		int8 z;
-		// FIXME: Perhaps the boids are not working because the values are all
-		//  having to be rounded to ints?
 
 		Vector();
 		Vector(int8 x_, int8 y_, int8 z_);
+
 		void add(Vector v);
 		void sub(Vector v);
 		void mul(uint8 n);
@@ -27,7 +26,7 @@ class Vector {
 		void bound(uint8 n);
 		bool empty();
 
-		// FIXME: Not working
+		// TODO: Is this needed?
 		friend std::ostream& operator<<(std::ostream& os, const Vector& v);
 };
 
@@ -59,7 +58,7 @@ class Boid {
 //Prototypes
 void setupEnvironment(uint32 *data);
 void calcNeighbours(Boid* b);
-uint8 calcDistance(Boid* b1, Boid* b2);
+uint8 calcDistance(Vector p1, Vector p2);
 Vector alignment(Boid* b);
 Vector cohesion(Boid* b);
 Vector separation(Boid* b);
@@ -67,6 +66,7 @@ Vector separation(Boid* b);
 // Parameter string
 Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
 Boid* neighbours[MAXNEIGHBOURS];
+uint8 boidCount;
 
 //==============================================================================
 //==============================================================================
@@ -134,10 +134,8 @@ bool Vector::empty() {
 	return result;
 }
 
-//FIXME: Not currently working
-std::ostream& operator<<(std::ostream& os, const Vector& v)
-{
-    os << v.x << ', ' << v.y << ', ' << v.z;
+std::ostream& operator <<(std::ostream& os, const Vector& v) {
+	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
     return os;
 }
 
@@ -193,23 +191,15 @@ void Boid::resetNeighbours() {
 }
 
 void Boid::setVelocity(Vector newVelocity) {
-//	std::cout << "Boid " << id << " changed velocity from [" << velocity.x <<
-//		", " << velocity.y << ", " << velocity.z << "] to [";
-
+//	std::cout << "Boid " << id << " changed velocity from " << velocity << " to ";
 	velocity = newVelocity;
-
-//	std::cout << velocity.x << ", " << velocity.y << ", " << velocity.z <<
-//		"]" << std::endl;
+//	std::cout << velocity << std::endl;
 }
 
 void Boid::update(Vector velocity) {
-	std::cout << "Boid " << id << " moved from [" << position.x << ", " <<
-		position.y << ", " << position.z << "] to [";
-
+	std::cout << "Boid " << id << " moved from " << position << " to ";
 	position.add(velocity);
-
-	std::cout << position.x << ", " << position.y << ", " << position.z <<
-		"]" << std::endl;
+	std::cout << position << std::endl;
 }
 
 // Other ///////////////////////////////////////////////////////////////////////
@@ -220,10 +210,8 @@ void Boid::draw() {
 
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
-	std::cout << "Boid Velocity: [" << velocity.x << ", " << velocity.y <<
-			", " << velocity.z << "]" << std::endl;
-	std::cout << "Boid Position: [" << position.x << ", " << position.y <<
-			", " << position.z << "]" << std::endl;
+	std::cout << "Boid Velocity: " << velocity << std::endl;
+	std::cout << "Boid Position: " << position << std::endl;
 	std::cout << "===================================" << std::endl;
 }
 //==============================================================================
@@ -251,11 +239,11 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 	// While....
 	uint8 loopCounter = 1;
-	uint8 loopLimit = 30;
+	uint8 loopLimit = 3;
 	while(loopCounter <= loopLimit) {
 		std::cout << "-" << loopCounter <<
 				"----------------------------------------------" << std::endl;
-		for(uint8 b = 0; b < MAXBOIDS; b++) {
+		for(uint8 b = 0; b < boidCount; b++) {
 			// Calculate the boid's neighbours
 			Boid* bob = boidList[b];
 			calcNeighbours(bob);
@@ -306,20 +294,29 @@ void setupEnvironment(uint32 *data) {
 //		boidList[i]->printBoidInfo();
 //	}
 
+//	boidCount = MAXBOIDS;
+	boidCount = 3;
+
 	// Boids can have no initial velocity as the attraction and repulsion rules
 	// will provide initial velocities
 	Vector initVel = Vector(0, 0, 0);
+	Vector altInitVel = Vector(-2, -4, 0);
+	// Boids 2 and 3 did not move as their attraction and repulsion cancelled
+	// each other out. Hence, a different initially velocity was needed and now
+	// they just fly parallel to each other.
 
 	boidList[0] = new Boid(Vector(2,13,0), initVel, 1);
 	boidList[1] = new Boid(Vector(6,12,0), initVel, 2);
-	boidList[2] = new Boid(Vector(5,10,0), initVel, 3);
-	boidList[3] = new Boid(Vector(9,8,0), initVel, 4);
-	boidList[4] = new Boid(Vector(8,7,0), initVel, 5);
-	boidList[5] = new Boid(Vector(7,5,0), initVel, 6);
-	boidList[6] = new Boid(Vector(11,6,0), initVel, 7);
-	boidList[7] = new Boid(Vector(10,5,0), initVel, 8);
-	boidList[8] = new Boid(Vector(11,4,0), initVel, 9);
-	boidList[9] = new Boid(Vector(4,3,0), initVel, 10);
+	boidList[2] = new Boid(Vector(5,10,0), altInitVel, 3);
+//	boidList[3] = new Boid(Vector(9,8,0), initVel, 4);
+//	boidList[4] = new Boid(Vector(8,7,0), initVel, 5);
+//	boidList[5] = new Boid(Vector(7,5,0), initVel, 6);
+//	boidList[6] = new Boid(Vector(11,6,0), initVel, 7);
+//	boidList[7] = new Boid(Vector(10,5,0), initVel, 8);
+//	boidList[8] = new Boid(Vector(11,4,0), initVel, 9);
+//	boidList[9] = new Boid(Vector(4,3,0), initVel, 10);
+
+
 
 	std::cout << "===============================================" << std::endl;
 	std::cout << data[0] << " boids initialised in grid of size " << data[1] <<
@@ -329,16 +326,31 @@ void setupEnvironment(uint32 *data) {
 
 void calcNeighbours(Boid* b) {
 	// For each boid
-	for (uint i = 0; i < MAXBOIDS; i++) {
+	for (uint i = 0; i < boidCount; i++) {
 		// If the boid is not us
 		if(boidList[i]->getID() != b->getID()) {
-			uint8 dist = calcDistance(b, boidList[i]);
+			uint8 dist = calcDistance(b->getPosition(), boidList[i]->getPosition());
 			// If the boid is within the vision radius, it is a neighbour
 			if(dist < VISIONRADIUS) {
 				b->addNeighbour(boidList[i]->getID());
 			}
 		}
 	}
+
+	// Calculate obstacles
+	// TODO: Determine suitable way of representing obstacles
+	// TODO: Overhaul neighbour list to hold both boids and obstacles
+//	Vector obtacles[] = {Vector(1,-2,0), Vector(2,-2,0), Vector(3,-2,0),
+//		Vector(4,-2,0), Vector(5,-2,0), Vector(6,-2,0), Vector(7,-2,0),
+//		Vector(8,-2,0), Vector(9,-2,0), Vector(10,-2,0)};
+//
+//	for (uint i = 0; i < 9; i++) {
+//		uint8 dist = calcDistance(b->getPosition(), obtacles[i]);
+//		// If the obstacle is within the vision radius, it is a neighbour
+//		if(dist < VISIONRADIUS) {
+//			b->addNeighbour(boidList[i]->getID());
+//		}
+//	}
 
 	// Display neighbouring boids
 //	std::cout << "Boid " << b->getID() << " has " << b->getNeighbourCount() <<
@@ -350,12 +362,13 @@ void calcNeighbours(Boid* b) {
 }
 
 /**
- * Calculates the Euclidean distance between two boids
+ * Calculates the Euclidean distance between two vectors
+ * TODO: Should be moved to Vector class?
  */
-uint8 calcDistance(Boid* b1, Boid* b2) {
-	double xs = pow(double(b1->getPosition().x - b2->getPosition().x), 2);
-	double ys = pow(double(b1->getPosition().y - b2->getPosition().y), 2);
-	double zs = pow(double(b1->getPosition().z - b2->getPosition().z), 2);
+uint8 calcDistance(Vector p1, Vector p2) {
+	double xs = pow(double(p1.x - p2.x), 2);
+	double ys = pow(double(p1.y - p2.y), 2);
+	double zs = pow(double(p1.z - p2.z), 2);
 
 	double dist = sqrt(xs + ys + zs);
 
