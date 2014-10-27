@@ -1,4 +1,4 @@
-#include "toplevel.h"
+#include "location.h"
 
 #define MAXPARAMCOUNT 20
 #define MAXBOIDS 10
@@ -7,7 +7,7 @@
 #define VISIONRADIUS 3
 #define MAXSPEED 5
 
-// Class
+// Class Definitions ===========================================================
 class Vector {
 	public:
 		int8 x;
@@ -54,8 +54,10 @@ class Boid {
 		void draw();
 		void printBoidInfo();
 };
+//==============================================================================
 
-//Prototypes
+
+// Prototypes ==================================================================
 void setupEnvironment(uint32 *data);
 void calcNeighbours(Boid* b);
 uint8 calcDistance(Vector p1, Vector p2);
@@ -67,9 +69,11 @@ Vector separation(Boid* b);
 Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
 Boid* neighbours[MAXNEIGHBOURS];
 uint8 boidCount;
+//==============================================================================
 
-//==============================================================================
-//==============================================================================
+
+// Class Details ===============================================================
+// Constructors ////////////////////////////////////////////////////////////////
 Vector::Vector() {
 	x = 0;
 	y = 0;
@@ -82,6 +86,7 @@ Vector::Vector(int8 x_, int8 y_, int8 z_) {
 	z = z_;
 }
 
+// Basic Operations ////////////////////////////////////////////////////////////
 void Vector::add(Vector v) {
 	x = x + v.x;
 	y = y + v.y;
@@ -108,6 +113,7 @@ void Vector::div(uint8 n) {
 	}
 }
 
+// Advanced Operations /////////////////////////////////////////////////////////
 uint8 Vector::mag() {
 	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
 }
@@ -134,14 +140,15 @@ bool Vector::empty() {
 	return result;
 }
 
+// Other ///////////////////////////////////////////////////////////////////////
 std::ostream& operator <<(std::ostream& os, const Vector& v) {
 	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
     return os;
 }
 
 
-//==============================================================================
-// Constructor /////////////////////////////////////////////////////////////////
+// -----------------------------------------------------------------------------
+// Constructors ////////////////////////////////////////////////////////////////
 Boid::Boid(Vector pos, Vector vel, uint8 id_) {
 	position = pos;
 	velocity = vel;
@@ -215,10 +222,9 @@ void Boid::printBoidInfo() {
 	std::cout << "===================================" << std::endl;
 }
 //==============================================================================
-//==============================================================================
 
 
-//Top-level function
+// Functions ===================================================================
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port=input
 #pragma HLS INTERFACE ap_fifo port=output
@@ -441,4 +447,4 @@ Vector separation(Boid* b) {
 	separation.normalise();
 	return separation;
 }
-
+//==============================================================================
