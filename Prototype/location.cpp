@@ -1,8 +1,19 @@
 #include "location.h"
 
+#define SIZEOF_ARRAY( a ) (sizeof( a ) / sizeof( a[ 0 ] ))
+
 #define MAXPARAMCOUNT 20
 #define MAXBOIDS 10
 #define MAXNEIGHBOURS 20
+
+#define CMD_HEADER_LEN	5	//
+#define MAX_CMD_BODY_LEN 20	//
+#define MAX_CMD_LEN		CMD_HEADER_LEN + MAX_CMD_BODY_LEN
+
+#define CMD_PING		1	// Controller asking how many locations their are
+#define CMD_KILL		2	// Controller stopping the simulation
+#define CMD_PING_REPLY	3	// Location response to controller ping
+#define CMD_INIT		4	// Controller initiation command
 
 #define VISIONRADIUS 3
 #define MAXSPEED 5
@@ -58,13 +69,13 @@ class Boid {
 
 
 // Function Headers ============================================================
-void sendPingReply();
-void initialise(uint32 *data);
-
-void calcNextBoidPositions();
-
-void sendLoadInfo();
-
+//void initialise(uint32 *data);
+//
+//void calcNextBoidPositions();
+//
+//void sendLoadInfo();
+void createCommand(uint32 *command, uint32 to, uint32 type, uint32 *data);
+void printCommand(uint32* command, bool send);
 
 void setupEnvironment(uint32 *data);
 void calcNeighbours(Boid* b);
@@ -77,6 +88,9 @@ Vector separation(Boid* b);
 Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
 Boid* neighbours[MAXNEIGHBOURS];
 uint8 boidCount;
+
+uint8 locationID;
+uint8 initBoidCount;
 //==============================================================================
 
 
@@ -240,60 +254,214 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable=output core=AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
-	// Read in parameter string
-	uint8 paramCount = input.read();
-	uint32 paramData[MAXPARAMCOUNT];
+	// TODO: Generate random initial ID
+	locationID = 16;
 
-	paramloop: for(int i = 0; i < paramCount; i++) {
-		paramData[i] = input.read();
+	// Read in the command -----------------------------------------------------
+	uint32 command[MAX_CMD_LEN];
+	bool ignoreCmd;
+
+	// First read the command header
+	cmdHeadIn: for(int i = 0; i < CMD_HEADER_LEN; i++) {
+		command[i] = input.read();
 	}
 
-	// Setup the environment
-	setupEnvironment(paramData);
-
-	// While....
-	uint8 loopCounter = 1;
-	uint8 loopLimit = 3;
-	while(loopCounter <= loopLimit) {
-		std::cout << "-" << loopCounter <<
-				"----------------------------------------------" << std::endl;
-		for(uint8 b = 0; b < boidCount; b++) {
-			// Calculate the boid's neighbours
-			Boid* bob = boidList[b];
-			calcNeighbours(bob);
-
-			// If the boid has any neighbours calculate the modifications to
-			// the boid's position and velocity
-			if(bob->getNeighbourCount() > 0) {
-				Vector alignMod = alignment(bob);
-				Vector groupMod = cohesion(bob);
-				Vector repelMod = separation(bob);
-
-				// Cap values and apply the modifications
-				Vector totalMod;
-				totalMod.add(alignMod);
-				totalMod.add(groupMod);
-				totalMod.add(repelMod);
-
-				if(!totalMod.empty()) {
-					//TODO: Should this be here or in each function?
-					totalMod.bound(MAXSPEED);
-
-					bob->setVelocity(totalMod);
-					bob->update(totalMod);
-					bob->draw();
-				}
-
-				bob->resetNeighbours();
-			}
+	// If the command is not a broadcast and not addressed to me, ignore it,
+	// but still have to read the input
+	// TODO: Find a way of not having to read the input
+	if((command[0] != 0) && (command[0] != locationID)) {
+		ignoreCmd = true;
+		for(int i = 0; i < command[3]; i++) {
+			input.read();
 		}
-
-		loopCounter++;
+	} else {
+		// Else, read the command body
+		ignoreCmd = false;
+		cmdBodyIn: for(int i = 0; i < command[3]; i++) {
+			command[CMD_HEADER_LEN + i] = input.read();
+		}
 	}
 
-	for(int i = 0; i < paramData[0]; i++) {
-		boidList[i]->printBoidInfo();
+	printCommand(command, false);
+	// -------------------------------------------------------------------------
+
+	// Process the command -----------------------------------------------------
+	if(!ignoreCmd) {
+		uint32 data[MAX_CMD_BODY_LEN];
+
+		switch(command[2]) {
+			case 0:
+				break;
+			case CMD_PING:
+				data[0] = 121;		// FPGA ID
+				createCommand(command, 1, CMD_PING_REPLY, data);
+
+				cmdOut: for(int i = 0; i < CMD_HEADER_LEN + command[3]; i++) {
+					output.write(command[i]);
+				}
+				printCommand(command, true);
+				break;
+			case CMD_KILL:
+				break;
+			case CMD_PING_REPLY:
+				break;
+			case CMD_INIT:
+				locationID = command[CMD_HEADER_LEN + 0];
+				initBoidCount = command[CMD_HEADER_LEN + 1];
+				break;
+			default:
+				std::cerr << "UNKNOWN COMMAND" << std::endl;
+				break;
+		}
 	}
+	// -------------------------------------------------------------------------
+
+//
+//	if(command[1] != 0) {
+//		std::cout << "Received command from location " << command[1] << std::endl;
+//	} else if(command[0] != 0) {
+//		std::cout << "Received targeted command from Controller" << std::endl;
+//
+//		if(command[2] == CMD_INIT) {
+//			std::cout << "Location " << command[CMD_HEADER_LEN] << "("
+//				<< locationID << ") initialising " <<
+//				command[CMD_HEADER_LEN + 1] << " boids." << std::endl;
+//
+//			locationID = command[CMD_HEADER_LEN];
+//			initBoidCount = command[CMD_HEADER_LEN + 1];
+//		}
+//
+//	} else {
+//		std::cout << "Received broadcast command from Controller" << std::endl;
+//
+//		switch(command[2]) {
+//			case(CMD_PING):
+//				std::cout << "Sending ping reply" << std::endl;
+//
+////				uint32 data[1] = 121;
+////				command = composeCommand(0, locationID, CMD_PING_REPLY, data);
+////				cmdOut: for(int i = 0; i < CMD_HEADER_LEN + SIZEOF_ARRAY(data); i++) {
+////					output.write(command[i]);
+////				}
+//
+//				output.write(0);				// To
+//				output.write(locationID);		// From
+//				output.write(CMD_PING_REPLY);	// Command type
+//				output.write(1);				// Length
+//				output.write(0);				// N/A
+//
+//				output.write(121);				// Data (FPGA ID)
+//
+//				break;
+//			case(CMD_KILL):
+//				std::cout << "Killing simulation" << std::endl;
+////				killSimulation();
+//				break;
+//			default:
+//				std::cerr << "Unknown command code: " << command[2] << std::endl;
+//				break;
+//		}
+//	}
+
+//	// Setup the environment
+//	setupEnvironment(paramData);
+//
+//	// While....
+//	uint8 loopCounter = 1;
+//	uint8 loopLimit = 3;
+//	while(loopCounter <= loopLimit) {
+//		std::cout << "-" << loopCounter <<
+//				"----------------------------------------------" << std::endl;
+//		for(uint8 b = 0; b < boidCount; b++) {
+//			// Calculate the boid's neighbours
+//			Boid* bob = boidList[b];
+//			calcNeighbours(bob);
+//
+//			// If the boid has any neighbours calculate the modifications to
+//			// the boid's position and velocity
+//			if(bob->getNeighbourCount() > 0) {
+//				Vector alignMod = alignment(bob);
+//				Vector groupMod = cohesion(bob);
+//				Vector repelMod = separation(bob);
+//
+//				// Cap values and apply the modifications
+//				Vector totalMod;
+//				totalMod.add(alignMod);
+//				totalMod.add(groupMod);
+//				totalMod.add(repelMod);
+//
+//				if(!totalMod.empty()) {
+//					//TODO: Should this be here or in each function?
+//					totalMod.bound(MAXSPEED);
+//
+//					bob->setVelocity(totalMod);
+//					bob->update(totalMod);
+//					bob->draw();
+//				}
+//
+//				bob->resetNeighbours();
+//			}
+//		}
+//
+//		loopCounter++;
+//	}
+//
+//	for(int i = 0; i < paramData[0]; i++) {
+//		boidList[i]->printBoidInfo();
+//	}
+}
+
+void createCommand(uint32 *command, uint32 to, uint32 type, uint32 *data) {
+	command[0] = to;
+	command[1] = locationID;
+	command[2] = type;
+	command[3] = sizeof(data)/sizeof(data[0]);
+
+	dataToCmd: for(int i = 0; i < command[3]; i++) {
+		command[4 + i] = data[i];
+	}
+}
+
+/**
+ * Parses the supplied command and prints it out to the terminal
+ */
+void printCommand(uint32 *command, bool send) {
+	if(send) {
+		if(command[0] == 0) {
+				std::cout << locationID << " sent broadcast to " << command[0] << ": ";
+			} else {
+				std::cout << locationID << " sent command to " << command[0] << ": ";
+			}
+	} else {
+		if(command[0] == 0) {
+			std::cout << locationID << " received broadcast from " << command[1] << ": ";
+		} else {
+			std::cout << locationID << "received command from " << command[1] << ": ";
+		}
+	}
+
+	switch(command[2]) {
+		case(0):
+			std::cout << "do something";
+			break;
+		case CMD_PING:
+			std::cout << "location ping";
+			break;
+		case CMD_KILL:
+			std::cout << "kill simulation";
+			break;
+		case CMD_PING_REPLY:
+			std::cout << "location ping response";
+			break;
+		case CMD_INIT:
+			std::cout << "initialise location";
+			break;
+		default:
+			std::cout << "UNKNOWN COMMAND";
+			break;
+	}
+
+	std::cout << std::endl;
 }
 
 void setupEnvironment(uint32 *data) {
