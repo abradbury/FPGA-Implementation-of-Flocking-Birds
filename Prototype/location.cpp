@@ -2,21 +2,28 @@
 
 #define SIZEOF_ARRAY( a ) (sizeof( a ) / sizeof( a[ 0 ] ))
 
-#define MAXPARAMCOUNT 20
-#define MAXBOIDS 10
-#define MAXNEIGHBOURS 20
-
 #define CMD_HEADER_LEN	5	//
 #define MAX_CMD_BODY_LEN 20	//
 #define MAX_CMD_LEN		CMD_HEADER_LEN + MAX_CMD_BODY_LEN
+
+#define MAX_NEIGHBOURS 	8	// The maximum number of neighbouring locations
+#define MAX_LOCATIONS 	100	// The maximum number of location allowed
 
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
 #define CMD_PING_REPLY	3	// Location response to controller ping
 #define CMD_INIT		4	// Controller initiation command
+#define CMD_BEGIN 		5	// Begin the simulation
+#define CMD_LOAD_INFO	6	// Each location reports its current load
+#define CMD_LOAD_ACT	7	// The decision of the controller based on the load
+#define CMD_LOC_UPDATE	8	// The new parameters for location if load balanced
+#define CMD_BOID		9	// Used to transfer boids between locations
+
+#define BROADCAST		0	// Used by the controller to address all locations
 
 #define VISIONRADIUS 3
 #define MAXSPEED 5
+#define MAXBOIDS 10
 
 // Class Headers ===============================================================
 class Vector {
@@ -46,7 +53,7 @@ class Boid {
 	Vector velocity;
 	uint8 id;
 	uint8 nCount;
-	uint8 neighbours[MAXNEIGHBOURS];
+	uint8 neighbours[MAX_NEIGHBOURS];
 
 	public:
 		Boid(Vector pos, Vector vel, uint8 id);
@@ -74,7 +81,7 @@ class Boid {
 //void calcNextBoidPositions();
 //
 //void sendLoadInfo();
-void createCommand(uint32 *command, uint32 to, uint32 type, uint32 *data);
+void createCommand(uint32 *command, uint32 to, uint32 type, uint32 len, uint32 *data);
 void printCommand(uint32* command, bool send);
 
 void setupEnvironment(uint32 *data);
@@ -86,8 +93,13 @@ Vector separation(Boid* b);
 
 // Parameter string
 Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
-Boid* neighbours[MAXNEIGHBOURS];
+Boid* neighbours[2];				// FIXME: Change initial size
 uint8 boidCount;
+
+uint32 locationNeighbours[MAX_NEIGHBOURS];
+uint32 locationPosition[8];
+
+bool dbg;
 
 uint8 locationID;
 uint8 initBoidCount;
@@ -257,6 +269,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// TODO: Generate random initial ID
 	locationID = 16;
 
+	dbg = true;
+
 	// Read in the command -----------------------------------------------------
 	uint32 command[MAX_CMD_LEN];
 	bool ignoreCmd;
@@ -288,13 +302,15 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// Process the command -----------------------------------------------------
 	if(!ignoreCmd) {
 		uint32 data[MAX_CMD_BODY_LEN];
+		uint32 len = 0;
 
 		switch(command[2]) {
 			case 0:
 				break;
 			case CMD_PING:
 				data[0] = 121;		// FPGA ID
-				createCommand(command, 1, CMD_PING_REPLY, data);
+				len = 1;
+				createCommand(command, 1, CMD_PING_REPLY, len, data);
 
 				cmdOut: for(int i = 0; i < CMD_HEADER_LEN + command[3]; i++) {
 					output.write(command[i]);
@@ -308,6 +324,28 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 			case CMD_INIT:
 				locationID = command[CMD_HEADER_LEN + 0];
 				initBoidCount = command[CMD_HEADER_LEN + 1];
+
+				// Store location neighbours
+				for(int i = 0; i < MAX_NEIGHBOURS; i++) {
+					locationNeighbours[i] = command[CMD_HEADER_LEN + 2 + i];
+				}
+
+				// Store location position
+				for(int i = 0; i < 8; i++) {
+					locationPosition[i] = command[CMD_HEADER_LEN + 2 +
+					                              MAX_NEIGHBOURS + i];
+				}
+				break;
+			case CMD_BEGIN:
+				// TODO: Begin the simulation
+				break;
+			case CMD_LOAD_INFO:
+				break;
+			case CMD_LOAD_ACT:
+				break;
+			case CMD_LOC_UPDATE:
+				break;
+			case CMD_BOID:
 				break;
 			default:
 				std::cerr << "UNKNOWN COMMAND" << std::endl;
@@ -315,53 +353,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		}
 	}
 	// -------------------------------------------------------------------------
-
-//
-//	if(command[1] != 0) {
-//		std::cout << "Received command from location " << command[1] << std::endl;
-//	} else if(command[0] != 0) {
-//		std::cout << "Received targeted command from Controller" << std::endl;
-//
-//		if(command[2] == CMD_INIT) {
-//			std::cout << "Location " << command[CMD_HEADER_LEN] << "("
-//				<< locationID << ") initialising " <<
-//				command[CMD_HEADER_LEN + 1] << " boids." << std::endl;
-//
-//			locationID = command[CMD_HEADER_LEN];
-//			initBoidCount = command[CMD_HEADER_LEN + 1];
-//		}
-//
-//	} else {
-//		std::cout << "Received broadcast command from Controller" << std::endl;
-//
-//		switch(command[2]) {
-//			case(CMD_PING):
-//				std::cout << "Sending ping reply" << std::endl;
-//
-////				uint32 data[1] = 121;
-////				command = composeCommand(0, locationID, CMD_PING_REPLY, data);
-////				cmdOut: for(int i = 0; i < CMD_HEADER_LEN + SIZEOF_ARRAY(data); i++) {
-////					output.write(command[i]);
-////				}
-//
-//				output.write(0);				// To
-//				output.write(locationID);		// From
-//				output.write(CMD_PING_REPLY);	// Command type
-//				output.write(1);				// Length
-//				output.write(0);				// N/A
-//
-//				output.write(121);				// Data (FPGA ID)
-//
-//				break;
-//			case(CMD_KILL):
-//				std::cout << "Killing simulation" << std::endl;
-////				killSimulation();
-//				break;
-//			default:
-//				std::cerr << "Unknown command code: " << command[2] << std::endl;
-//				break;
-//		}
-//	}
 
 //	// Setup the environment
 //	setupEnvironment(paramData);
@@ -411,32 +402,43 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 //	}
 }
 
-void createCommand(uint32 *command, uint32 to, uint32 type, uint32 *data) {
+/**
+ * Create a command to send from the locations to the controller.
+ *
+ * If the command is a broadcast command, then no data is to be sent.
+ *
+ * Apparently, it is not possible to find the length of an array, given a
+ * pointer to that array. Therefore, the length of the data has to be supplied.
+ */
+void createCommand(uint32 *command, uint32 to, uint32 type, uint32 len, uint32 *data) {
 	command[0] = to;
 	command[1] = locationID;
 	command[2] = type;
-	command[3] = sizeof(data)/sizeof(data[0]);
+	command[3] = (command[0] == BROADCAST)? (uint32)0 : len;
+	command[4] = 0;
 
 	dataToCmd: for(int i = 0; i < command[3]; i++) {
-		command[4 + i] = data[i];
+		command[5 + i] = data[i];
 	}
 }
 
 /**
  * Parses the supplied command and prints it out to the terminal
+ *
+ * FIXME: Testbench file cannot have same method name
  */
 void printCommand(uint32 *command, bool send) {
 	if(send) {
 		if(command[0] == 0) {
-				std::cout << locationID << " sent broadcast to " << command[0] << ": ";
-			} else {
-				std::cout << locationID << " sent command to " << command[0] << ": ";
-			}
+			std::cout << "-> TX, " << locationID << " sent broadcast to " << command[0] << ": ";
+		} else {
+			std::cout << "-> TX, " << locationID << " sent command to " << command[0] << ": ";
+		}
 	} else {
 		if(command[0] == 0) {
-			std::cout << locationID << " received broadcast from " << command[1] << ": ";
+			std::cout << "<- RX, " << locationID << " received broadcast from " << command[1] << ": ";
 		} else {
-			std::cout << locationID << "received command from " << command[1] << ": ";
+			std::cout << "<- RX, " << locationID << " received command from " << command[1] << ": ";
 		}
 	}
 
@@ -454,7 +456,25 @@ void printCommand(uint32 *command, bool send) {
 			std::cout << "location ping response";
 			break;
 		case CMD_INIT:
-			std::cout << "initialise location";
+			std::cout << "initialise location (" << command[0] << " becomes "
+				<< command[CMD_HEADER_LEN + 0] << " with " <<
+				command[CMD_HEADER_LEN + 1] << " boids)";
+			break;
+		case CMD_BEGIN:
+			std::cout << "begin the simulation";
+			std::cout << " " << locationID;
+			break;
+		case CMD_LOAD_INFO:
+			std::cout << "location load information";
+			break;
+		case CMD_LOAD_ACT:
+			std::cout << "load-balancing decision";
+			break;
+		case CMD_LOC_UPDATE:
+			std::cout << "new location parameters";
+			break;
+		case CMD_BOID:
+			std::cout << "boid";
 			break;
 		default:
 			std::cout << "UNKNOWN COMMAND";
@@ -462,6 +482,21 @@ void printCommand(uint32 *command, bool send) {
 	}
 
 	std::cout << std::endl;
+
+
+	if(dbg) {
+		std::cout << "\t";
+		for(int i = 0; i < CMD_HEADER_LEN; i++) {
+			std::cout << command[i] << " ";
+		}
+
+		std::cout << "|| ";
+
+		for(int i = 0; i < command[3]; i++) {
+			std::cout << command[CMD_HEADER_LEN + i] << " ";
+		}
+		std::cout << std::endl;
+	}
 }
 
 void setupEnvironment(uint32 *data) {
