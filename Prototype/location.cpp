@@ -42,6 +42,7 @@ class Vector {
 		uint8 mag();
 		void normalise();
 		void bound(uint8 n);
+		void rand(uint8 min, uint8 max);
 		bool empty();
 
 		// TODO: Is this needed?
@@ -83,6 +84,8 @@ class Boid {
 //void sendLoadInfo();
 void createCommand(uint32 *command, uint32 to, uint32 type, uint32 len, uint32 *data);
 void printCommand(uint32* command, bool send);
+
+void initialiseBoids(uint32 initBoidCount);
 
 void setupEnvironment(uint32 *data);
 void calcNeighbours(Boid* b);
@@ -158,10 +161,14 @@ void Vector::normalise() {
 }
 
 void Vector::bound(uint8 n) {
-	//TODO: The is technically not binding the speed, which is the magnitude
+	// TODO: The is technically not binding the speed, which is the magnitude
 	if(x > n) x = n;
 	if(y > n) y = n;
 	if(z > n) z = n;
+}
+
+void Vector::rand(uint8 min, uint8 max) {
+	// TODO
 }
 
 bool Vector::empty() {
@@ -266,97 +273,108 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable=output core=AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
-	// TODO: Generate random initial ID
-	locationID = 16;
-
-	dbg = true;
+	locationID = 16;		// TODO: Generate random initial ID
+	dbg = true;				// Enable debug or not
+	bool stop = false;		// Stop condition
 
 	// Read in the command -----------------------------------------------------
 	uint32 command[MAX_CMD_LEN];
 	bool ignoreCmd;
 
-	// First read the command header
-	cmdHeadIn: for(int i = 0; i < CMD_HEADER_LEN; i++) {
-		command[i] = input.read();
+	while(!stop) {
+		// First read the command header
+		cmdHeadIn: for(int i = 0; i < CMD_HEADER_LEN; i++) {
+			command[i] = input.read();
+			//input.empty();
+		}
+
+		// If the command is not a broadcast and not addressed to me, ignore it,
+		// but still have to read the input
+		// TODO: Find a way of not having to read the input
+		if((command[0] != 0) && (command[0] != locationID)) {
+			ignoreCmd = true;
+			for(int i = 0; i < command[3]; i++) {
+				input.read();
+			}
+		} else {
+			// Else, read the command body
+			ignoreCmd = false;
+			cmdBodyIn: for(int i = 0; i < command[3]; i++) {
+				command[CMD_HEADER_LEN + i] = input.read();
+			}
+		}
+
+		printCommand(command, false);
+		// ---------------------------------------------------------------------
+
+		// Process the command -------------------------------------------------
+		if(!ignoreCmd) {
+			uint32 data[MAX_CMD_BODY_LEN];
+			uint32 len = 0;
+
+			switch(command[2]) {
+				case 0:
+					break;
+				case CMD_PING:
+					data[0] = 121;		// FPGA ID
+					len = 1;
+					createCommand(command, 1, CMD_PING_REPLY, len, data);
+
+					cmdOut: for(int i = 0; i < CMD_HEADER_LEN + command[3]; i++) {
+						output.write(command[i]);
+					}
+					printCommand(command, true);
+					break;
+				case CMD_KILL:
+					break;
+				case CMD_PING_REPLY:
+					break;
+				case CMD_INIT:
+					locationID = command[CMD_HEADER_LEN + 0];
+
+					initBoidCount = command[CMD_HEADER_LEN + 1];
+					initialiseBoids(initBoidCount);
+
+					// Store location neighbours
+					for(int i = 0; i < MAX_NEIGHBOURS; i++) {
+						locationNeighbours[i] = command[CMD_HEADER_LEN + 2 + i];
+					}
+
+					// Store location position
+					for(int i = 0; i < 8; i++) {
+						locationPosition[i] = command[CMD_HEADER_LEN + 2 +
+													  MAX_NEIGHBOURS + i];
+					}
+					break;
+				case CMD_BEGIN: {
+						// TODO: Begin the simulation
+						// While....
+						uint8 loopCounter = 1;
+						uint8 loopLimit = 3;
+						while(loopCounter <= loopLimit) {
+							std::cout << "-" << loopCounter << "-----------------"
+								<< "-----------------------------" << std::endl;
+							loopCounter++;
+						}
+						break;
+					}
+				case CMD_LOAD_INFO:
+					break;
+				case CMD_LOAD_ACT:
+					break;
+				case CMD_LOC_UPDATE:
+					break;
+				case CMD_BOID:
+					break;
+				default:
+					std::cerr << "UNKNOWN COMMAND" << std::endl;
+					break;
+			}
+		}
+		stop = true;
+		// ---------------------------------------------------------------------
 	}
 
-	// If the command is not a broadcast and not addressed to me, ignore it,
-	// but still have to read the input
-	// TODO: Find a way of not having to read the input
-	if((command[0] != 0) && (command[0] != locationID)) {
-		ignoreCmd = true;
-		for(int i = 0; i < command[3]; i++) {
-			input.read();
-		}
-	} else {
-		// Else, read the command body
-		ignoreCmd = false;
-		cmdBodyIn: for(int i = 0; i < command[3]; i++) {
-			command[CMD_HEADER_LEN + i] = input.read();
-		}
-	}
-
-	printCommand(command, false);
-	// -------------------------------------------------------------------------
-
-	// Process the command -----------------------------------------------------
-	if(!ignoreCmd) {
-		uint32 data[MAX_CMD_BODY_LEN];
-		uint32 len = 0;
-
-		switch(command[2]) {
-			case 0:
-				break;
-			case CMD_PING:
-				data[0] = 121;		// FPGA ID
-				len = 1;
-				createCommand(command, 1, CMD_PING_REPLY, len, data);
-
-				cmdOut: for(int i = 0; i < CMD_HEADER_LEN + command[3]; i++) {
-					output.write(command[i]);
-				}
-				printCommand(command, true);
-				break;
-			case CMD_KILL:
-				break;
-			case CMD_PING_REPLY:
-				break;
-			case CMD_INIT:
-				locationID = command[CMD_HEADER_LEN + 0];
-				initBoidCount = command[CMD_HEADER_LEN + 1];
-
-				// Store location neighbours
-				for(int i = 0; i < MAX_NEIGHBOURS; i++) {
-					locationNeighbours[i] = command[CMD_HEADER_LEN + 2 + i];
-				}
-
-				// Store location position
-				for(int i = 0; i < 8; i++) {
-					locationPosition[i] = command[CMD_HEADER_LEN + 2 +
-					                              MAX_NEIGHBOURS + i];
-				}
-				break;
-			case CMD_BEGIN:
-				// TODO: Begin the simulation
-				break;
-			case CMD_LOAD_INFO:
-				break;
-			case CMD_LOAD_ACT:
-				break;
-			case CMD_LOC_UPDATE:
-				break;
-			case CMD_BOID:
-				break;
-			default:
-				std::cerr << "UNKNOWN COMMAND" << std::endl;
-				break;
-		}
-	}
-	// -------------------------------------------------------------------------
-
-//	// Setup the environment
-//	setupEnvironment(paramData);
-//
 //	// While....
 //	uint8 loopCounter = 1;
 //	uint8 loopLimit = 3;
@@ -499,28 +517,25 @@ void printCommand(uint32 *command, bool send) {
 	}
 }
 
-void setupEnvironment(uint32 *data) {
-	// Number of boids
-	//TODO: Adjust maximum of boid list depending on number of boids specified
-	// though I don't think this can be done...
+void initialiseBoids(uint32 initBoidCount) {
+	// TODO: Create random initial positions and velocity
+	Vector initPos;
+	Vector initVel;
 
-	//TODO: Create random initial positions and velocity
-//	for(int i = 0; i < data[0]; i++) {
-//		uint8 pos[DIMENSIONS] = {1,2,3};
-//		boidList[i] = new Boid(pos, 2, i+1);
-//		boidList[i]->printBoidInfo();
+//	for(int i = 0; i < initBoidCount; i++) {
+//		initPos.rand(0, 10);
+//		initVel.rand(0, 3);
+//		boidList[i] = new Boid(initPos, initVel, i + 1);
 //	}
 
-//	boidCount = MAXBOIDS;
-	boidCount = 3;
-
+	// The below is needed until a random function is created
+	//
 	// Boids can have no initial velocity as the attraction and repulsion rules
-	// will provide initial velocities
-	Vector initVel = Vector(0, 0, 0);
+	// will provide initial velocities. However, boids 2 and 3 did not move as
+	// their attraction and repulsion cancelled each other out. Hence, a
+	// different initial velocity was needed and now they just fly parallel.
+	initVel = Vector(0, 0, 0);
 	Vector altInitVel = Vector(-2, -4, 0);
-	// Boids 2 and 3 did not move as their attraction and repulsion cancelled
-	// each other out. Hence, a different initially velocity was needed and now
-	// they just fly parallel to each other.
 
 	boidList[0] = new Boid(Vector(2,13,0), initVel, 1);
 	boidList[1] = new Boid(Vector(6,12,0), initVel, 2);
@@ -533,12 +548,13 @@ void setupEnvironment(uint32 *data) {
 //	boidList[8] = new Boid(Vector(11,4,0), initVel, 9);
 //	boidList[9] = new Boid(Vector(4,3,0), initVel, 10);
 
-
-
 	std::cout << "===============================================" << std::endl;
-	std::cout << data[0] << " boids initialised in grid of size " << data[1] <<
-		" by " << data[2] << std::endl;
+	std::cout << initBoidCount << " boids initialised." << std::endl;
 	std::cout << "===============================================" << std::endl;
+}
+
+void setupEnvironment(uint32 *data) {
+	// TODO: Is this needed?
 }
 
 void calcNeighbours(Boid* b) {
