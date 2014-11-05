@@ -3,34 +3,135 @@
 from Tkinter import *       # Used to draw shapes for the simulation
 import numpy as np          # Used in various mathematical operations
 import random               # Used to randomly position the boids on initialisation
+import sys
 
 class Boid:
 
-    def __init__(self, canvas, initPosition):
+    def __init__(self, canvas, _location, _boidID, initPosition):
+        self.location = _location
+
         # Create the boids
+        self.boidID = _boidID
         self.bearing = np.pi
         self.step = 10
         self.canvas = canvas
-        self.initPosition = initPosition
+        self.position = initPosition
+
+        self.neighbouringBoids = []
+
+        self.MAX_VELOCITY = 3
+        self.VISION_RADIUS = 100
+        self.velocity = random.randint(0, self.MAX_VELOCITY)
 
         # Define the boid polygon points
-        self.x0 = self.initPosition[0] - self.step
-        self.y0 = self.initPosition[1] - self.step
-        self.x1 = self.initPosition[0]
-        self.y1 = self.initPosition[1] + self.step
-        self.x2 = self.initPosition[0] + self.step
-        self.y2 = self.initPosition[1] - self.step
-        self.x3 = self.initPosition[0]
-        self.y3 = self.initPosition[1] - (self.step/2)
+        self.x0 = self.position[0] - self.step
+        self.y0 = self.position[1] - self.step
+        self.x1 = self.position[0]
+        self.y1 = self.position[1] + self.step
+        self.x2 = self.position[0] + self.step
+        self.y2 = self.position[1] - self.step
+        self.x3 = self.position[0]
+        self.y3 = self.position[1] - (self.step/2)
 
         # Draw the boid
         self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3, fill = "red", outline = "white")
-        self.canvas.itemconfig(self.boid, tags = ("b1"))
+            self.y2, self.x3, self.y3, fill = "red", outline = "white", tags = (str(self.boidID)))
 
-        # Draw a circle at the centre of the boid
-        # self.boidCircle = self.canvas.create_oval(self.initPosition[0] - 5, self.initPosition[1] - 5, 
-        #     self.initPosition[0] + 5, self.initPosition[1] + 5);
+        print "Created boid with ID " + str(self.boidID)
+
+
+    def getPosition(self):
+        return self.position
+
+
+    def getVelocity(self):
+        return self.velocity
+
+
+    def update(self, possibleNeighbouringBoids):
+        self.possibleNeighbours = possibleNeighbouringBoids
+
+        self.calculateNeighbours()
+
+        # if len(self.neighbouringBoids) > 0:
+        #     self.cohesionMod = self.coehsion()
+        #     self.alignmentMod = self.alignment()
+        #     self.repulsionMod = self.repulsion()
+
+        #     self.movement = self.cohesionMod + self.alignmentMod + self.repulsionMod
+
+        # else:
+        #     self.movement = 0
+
+        raw_input()
+        self.canvas.itemconfig(self.boid, fill = "red")
+        for boid in self.neighbouringBoids:
+            boid.highlightBoid(False)
+        # sys.exit()
+
+
+    def highlightBoid(self, on):
+        if on:
+            self.canvas.itemconfig(self.boid, fill = "green")
+        else:
+            self.canvas.itemconfig(self.boid, fill = "red")
+
+
+    def calculateNeighbours(self):
+        print "Number of possible neighbouring boids: " + str(len(self.possibleNeighbours))
+
+        for boid in self.possibleNeighbours:
+            if boid.boidID != self.boidID:
+                dist = np.linalg.norm(boid.position - self.position)
+                if dist < self.VISION_RADIUS:
+                    self.neighbouringBoids.append(boid)
+
+        self.canvas.itemconfig(self.boid, fill = "blue")
+        print "Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + " neighbouring boids"
+
+        for boid in self.neighbouringBoids:
+            print boid.boidID
+            boid.highlightBoid(True)
+
+
+    def coehsion(self):
+        self.cohesionMod = 0;
+        for boid in self.neighbouringBoids:
+            self.cohesionMod += boid.position
+            # print boid.boidID
+
+        self.cohesionMod /= len(self.neighbouringBoids)
+        self.cohesionMod -= self.position
+        
+        # print str(self.cohesionMod)
+        self.cohesionMod = (self.cohesionMod / np.linalg.norm(self.cohesionMod))
+        # print str(np.linalg.norm(self.cohesionMod))
+        # print str(self.cohesionMod)
+
+        return self.cohesionMod
+
+
+    def alignment(self):
+        self.alignmentMod = 0
+        for boid in self.neighbouringBoids:
+            self.alignmentMod += boid.velocity
+
+        self.alignmentMod /= len(self.neighbouringBoids)
+        self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+
+        return self.alignmentMod
+
+
+    def repulsion(self):
+        self.repulsionMod = 0
+        for boid in self.neighbouringBoids:
+            self.repulsionMod += (boid.position - self.position)
+
+        self.repulsionMod /= len(self.neighbouringBoids)
+        self.repulsionMod *= -1
+        self.repulsionMod = (self.repulsionMod / np.linalg.norm(self.repulsionMod))
+
+        return self.repulsionMod
 
 
     # Rotation definition based on an answer from StackOverflow: http://stackoverflow.com/a/3409039
@@ -58,21 +159,54 @@ class Boid:
 
 class Location:
 
-    def __init__(self, canvas, locationID, locationCoords, initialBoidCount):
+    def __init__(self, canvas, _simulation, _locationID, locationCoords, _initialBoidCount):
+        self.simulation = _simulation
+        self.locationID = _locationID
+
+        self.boids = []
+        self.initialBoidCount = _initialBoidCount
+
         # Draw the location bounds
         canvas.create_rectangle(locationCoords[0], locationCoords[1], locationCoords[2], locationCoords[3], outline = "yellow")
 
         # Draw the location's boids
-        for i in range (0, initialBoidCount):
+        for i in range (0, self.initialBoidCount):
             # Randomly position the boid on initialisation
             self.randomX = random.randint(locationCoords[0], locationCoords[2]);
             self.randomY = random.randint(locationCoords[1], locationCoords[3]);
             self.initialPosition = np.array([self.randomX, self.randomY])
-            Boid(canvas, self.initialPosition)
+            self.boidID = ((self.locationID - 1)* self.initialBoidCount) + i + 1
 
-        print "Created location " + str(locationID) + " with " + str(initialBoidCount) + " boids"
+            boid = Boid(canvas, self, self.boidID, self.initialPosition)
+            self.boids.append(boid)
+
+        print "Created location " + str(self.locationID) + " with " + str(self.initialBoidCount) + " boids"
 
 
+    def update(self):
+        self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
+        for i in range(0, self.initialBoidCount):
+            self.boids[i].update(self.possibleNeighbouringBoids)
+
+
+    # Return a list containing the boids currently controlled by this location
+    def getBoids(self):
+        return self.boids
+
+
+    # Return a list containing the boids from each neighbouring location
+    def getPossibleNeighbouringBoids(self):
+        self.neighbouringLocations = self.simulation.getNeighbouringLocations(self.locationID)
+        print "This location has the following location neighbours: " + (" ".join([str(l) for l in self.neighbouringLocations]))
+
+        # Need the slice operation or else updating 
+        self.neighbouringBoids = self.boids[:]
+
+        for locationIndex in self.neighbouringLocations:
+            if locationIndex != 0:
+                self.neighbouringBoids += self.simulation.getLocationBoids(locationIndex)
+
+        return self.neighbouringBoids
 
 
 
@@ -85,16 +219,16 @@ class Simulation:
         frame = Frame(self.root)
         frame.pack()
 
-        self.width = 500
-        self.height = 500
+        self.width = 700
+        self.height = 700
         self.boidCount = 90
 
         # Create the window
-        self.canvas = Canvas(frame, bg = "black", width = 500, height = self.height)
+        self.canvas = Canvas(frame, bg = "black", width = self.width, height = self.height)
         self.canvas.pack();
         
         # Create the buttons
-        self.timeButton = Button(frame, text = "Next Time Step", command = self.timeInc)
+        self.timeButton = Button(frame, text = "Next Time Step", command = self.buttonAction)
         self.timeButton.pack(side = LEFT)
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
         self.quitButton.pack(side = LEFT)
@@ -106,8 +240,9 @@ class Simulation:
         self.allowedLocationCounts = np.array([1, 2, 4, 9, 16, 25, 36])
         self.locationCount = self.allowedLocationCounts[3]
         self.initialBoidCount = self.boidCount / self.locationCount
-        
         self.locationSize = round(self.canvas.winfo_width() / np.sqrt(self.locationCount))
+
+        self.locations = []
 
         self.locationCoords = np.array([0, 0, 0, 0])
         for i in range(0, self.locationCount):
@@ -118,16 +253,44 @@ class Simulation:
 
             print "[" + str(self.locationCoords[0]) + "," + str(self.locationCoords[1]) + "]"
 
-            Location(self.canvas, i + 1, self.locationCoords, self.initialBoidCount)
-
+            loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount)
+            self.locations.append(loc)
 
         # Start everything going
         self.root.mainloop()
 
 
-    def timeInc(self):
-        Boid(self.canvas)
+    def buttonAction(self):
+        for i in range(0, self.locationCount):
+            print "Updating location " + str(self.locations[i].locationID) + "..."
+            self.locations[i].update()
 
+
+    def getNeighbouringLocations(self, locationID):
+        if locationID == 1:
+            self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
+        elif locationID == 2:
+            self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
+        elif locationID == 3:
+            self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
+        elif locationID == 4:
+            self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
+        elif locationID == 5:
+            self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
+        elif locationID == 6:
+            self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
+        elif locationID == 7:
+            self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
+        elif locationID == 8:
+            self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
+        elif locationID == 9:
+            self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
+
+        return self.neighbouringLocations
+
+
+    def getLocationBoids(self, locationID):
+        return self.locations[locationID - 1].getBoids()
 
 
 boidSimulation = Simulation()
