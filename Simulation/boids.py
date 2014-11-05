@@ -35,7 +35,7 @@ class Boid:
 
         # Draw the boid
         self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3, fill = "red", outline = "white", tags = (str(self.boidID)))
+            self.y2, self.x3, self.y3, fill = "red", outline = "white", tags = ("B" + str(self.boidID)))
 
         print "Created boid with ID " + str(self.boidID)
 
@@ -53,21 +53,44 @@ class Boid:
 
         self.calculateNeighbours()
 
-        # if len(self.neighbouringBoids) > 0:
-        #     self.cohesionMod = self.coehsion()
-        #     self.alignmentMod = self.alignment()
-        #     self.repulsionMod = self.repulsion()
+        if len(self.neighbouringBoids) > 0:
+            self.cohesionMod = self.coehsion()
+            self.alignmentMod = self.alignment()
+            self.repulsionMod = self.repulsion()
 
-        #     self.movement = self.cohesionMod + self.alignmentMod + self.repulsionMod
+            self.movement = self.cohesionMod + self.alignmentMod + self.repulsionMod
 
-        # else:
-        #     self.movement = 0
+        else:
+            self.movement = 0
 
+
+        self.position = self.position + self.movement
+        # self.velocity = self.movement
+        # self.move()
+        # self.canvas.coords(str(self.boidID), self.position)
+
+        print "=======Press enter key"
         raw_input()
+
         self.canvas.itemconfig(self.boid, fill = "red")
+        self.canvas.delete("boidCircle")
         for boid in self.neighbouringBoids:
             boid.highlightBoid(False)
         # sys.exit()
+
+
+    def move(self):
+        self.x0 = self.position[0] - self.step
+        self.y0 = self.position[1] - self.step
+        self.x1 = self.position[0]
+        self.y1 = self.position[1] + self.step
+        self.x2 = self.position[0] + self.step
+        self.y2 = self.position[1] - self.step
+        self.x3 = self.position[0]
+        self.y3 = self.position[1] - (self.step/2)
+
+        self.canvas.coords("B" + str(self.boidID), self.x0, self.y0, self.x1, self.y1, self.x2, 
+            self.y2, self.x3, self.y3)
 
 
     def highlightBoid(self, on):
@@ -87,6 +110,11 @@ class Boid:
                     self.neighbouringBoids.append(boid)
 
         self.canvas.itemconfig(self.boid, fill = "blue")
+
+        self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
+            self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
+            self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
+
         print "Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + " neighbouring boids"
 
         for boid in self.neighbouringBoids:
@@ -167,7 +195,7 @@ class Location:
         self.initialBoidCount = _initialBoidCount
 
         # Draw the location bounds
-        canvas.create_rectangle(locationCoords[0], locationCoords[1], locationCoords[2], locationCoords[3], outline = "yellow")
+        canvas.create_rectangle(locationCoords[0], locationCoords[1], locationCoords[2], locationCoords[3], outline = "yellow", tags = "L" + str(self.locationID))
 
         # Draw the location's boids
         for i in range (0, self.initialBoidCount):
@@ -255,6 +283,8 @@ class Simulation:
 
             loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount)
             self.locations.append(loc)
+
+        print "=======Press button"
 
         # Start everything going
         self.root.mainloop()
