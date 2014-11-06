@@ -55,6 +55,10 @@ class Boid:
         return self.velocity
 
 
+    # Update the boid's position based on the information contained in its neighbourhood. Only 
+    # commit the changes when all the boids have calculated their next move. Otherwise, a boid 
+    # would move based on its neighbours and when one of its neighbouts comes to move it will use 
+    # the new position of the original boid, not its original position. 
     def update(self, possibleNeighbouringBoids):
         self.possibleNeighbours = possibleNeighbouringBoids
 
@@ -69,29 +73,54 @@ class Boid:
 
         else:
             self.movement = 0
+           
 
+    # Move the boid to the calculate positon
+    def commit(self):
         self.velocity += self.movement
         self.position += self.velocity
 
         # print self.velocity
         # print self.position
-        # print self.movement
-        # print np.arctan2(self.velocity[0], self.velocity[1])
 
-        self.move()
+        if self.position[0] < 0:
+            # print "X less than 0"
+            # self.velocity -= self.movement
+            self.velocity = -self.velocity
+            self.position += self.velocity
+
+        elif self.position[0] > self.canvas.winfo_width():
+            # print "X greater than max"
+            # self.velocity -= self.movement
+            self.velocity = -self.velocity
+            self.position += self.velocity
+
+        elif self.position[1] < 0:
+            # print "Y less than 0"
+            # self.velocity -= self.movement
+            self.velocity = -self.velocity
+            self.position += self.velocity
+
+        elif self.position[1] > self.canvas.winfo_width():
+            # print "Y greater than max"
+            # self.velocity -= self.movement
+            self.velocity = -self.velocity
+            self.position += self.velocity
+
+        # print self.velocity
+        # print self.position
+
+        # self.canvas.itemconfig(self.boid, fill = "blue") 
 
         # print "=======Press enter key"
         # raw_input()
         # time.sleep(1)
 
-        self.canvas.itemconfig(self.boid, fill = "red")
-        self.canvas.delete("boidCircle")
-        for boid in self.neighbouringBoids:
-            boid.highlightBoid(False)
-        # sys.exit()
+        # self.canvas.itemconfig(self.boid, fill = "red") 
+        # self.canvas.delete("boidCircle")
+        # for boid in self.neighbouringBoids:
+        #     boid.highlightBoid(False)
 
-
-    def move(self):
         self.x0 = self.position[0] - self.step
         self.y0 = self.position[1] - self.step
         self.x1 = self.position[0]
@@ -123,17 +152,17 @@ class Boid:
                 if dist < self.VISION_RADIUS:
                     self.neighbouringBoids.append(boid)
 
-        self.canvas.itemconfig(self.boid, fill = "blue")
+        # self.canvas.itemconfig(self.boid, fill = "blue")
 
-        self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
-            self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
-            self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
+        # self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
+        #     self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
+        #     self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
 
         # print "Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + " neighbouring boids"
 
-        for boid in self.neighbouringBoids:
-            # print boid.boidID
-            boid.highlightBoid(True)
+        # for boid in self.neighbouringBoids:
+        #     # print boid.boidID
+        #     boid.highlightBoid(True)
 
 
     def coehsion(self):
@@ -221,7 +250,8 @@ class Location:
         self.initialBoidCount = _initialBoidCount
 
         # Draw the location bounds
-        canvas.create_rectangle(locationCoords[0], locationCoords[1], locationCoords[2], locationCoords[3], outline = "yellow", tags = "L" + str(self.locationID))
+        canvas.create_rectangle(locationCoords[0], locationCoords[1], locationCoords[2], 
+            locationCoords[3], outline = "yellow", tags = "L" + str(self.locationID))
 
         # Draw the location's boids
         for i in range (0, self.initialBoidCount):
@@ -237,11 +267,15 @@ class Location:
         print "Created location " + str(self.locationID) + " with " + str(self.initialBoidCount) + " boids"
 
 
-    def update(self):
-        self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
-        for i in range(0, self.initialBoidCount):
-            self.boids[i].update(self.possibleNeighbouringBoids)
-            # self.boids[i].rotate(90)
+    def update(self, commit):
+        if commit == False:
+            self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
+
+            for i in range(0, self.initialBoidCount):
+                self.boids[i].update(self.possibleNeighbouringBoids)
+        else:
+            for i in range(0, self.initialBoidCount):
+                self.boids[i].commit()
 
 
     # Return a list containing the boids currently controlled by this location
@@ -318,9 +352,14 @@ class Simulation:
 
 
     def buttonAction(self):
+        # for b in range(1, 1000):
         for i in range(0, self.locationCount):
-            # print "Updating location " + str(self.locations[i].locationID) + "..."
-            self.locations[i].update()
+            # print "Calculating next boid positions for location " + str(self.locations[i].locationID) + "..."
+            self.locations[i].update(False)
+
+        for i in range(0, self.locationCount):
+            # print "Moving boids to calculated positions for location " + str(self.locations[i].locationID) + "..."
+            self.locations[i].update(True)
 
 
     def getNeighbouringLocations(self, locationID):
