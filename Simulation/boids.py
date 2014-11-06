@@ -3,7 +3,9 @@
 from Tkinter import *       # Used to draw shapes for the simulation
 import numpy as np          # Used in various mathematical operations
 import random               # Used to randomly position the boids on initialisation
+
 import sys
+import time
 
 class Boid:
 
@@ -19,9 +21,12 @@ class Boid:
 
         self.neighbouringBoids = []
 
-        self.MAX_VELOCITY = 3
+        self.MAX_VELOCITY = 30
         self.VISION_RADIUS = 100
-        self.velocity = random.randint(0, self.MAX_VELOCITY)
+
+        self.randomVelX = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
+        self.randomVelY = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
+        self.velocity = np.array([self.randomVelX, self.randomVelY], dtype = np.float_)
 
         # Define the boid polygon points
         self.x0 = self.position[0] - self.step
@@ -36,6 +41,8 @@ class Boid:
         # Draw the boid
         self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
             self.y2, self.x3, self.y3, fill = "red", outline = "white", tags = ("B" + str(self.boidID)))
+
+        self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
         print "Created boid with ID " + str(self.boidID)
 
@@ -63,14 +70,19 @@ class Boid:
         else:
             self.movement = 0
 
+        self.velocity += self.movement
+        self.position += self.velocity
 
-        self.position = self.position + self.movement
-        # self.velocity = self.movement
-        # self.move()
-        # self.canvas.coords(str(self.boidID), self.position)
+        # print self.velocity
+        # print self.position
+        # print self.movement
+        # print np.arctan2(self.velocity[0], self.velocity[1])
 
-        print "=======Press enter key"
-        raw_input()
+        self.move()
+
+        # print "=======Press enter key"
+        # raw_input()
+        # time.sleep(1)
 
         self.canvas.itemconfig(self.boid, fill = "red")
         self.canvas.delete("boidCircle")
@@ -92,6 +104,8 @@ class Boid:
         self.canvas.coords("B" + str(self.boidID), self.x0, self.y0, self.x1, self.y1, self.x2, 
             self.y2, self.x3, self.y3)
 
+        self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
+
 
     def highlightBoid(self, on):
         if on:
@@ -101,7 +115,7 @@ class Boid:
 
 
     def calculateNeighbours(self):
-        print "Number of possible neighbouring boids: " + str(len(self.possibleNeighbours))
+        # print "Number of possible neighbouring boids: " + str(len(self.possibleNeighbours))
 
         for boid in self.possibleNeighbours:
             if boid.boidID != self.boidID:
@@ -115,10 +129,10 @@ class Boid:
             self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
             self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
 
-        print "Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + " neighbouring boids"
+        # print "Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + " neighbouring boids"
 
         for boid in self.neighbouringBoids:
-            print boid.boidID
+            # print boid.boidID
             boid.highlightBoid(True)
 
 
@@ -141,11 +155,22 @@ class Boid:
 
     def alignment(self):
         self.alignmentMod = 0
+
+        # print "Alignment info: "
+
         for boid in self.neighbouringBoids:
             self.alignmentMod += boid.velocity
+            # print boid.velocity
 
+        # print self.alignmentMod
+        # print len(self.neighbouringBoids)
         self.alignmentMod /= len(self.neighbouringBoids)
+        # print self.alignmentMod
         self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+        
+        # print self.alignmentMod
+        # print np.linalg.norm(self.alignmentMod)
+        # print self.alignmentMod
 
         return self.alignmentMod
 
@@ -163,19 +188,20 @@ class Boid:
 
 
     # Rotation definition based on an answer from StackOverflow: http://stackoverflow.com/a/3409039
-    def rotate(self, degrees):
+    def rotate(self, radians):
         # Convert to radians for trig functions
-        radians = degrees * np.pi / 180
+        # radians = degrees * np.pi / 180
         self.bearing -= radians
+        self.bearing = self.bearing % (2 * np.pi)
 
         def _rot(x, y):
             # Note: the rotation is done in the opposite fashion from for a right-handed coordinate 
             #   system due to the left-handedness of computer coordinates
-            x -= self.centreX
-            y -= self.centreY
+            x -= self.position[0]
+            y -= self.position[1]
             _x = x * np.cos(radians) + y * np.sin(radians)
             _y = -x * np.sin(radians) + y * np.cos(radians)
-            return _x + self.centreX, _y + self.centreY
+            return _x + self.position[0], _y + self.position[1]
 
         self.x0, self.y0 = _rot(self.x0, self.y0)
         self.x1, self.y1 = _rot(self.x1, self.y1)
@@ -202,7 +228,7 @@ class Location:
             # Randomly position the boid on initialisation
             self.randomX = random.randint(locationCoords[0], locationCoords[2]);
             self.randomY = random.randint(locationCoords[1], locationCoords[3]);
-            self.initialPosition = np.array([self.randomX, self.randomY])
+            self.initialPosition = np.array([self.randomX, self.randomY], dtype = np.float_)
             self.boidID = ((self.locationID - 1)* self.initialBoidCount) + i + 1
 
             boid = Boid(canvas, self, self.boidID, self.initialPosition)
@@ -215,6 +241,7 @@ class Location:
         self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
         for i in range(0, self.initialBoidCount):
             self.boids[i].update(self.possibleNeighbouringBoids)
+            # self.boids[i].rotate(90)
 
 
     # Return a list containing the boids currently controlled by this location
@@ -225,7 +252,7 @@ class Location:
     # Return a list containing the boids from each neighbouring location
     def getPossibleNeighbouringBoids(self):
         self.neighbouringLocations = self.simulation.getNeighbouringLocations(self.locationID)
-        print "This location has the following location neighbours: " + (" ".join([str(l) for l in self.neighbouringLocations]))
+        # print "This location has the following location neighbours: " + (" ".join([str(l) for l in self.neighbouringLocations]))
 
         # Need the slice operation or else updating 
         self.neighbouringBoids = self.boids[:]
@@ -292,7 +319,7 @@ class Simulation:
 
     def buttonAction(self):
         for i in range(0, self.locationCount):
-            print "Updating location " + str(self.locations[i].locationID) + "..."
+            # print "Updating location " + str(self.locations[i].locationID) + "..."
             self.locations[i].update()
 
 
