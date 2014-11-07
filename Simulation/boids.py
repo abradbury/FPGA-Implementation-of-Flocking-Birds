@@ -7,6 +7,23 @@ import random               # Used to randomly position the boids on initialisat
 import sys
 import time
 
+
+## MUST DOs ========================================================================================
+# TODO: Create boid handover functionality between locations
+# TODO: Rework drawing routine so that it can be automatic
+# TODO: Implement locations as threads
+# TODO: Add timing functions to computation
+
+# FIXME: Investigate arithmetic warning on rule calculation
+# FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
+
+## MAY DOs =========================================================================================
+# TODO: Enable logging to control debug output
+# TODO: Add keybinding to capture return key and simulate button press
+# TODO: Add acceleration to smooth movement
+# TODO: Add timestep counter
+
+
 class Boid:
 
     def __init__(self, canvas, _location, _boidID, initPosition):
@@ -21,8 +38,12 @@ class Boid:
 
         self.neighbouringBoids = []
 
-        self.MAX_VELOCITY = 30
-        self.VISION_RADIUS = 100
+        self.MAX_VELOCITY = 10
+        self.VISION_RADIUS = 200
+
+        self.ALIGNMENT_WEIGHT = 1
+        self.COHESION_WEIGHT = 1
+        self.REPULSION_WEIGHT = 1
 
         self.randomVelX = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
         self.randomVelY = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
@@ -62,14 +83,20 @@ class Boid:
     def update(self, possibleNeighbouringBoids):
         self.possibleNeighbours = possibleNeighbouringBoids
 
+        for boid in self.neighbouringBoids:
+            boid.highlightBoid(False)
+
         self.calculateNeighbours()
+        self.followBoid(42, True)
 
         if len(self.neighbouringBoids) > 0:
             self.cohesionMod = self.coehsion()
             self.alignmentMod = self.alignment()
             self.repulsionMod = self.repulsion()
 
-            self.movement = self.cohesionMod + self.alignmentMod + self.repulsionMod
+            self.movement = ((self.COHESION_WEIGHT * self.cohesionMod) + 
+                (self.ALIGNMENT_WEIGHT * self.alignmentMod) + 
+                (self.REPULSION_WEIGHT * self.repulsionMod))
 
         else:
             self.movement = 0
@@ -78,6 +105,21 @@ class Boid:
     # Move the boid to the calculate positon
     def commit(self):
         self.velocity += self.movement
+
+        # Bounds the velocity to the maximum allowed
+        if self.velocity[0] > self.MAX_VELOCITY:
+            self.velocity[0] = self.MAX_VELOCITY
+
+        if self.velocity[1] > self.MAX_VELOCITY:
+            self.velocity[1] = self.MAX_VELOCITY
+
+        if self.velocity[0] < -self.MAX_VELOCITY:
+            self.velocity[0] = -self.MAX_VELOCITY
+
+        if self.velocity[1] < -self.MAX_VELOCITY:
+            self.velocity[1] = -self.MAX_VELOCITY
+
+
         self.position += self.velocity
 
         # print self.velocity
@@ -116,10 +158,6 @@ class Boid:
         # raw_input()
         # time.sleep(1)
 
-        # self.canvas.itemconfig(self.boid, fill = "red") 
-        # self.canvas.delete("boidCircle")
-        # for boid in self.neighbouringBoids:
-        #     boid.highlightBoid(False)
 
         self.x0 = self.position[0] - self.step
         self.y0 = self.position[1] - self.step
@@ -135,6 +173,37 @@ class Boid:
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
+        self.followBoid(42, False)
+
+
+    # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
+    # coloured blue. Any neighbouring boid is coloured green. 
+    def followBoid(self, _boidID, update):
+        if self.boidID == _boidID:
+            if update == True:
+                self.canvas.itemconfig(self.boid, fill = "red") 
+                self.canvas.delete("boidCircle")
+                for boid in self.neighbouringBoids:
+                    boid.highlightBoid(False)
+
+            else:
+                self.canvas.itemconfig(self.boid, fill = "blue")
+
+                self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
+                    self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
+                    self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
+
+                print("Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + 
+                    " neighbouring boids: ")
+                print (" ".join([str(b.boidID) for b in self.neighbouringBoids]))
+
+                for boid in self.neighbouringBoids:
+                    boid.highlightBoid(True)
+                #     print("Boid " + str(boid.boidID) + " has position " + str(boid.position) + 
+                #         " and velocty " + str(boid.velocity)) 
+        
+                # print str(boid.movement)
+
 
     def highlightBoid(self, on):
         if on:
@@ -143,8 +212,10 @@ class Boid:
             self.canvas.itemconfig(self.boid, fill = "red")
 
 
+    # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
+    # the possible neighbour. Possible neighbouring boids include boids from neighbouring locations.
     def calculateNeighbours(self):
-        # print "Number of possible neighbouring boids: " + str(len(self.possibleNeighbours))
+        self.neighbouringBoids = []
 
         for boid in self.possibleNeighbours:
             if boid.boidID != self.boidID:
@@ -152,58 +223,33 @@ class Boid:
                 if dist < self.VISION_RADIUS:
                     self.neighbouringBoids.append(boid)
 
-        # self.canvas.itemconfig(self.boid, fill = "blue")
 
-        # self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
-        #     self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
-        #     self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
-
-        # print "Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + " neighbouring boids"
-
-        # for boid in self.neighbouringBoids:
-        #     # print boid.boidID
-        #     boid.highlightBoid(True)
-
-
+    # A boid will move towards the centre of mass of its neighbourhood
     def coehsion(self):
         self.cohesionMod = 0;
         for boid in self.neighbouringBoids:
             self.cohesionMod += boid.position
-            # print boid.boidID
 
         self.cohesionMod /= len(self.neighbouringBoids)
         self.cohesionMod -= self.position
-        
-        # print str(self.cohesionMod)
         self.cohesionMod = (self.cohesionMod / np.linalg.norm(self.cohesionMod))
-        # print str(np.linalg.norm(self.cohesionMod))
-        # print str(self.cohesionMod)
 
         return self.cohesionMod
 
 
+    # A boid will align itself with the average orientation of its neighbours
     def alignment(self):
         self.alignmentMod = 0
-
-        # print "Alignment info: "
-
         for boid in self.neighbouringBoids:
             self.alignmentMod += boid.velocity
-            # print boid.velocity
 
-        # print self.alignmentMod
-        # print len(self.neighbouringBoids)
         self.alignmentMod /= len(self.neighbouringBoids)
-        # print self.alignmentMod
         self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
-        
-        # print self.alignmentMod
-        # print np.linalg.norm(self.alignmentMod)
-        # print self.alignmentMod
 
         return self.alignmentMod
 
 
+    # A boid does not want to get too close to its neighbours and needs its personal space
     def repulsion(self):
         self.repulsionMod = 0
         for boid in self.neighbouringBoids:
@@ -364,23 +410,32 @@ class Simulation:
 
     def getNeighbouringLocations(self, locationID):
         if locationID == 1:
-            self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
+            # self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
+            self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 9]
         elif locationID == 2:
-            self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
+            # self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
+            self.neighbouringLocations = [1, 3, 4, 5, 6, 7, 8, 9]
         elif locationID == 3:
-            self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
+            # self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
+            self.neighbouringLocations = [2, 1, 4, 5, 6, 7, 8, 9]
         elif locationID == 4:
-            self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
+            # self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
+            self.neighbouringLocations = [2, 3, 1, 5, 6, 7, 8, 9]
         elif locationID == 5:
-            self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
+            # self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
+            self.neighbouringLocations = [2, 3, 4, 1, 6, 7, 8, 9]
         elif locationID == 6:
-            self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
+            # self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
+            self.neighbouringLocations = [2, 3, 4, 5, 1, 7, 8, 9]
         elif locationID == 7:
-            self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
+            # self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
+            self.neighbouringLocations = [2, 3, 4, 5, 6, 1, 8, 9]
         elif locationID == 8:
-            self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
+            # self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
+            self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 1, 9]
         elif locationID == 9:
-            self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
+            # self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
+            self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 1]
 
         return self.neighbouringLocations
 
