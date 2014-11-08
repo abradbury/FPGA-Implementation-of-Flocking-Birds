@@ -10,7 +10,6 @@ import time
 
 ## MUST DOs ========================================================================================
 # TODO: Create boid handover functionality between locations
-# TODO: Rework drawing routine so that it can be automatic
 # TODO: Implement locations as threads
 # TODO: Add timing functions to computation
 
@@ -21,7 +20,7 @@ import time
 # TODO: Enable logging to control debug output
 # TODO: Add keybinding to capture return key and simulate button press
 # TODO: Add acceleration to smooth movement
-# TODO: Add timestep counter
+# TODO: Calculate a locations neighbours programmatically
 
 
 class Boid:
@@ -345,28 +344,41 @@ class Location:
 
 
 
+# The main application class. Sets up the simulation area and the number of locations that it is to 
+# be divided into. 
+#
+# Note that the simulation begins with a user pressing the pauseButton (initially labelled 'Begin'). 
+# Because the pause flag is initally set to true, in the action function the simulation is 'resumed'.
 class Simulation:
 
     def __init__(self):
+        # Setup the simulation parameters
+        self.width = 700
+        self.height = 700
+        self.boidCount = 90
+        self.pauseSimulation = True
+        self.timeStepCounter = 0
+
+        # Create the window
         self.root = Tk()
         self.root.wm_title("Boid Simulation")
 
         frame = Frame(self.root)
         frame.pack()
-
-        self.width = 700
-        self.height = 700
-        self.boidCount = 90
-
-        # Create the window
+        
         self.canvas = Canvas(frame, bg = "black", width = self.width, height = self.height)
         self.canvas.pack();
         
         # Create the buttons
-        self.timeButton = Button(frame, text = "Next Time Step", command = self.buttonAction)
+        self.timeButton = Button(frame, text = "Next Time Step", command = self.simulationStep, state = DISABLED)
         self.timeButton.pack(side = LEFT)
+        self.pauseButton = Button(frame, text = "Begin", command = self.pause)
+        self.pauseButton.pack(side = LEFT)
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
         self.quitButton.pack(side = LEFT)
+
+        self.counterLabel = Label(frame, text = self.timeStepCounter, width = 6)
+        self.counterLabel.pack(side = RIGHT)
 
         # Needed so that the canvas sizes can be used later
         self.root.update()
@@ -391,23 +403,44 @@ class Simulation:
             loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount)
             self.locations.append(loc)
 
-        print "=======Press button"
+        print "======= Press the 'Begin' button to start the simulation"
 
         # Start everything going
         self.root.mainloop()
 
 
-    def buttonAction(self):
-        # for b in range(1, 1000):
-        for i in range(0, self.locationCount):
-            # print "Calculating next boid positions for location " + str(self.locations[i].locationID) + "..."
-            self.locations[i].update(False)
+    def simulationStep(self):
+        if self.pauseSimulation == False:
+            for i in range(0, self.locationCount):
+                # print "Calculating next boid positions for location " + str(self.locations[i].locationID) + "..."
+                self.locations[i].update(False)
 
-        for i in range(0, self.locationCount):
-            # print "Moving boids to calculated positions for location " + str(self.locations[i].locationID) + "..."
-            self.locations[i].update(True)
+            for i in range(0, self.locationCount):
+                # print "Moving boids to calculated positions for location " + str(self.locations[i].locationID) + "..."
+                self.locations[i].update(True)
+
+            # Update the counter label
+            self.timeStepCounter += 1
+            self.counterLabel.config(text = self.timeStepCounter)
+
+            # Call self after 100ms
+            self.canvas.after(100, self.simulationStep)
 
 
+    # Sets a flag that is used to pause and resume the simulation 
+    def pause(self):
+        if self.pauseSimulation == False:
+            self.pauseSimulation = True
+            self.pauseButton.config(text = "Resume")
+        else:
+            self.pauseSimulation = False
+            self.pauseButton.config(text = "Pause")
+            self.simulationStep()
+
+
+    # Get the neighbouring locations of the specified location. Currently, this simply returns a 
+    # hard-coded list of neighbours tailored to the asking location. Ideally, the neighbours would 
+    # be calculated in a programmatic way.
     def getNeighbouringLocations(self, locationID):
         if locationID == 1:
             # self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
@@ -440,11 +473,14 @@ class Simulation:
         return self.neighbouringLocations
 
 
+    # Return a list of the boids for a specified location
     def getLocationBoids(self, locationID):
         return self.locations[locationID - 1].getBoids()
 
 
+# Start everything off
 boidSimulation = Simulation()
+
 
 if __name__ == '__main__':
     print "yolo";
