@@ -5,6 +5,8 @@ import numpy as np          # Used in various mathematical operations
 import random               # Used to randomly position the boids on initialisation
 import logging              # Used to handle the textual output
 
+import warnings             # Used to catch an invalid divide warning
+
 
 ## MUST DOs ========================================================================================
 # TODO: Implement locations as threads
@@ -15,7 +17,6 @@ import logging              # Used to handle the textual output
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 
 ## MAY DOs =========================================================================================
-# TODO: Enable logging to control debug output
 # TODO: Add keybinding to capture return key and simulate button press
 # TODO: Add acceleration to smooth movement
 # TODO: Calculate a locations neighbours programmatically
@@ -218,7 +219,17 @@ class Boid:
         for boid in self.neighbouringBoids:
             self.alignmentMod += boid.velocity
 
-        self.alignmentMod /= len(self.neighbouringBoids)
+
+        self.alignmentModPrev = self.alignmentMod
+        try:
+            self.alignmentMod /= len(self.neighbouringBoids)
+        except RuntimeWarning, w:
+            logging.WARNING(w)
+            logging.WARNING(self.alignmentModPrev)
+            logging.WARNING(self.alignmentMod)
+            logging.WARNING(len(self.neighbouringBoids))
+
+        
         self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
 
     #       boids.py:222: RuntimeWarning: invalid value encountered in divide
