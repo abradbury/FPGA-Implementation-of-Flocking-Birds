@@ -9,7 +9,6 @@ import time
 
 
 ## MUST DOs ========================================================================================
-# TODO: Create boid handover functionality between locations
 # TODO: Implement locations as threads
 # TODO: Add timing functions to computation
 
@@ -25,8 +24,9 @@ import time
 
 class Boid:
 
-    def __init__(self, canvas, _location, _boidID, initPosition):
+    def __init__(self, canvas, _location, _boidID, initPosition, _colour):
         self.location = _location
+        self.colour = _colour
 
         # Create the boids
         self.boidID = _boidID
@@ -60,7 +60,7 @@ class Boid:
 
         # Draw the boid
         self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3, fill = "red", outline = "white", tags = ("B" + str(self.boidID)))
+            self.y2, self.x3, self.y3, fill = self.colour, outline = self.colour, width = 2, tags = ("B" + str(self.boidID)))
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
@@ -82,11 +82,11 @@ class Boid:
     def update(self, possibleNeighbouringBoids):
         self.possibleNeighbours = possibleNeighbouringBoids
 
-        for boid in self.neighbouringBoids:
-            boid.highlightBoid(False)
+        # for boid in self.neighbouringBoids:
+        #     boid.highlightBoid(False)
 
         self.calculateNeighbours()
-        self.followBoid(42, True)
+        # self.followBoid(42, True)
 
         if len(self.neighbouringBoids) > 0:
             self.cohesionMod = self.coehsion()
@@ -102,10 +102,10 @@ class Boid:
            
 
     # Move the boid to the calculate positon
-    def commit(self):
+    def draw(self, colour):
         self.velocity += self.movement
 
-        # Bounds the velocity to the maximum allowed
+        # Bound the velocity to the maximum allowed
         if self.velocity[0] > self.MAX_VELOCITY:
             self.velocity[0] = self.MAX_VELOCITY
 
@@ -118,46 +118,26 @@ class Boid:
         if self.velocity[1] < -self.MAX_VELOCITY:
             self.velocity[1] = -self.MAX_VELOCITY
 
-
         self.position += self.velocity
 
-        # print self.velocity
-        # print self.position
-
+        # Contain the boids in the simulation area
         if self.position[0] < 0:
-            # print "X less than 0"
-            # self.velocity -= self.movement
             self.velocity = -self.velocity
             self.position += self.velocity
 
         elif self.position[0] > self.canvas.winfo_width():
-            # print "X greater than max"
-            # self.velocity -= self.movement
             self.velocity = -self.velocity
             self.position += self.velocity
 
         elif self.position[1] < 0:
-            # print "Y less than 0"
-            # self.velocity -= self.movement
             self.velocity = -self.velocity
             self.position += self.velocity
 
         elif self.position[1] > self.canvas.winfo_width():
-            # print "Y greater than max"
-            # self.velocity -= self.movement
             self.velocity = -self.velocity
             self.position += self.velocity
 
-        # print self.velocity
-        # print self.position
-
-        # self.canvas.itemconfig(self.boid, fill = "blue") 
-
-        # print "=======Press enter key"
-        # raw_input()
-        # time.sleep(1)
-
-
+        # Calculate the position of the points of the boid object
         self.x0 = self.position[0] - self.step
         self.y0 = self.position[1] - self.step
         self.x1 = self.position[0]
@@ -169,10 +149,11 @@ class Boid:
 
         self.canvas.coords("B" + str(self.boidID), self.x0, self.y0, self.x1, self.y1, self.x2, 
             self.y2, self.x3, self.y3)
+        self.canvas.itemconfig(self.boid, fill = colour) 
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
-        self.followBoid(42, False)
+        # self.followBoid(42, False)
 
 
     # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
@@ -287,40 +268,118 @@ class Boid:
 
 class Location:
 
-    def __init__(self, canvas, _simulation, _locationID, locationCoords, _initialBoidCount):
+    def __init__(self, canvas, _simulation, _locationID, _locationCoords, _initialBoidCount, _colour):
         self.simulation = _simulation
         self.locationID = _locationID
+        self.locationCoords = np.copy(_locationCoords)
+        self.colour = _colour
 
         self.boids = []
-        self.initialBoidCount = _initialBoidCount
+        self.boidCount = _initialBoidCount
+
+        print self.locationCoords
 
         # Draw the location bounds
-        canvas.create_rectangle(locationCoords[0], locationCoords[1], locationCoords[2], 
-            locationCoords[3], outline = "yellow", tags = "L" + str(self.locationID))
+        canvas.create_rectangle(self.locationCoords[0], self.locationCoords[1], self.locationCoords[2], 
+            self.locationCoords[3], outline = self.colour, tags = "L" + str(self.locationID))
 
         # Draw the location's boids
-        for i in range (0, self.initialBoidCount):
+        for i in range (0, self.boidCount):
             # Randomly position the boid on initialisation
-            self.randomX = random.randint(locationCoords[0], locationCoords[2]);
-            self.randomY = random.randint(locationCoords[1], locationCoords[3]);
+            self.randomX = random.randint(self.locationCoords[0], self.locationCoords[2]);
+            self.randomY = random.randint(self.locationCoords[1], self.locationCoords[3]);
             self.initialPosition = np.array([self.randomX, self.randomY], dtype = np.float_)
-            self.boidID = ((self.locationID - 1)* self.initialBoidCount) + i + 1
+            self.boidID = ((self.locationID - 1)* self.boidCount) + i + 1
 
-            boid = Boid(canvas, self, self.boidID, self.initialPosition)
+            boid = Boid(canvas, self, self.boidID, self.initialPosition, self.colour)
             self.boids.append(boid)
 
-        print "Created location " + str(self.locationID) + " with " + str(self.initialBoidCount) + " boids"
+        print "Created location " + str(self.locationID) + " with " + str(self.boidCount) + " boids"
 
 
-    def update(self, commit):
-        if commit == False:
+    def update(self, draw):
+        if draw == False:
             self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
 
-            for i in range(0, self.initialBoidCount):
+            for i in range(0, self.boidCount):
                 self.boids[i].update(self.possibleNeighbouringBoids)
+
+            for boid in self.boids:
+                self.determineBoidTransfer(boid)
+
         else:
-            for i in range(0, self.initialBoidCount):
-                self.boids[i].commit()
+            for i in range(0, self.boidCount):
+                # print str(i) + " - " + str(self.boidCount) +  " - " + str(len(self.boids)) + " " + str(self.boids[0].boidID)
+                self.boids[i].draw(self.colour)
+
+
+    #TODO: indexing
+    def determineBoidTransfer(self, boid):
+
+        # print str(self.locationCoords) + str(boid.position)
+
+        # If the location has a neighbour to the NORTHWEST and the boid is beyond its northern AND western boundaries
+        if (self.neighbouringLocations[0] != 0) and (boid.position[1] < self.locationCoords[1]) and (boid.position[0] < self.locationCoords[0]):
+            print "Boid " + str(boid.boidID) + " is beyond the NORTH and WESTERN boundaries of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[0])
+
+        # If the location has a neighbour to the NORTHEAST and the boid is beyond its northern AND eastern boundaries
+        elif (self.neighbouringLocations[2] != 0) and (boid.position[1] < self.locationCoords[1]) and (boid.position[0] > self.locationCoords[2]):
+            print "Boid " + str(boid.boidID) + " is beyond the NORTH and EASTERN boundaries of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[2])
+
+        # If the location has a neighbour to the SOUTHEAST and the boid is beyond its southern AND eastern boundaries
+        elif (self.neighbouringLocations[4] != 0) and (boid.position[1] > self.locationCoords[3]) and (boid.position[0] > self.locationCoords[2]):
+            print "Boid " + str(boid.boidID) + " is beyond the SOUTHERN and EASTERN boundaries of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[4])
+
+        # If the location has a neighbour to the SOUTHWEST and the boid is beyond its southern AND western boundaries
+        elif (self.neighbouringLocations[6] != 0) and (boid.position[1] > self.locationCoords[3]) and (boid.position[0] < self.locationCoords[0]):
+            print "Boid " + str(boid.boidID) + " is beyond the SOUTHERN and WESTERN boundaries of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[6])
+
+        # If the location has a neighbour to the NORTH and the boid is beyond its northern boundary
+        elif (self.neighbouringLocations[1] != 0) and (boid.position[1] < self.locationCoords[1]):
+            print "Boid " + str(boid.boidID) + " is beyond the NORTH boundary of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[1])
+
+        # If the location has a neighbour to the EAST and the boid is beyond its eastern boundary
+        elif (self.neighbouringLocations[3] != 0) and (boid.position[0] > self.locationCoords[2]):
+            print "Boid " + str(boid.boidID) + " is beyond the EAST boundary of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[3])  
+            
+        # If the location has a neighbour to the SOUTH and the boid is beyond its southern boundary
+        elif (self.neighbouringLocations[5] != 0) and (boid.position[1] > self.locationCoords[3]):
+            print "Boid " + str(boid.boidID) + " is beyond the SOUTH boundary of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[5])
+
+        # If the location has a neighbour to the WEST and the boid is beyond its western boundary
+        elif (self.neighbouringLocations[7] != 0) and (boid.position[0] < self.locationCoords[0]):
+            print "Boid " + str(boid.boidID) + " is beyond the WEST boundary of location " + str(self.locationID)
+            self.transferBoid(boid, self.neighbouringLocations[7])
+
+        # boid.highlightBoid(True)
+        # raw_input()
+        # boid.highlightBoid(False)
+
+
+    # Accept a boid transferred from another location and add it to this locations boid list
+    def acceptBoid(self, boid, fromID):
+        self.boids.append(boid)
+        self.boidCount += 1
+
+        print("Location " + str(self.locationID) + " accepted boid " + str(boid.boidID) + 
+            " from location " + str(fromID) + " and now has " + str(self.boidCount) + " boids")
+
+
+    # Transfer a boid from this location to another location
+    def transferBoid(self, boid, toID):
+        print("Location " + str(self.locationID) + " sent boid " + str(boid.boidID) + 
+            " to location " + str(toID) + " and now has " + str(self.boidCount - 1) + " boids")
+
+        self.simulation.transferBoid(boid, toID, self.locationID)
+        self.boids[:] = [b for b in self.boids if b.boidID != boid.boidID]
+        self.boidCount -= 1
 
 
     # Return a list containing the boids currently controlled by this location
@@ -370,7 +429,7 @@ class Simulation:
         self.canvas.pack();
         
         # Create the buttons
-        self.timeButton = Button(frame, text = "Next Time Step", command = self.simulationStep, state = DISABLED)
+        self.timeButton = Button(frame, text = "Next Time Step", command = self.nextStepButton)
         self.timeButton.pack(side = LEFT)
         self.pauseButton = Button(frame, text = "Begin", command = self.pause)
         self.pauseButton.pack(side = LEFT)
@@ -391,6 +450,8 @@ class Simulation:
 
         self.locations = []
 
+        self.locationColours = ["red", "blue", "green", "yellow", "white", "magenta", "dark grey", "cyan", "dark green"]
+
         self.locationCoords = np.array([0, 0, 0, 0])
         for i in range(0, self.locationCount):
             self.locationCoords[0] = (i % 3) * self.locationSize
@@ -398,9 +459,9 @@ class Simulation:
             self.locationCoords[2] = self.locationCoords[0] + self.locationSize
             self.locationCoords[3] = self.locationCoords[1] + self.locationSize
 
-            print "[" + str(self.locationCoords[0]) + "," + str(self.locationCoords[1]) + "]"
+            print str(self.locationCoords)
 
-            loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount)
+            loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount, self.locationColours[i])
             self.locations.append(loc)
 
         print "======= Press the 'Begin' button to start the simulation"
@@ -415,6 +476,9 @@ class Simulation:
                 # print "Calculating next boid positions for location " + str(self.locations[i].locationID) + "..."
                 self.locations[i].update(False)
 
+            print "Location boid counts: " + " ".join(str(loc.boidCount) for loc in self.locations)
+            print
+
             for i in range(0, self.locationCount):
                 # print "Moving boids to calculated positions for location " + str(self.locations[i].locationID) + "..."
                 self.locations[i].update(True)
@@ -425,6 +489,13 @@ class Simulation:
 
             # Call self after 100ms
             self.canvas.after(100, self.simulationStep)
+
+    
+    # Manual timestep increment
+    def nextStepButton(self):
+        self.pauseSimulation = False
+        self.simulationStep()
+        self.pauseSimulation = True
 
 
     # Sets a flag that is used to pause and resume the simulation 
@@ -443,32 +514,32 @@ class Simulation:
     # be calculated in a programmatic way.
     def getNeighbouringLocations(self, locationID):
         if locationID == 1:
-            # self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
-            self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 9]
+            self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
+            # self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 9]
         elif locationID == 2:
-            # self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
-            self.neighbouringLocations = [1, 3, 4, 5, 6, 7, 8, 9]
+            self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
+            # self.neighbouringLocations = [1, 3, 4, 5, 6, 7, 8, 9]
         elif locationID == 3:
-            # self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
-            self.neighbouringLocations = [2, 1, 4, 5, 6, 7, 8, 9]
+            self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
+            # self.neighbouringLocations = [2, 1, 4, 5, 6, 7, 8, 9]
         elif locationID == 4:
-            # self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
-            self.neighbouringLocations = [2, 3, 1, 5, 6, 7, 8, 9]
+            self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
+            # self.neighbouringLocations = [2, 3, 1, 5, 6, 7, 8, 9]
         elif locationID == 5:
-            # self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
-            self.neighbouringLocations = [2, 3, 4, 1, 6, 7, 8, 9]
+            self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
+            # self.neighbouringLocations = [2, 3, 4, 1, 6, 7, 8, 9]
         elif locationID == 6:
-            # self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
-            self.neighbouringLocations = [2, 3, 4, 5, 1, 7, 8, 9]
+            self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
+            # self.neighbouringLocations = [2, 3, 4, 5, 1, 7, 8, 9]
         elif locationID == 7:
-            # self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
-            self.neighbouringLocations = [2, 3, 4, 5, 6, 1, 8, 9]
+            self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
+            # self.neighbouringLocations = [2, 3, 4, 5, 6, 1, 8, 9]
         elif locationID == 8:
-            # self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
-            self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 1, 9]
+            self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
+            # self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 1, 9]
         elif locationID == 9:
-            # self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
-            self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 1]
+            self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
+            # self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 1]
 
         return self.neighbouringLocations
 
@@ -476,6 +547,11 @@ class Simulation:
     # Return a list of the boids for a specified location
     def getLocationBoids(self, locationID):
         return self.locations[locationID - 1].getBoids()
+
+
+    # Transfer a boid from one location to another
+    def transferBoid(self, boid, toID, fromID):
+        self.locations[toID - 1].acceptBoid(boid, fromID)
 
 
 # Start everything off
