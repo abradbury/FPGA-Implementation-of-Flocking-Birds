@@ -3,16 +3,15 @@
 from Tkinter import *       # Used to draw shapes for the simulation
 import numpy as np          # Used in various mathematical operations
 import random               # Used to randomly position the boids on initialisation
-
-import sys
-import time
+import logging              # Used to handle the textual output
 
 
 ## MUST DOs ========================================================================================
 # TODO: Implement locations as threads
 # TODO: Add timing functions to computation
+# TODO: Split into three class files
 
-# FIXME: Investigate arithmetic warning on rule calculation
+# FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 
 ## MAY DOs =========================================================================================
@@ -64,7 +63,7 @@ class Boid:
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
-        print "Created boid with ID " + str(self.boidID)
+        logger.debug("Created boid with ID " + str(self.boidID))
 
 
     def getPosition(self):
@@ -173,16 +172,12 @@ class Boid:
                     self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
                     self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
 
-                print("Boid " + str(self.boidID) + " has " + str(len(self.neighbouringBoids)) + 
-                    " neighbouring boids: ")
-                print (" ".join([str(b.boidID) for b in self.neighbouringBoids]))
+                logger.debug("Boid " + str(self.boidID) + " has " + 
+                    str(len(self.neighbouringBoids)) + " neighbouring boids: ")
+                logger.debug(" ".join([str(b.boidID) for b in self.neighbouringBoids]))
 
                 for boid in self.neighbouringBoids:
                     boid.highlightBoid(True)
-                #     print("Boid " + str(boid.boidID) + " has position " + str(boid.position) + 
-                #         " and velocty " + str(boid.velocity)) 
-        
-                # print str(boid.movement)
 
 
     def highlightBoid(self, on):
@@ -225,6 +220,9 @@ class Boid:
 
         self.alignmentMod /= len(self.neighbouringBoids)
         self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+
+    #       boids.py:222: RuntimeWarning: invalid value encountered in divide
+    #           self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
 
         return self.alignmentMod
 
@@ -277,8 +275,6 @@ class Location:
         self.boids = []
         self.boidCount = _initialBoidCount
 
-        print self.locationCoords
-
         # Draw the location bounds
         canvas.create_rectangle(self.locationCoords[0], self.locationCoords[1], self.locationCoords[2], 
             self.locationCoords[3], outline = self.colour, tags = "L" + str(self.locationID))
@@ -294,7 +290,8 @@ class Location:
             boid = Boid(canvas, self, self.boidID, self.initialPosition, self.colour)
             self.boids.append(boid)
 
-        print "Created location " + str(self.locationID) + " with " + str(self.boidCount) + " boids"
+        logger.info("Created location " + str(self.locationID) + " with " + 
+            str(self.boidCount) + " boids")
 
 
     def update(self, draw):
@@ -309,58 +306,57 @@ class Location:
 
         else:
             for i in range(0, self.boidCount):
-                # print str(i) + " - " + str(self.boidCount) +  " - " + str(len(self.boids)) + " " + str(self.boids[0].boidID)
                 self.boids[i].draw(self.colour)
 
 
-    #TODO: indexing
     def determineBoidTransfer(self, boid):
-
-        # print str(self.locationCoords) + str(boid.position)
-
         # If the location has a neighbour to the NORTHWEST and the boid is beyond its northern AND western boundaries
         if (self.neighbouringLocations[0] != 0) and (boid.position[1] < self.locationCoords[1]) and (boid.position[0] < self.locationCoords[0]):
-            print "Boid " + str(boid.boidID) + " is beyond the NORTH and WESTERN boundaries of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the NORTH and WESTERN boundaries of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[0])
 
         # If the location has a neighbour to the NORTHEAST and the boid is beyond its northern AND eastern boundaries
         elif (self.neighbouringLocations[2] != 0) and (boid.position[1] < self.locationCoords[1]) and (boid.position[0] > self.locationCoords[2]):
-            print "Boid " + str(boid.boidID) + " is beyond the NORTH and EASTERN boundaries of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the NORTH and EASTERN boundaries of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[2])
 
         # If the location has a neighbour to the SOUTHEAST and the boid is beyond its southern AND eastern boundaries
         elif (self.neighbouringLocations[4] != 0) and (boid.position[1] > self.locationCoords[3]) and (boid.position[0] > self.locationCoords[2]):
-            print "Boid " + str(boid.boidID) + " is beyond the SOUTHERN and EASTERN boundaries of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the SOUTHERN and EASTERN boundaries of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[4])
 
         # If the location has a neighbour to the SOUTHWEST and the boid is beyond its southern AND western boundaries
         elif (self.neighbouringLocations[6] != 0) and (boid.position[1] > self.locationCoords[3]) and (boid.position[0] < self.locationCoords[0]):
-            print "Boid " + str(boid.boidID) + " is beyond the SOUTHERN and WESTERN boundaries of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the SOUTHERN and WESTERN boundaries of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[6])
 
         # If the location has a neighbour to the NORTH and the boid is beyond its northern boundary
         elif (self.neighbouringLocations[1] != 0) and (boid.position[1] < self.locationCoords[1]):
-            print "Boid " + str(boid.boidID) + " is beyond the NORTH boundary of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the NORTH boundary of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[1])
 
         # If the location has a neighbour to the EAST and the boid is beyond its eastern boundary
         elif (self.neighbouringLocations[3] != 0) and (boid.position[0] > self.locationCoords[2]):
-            print "Boid " + str(boid.boidID) + " is beyond the EAST boundary of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the EAST boundary of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[3])  
             
         # If the location has a neighbour to the SOUTH and the boid is beyond its southern boundary
         elif (self.neighbouringLocations[5] != 0) and (boid.position[1] > self.locationCoords[3]):
-            print "Boid " + str(boid.boidID) + " is beyond the SOUTH boundary of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the SOUTH boundary of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[5])
 
         # If the location has a neighbour to the WEST and the boid is beyond its western boundary
         elif (self.neighbouringLocations[7] != 0) and (boid.position[0] < self.locationCoords[0]):
-            print "Boid " + str(boid.boidID) + " is beyond the WEST boundary of location " + str(self.locationID)
+            logger.debug("Boid " + str(boid.boidID) + 
+                " is beyond the WEST boundary of location " + str(self.locationID))
             self.transferBoid(boid, self.neighbouringLocations[7])
-
-        # boid.highlightBoid(True)
-        # raw_input()
-        # boid.highlightBoid(False)
 
 
     # Accept a boid transferred from another location and add it to this locations boid list
@@ -368,13 +364,13 @@ class Location:
         self.boids.append(boid)
         self.boidCount += 1
 
-        print("Location " + str(self.locationID) + " accepted boid " + str(boid.boidID) + 
+        logger.debug("Location " + str(self.locationID) + " accepted boid " + str(boid.boidID) + 
             " from location " + str(fromID) + " and now has " + str(self.boidCount) + " boids")
 
 
     # Transfer a boid from this location to another location
     def transferBoid(self, boid, toID):
-        print("Location " + str(self.locationID) + " sent boid " + str(boid.boidID) + 
+        logger.debug("Location " + str(self.locationID) + " sent boid " + str(boid.boidID) + 
             " to location " + str(toID) + " and now has " + str(self.boidCount - 1) + " boids")
 
         self.simulation.transferBoid(boid, toID, self.locationID)
@@ -390,7 +386,6 @@ class Location:
     # Return a list containing the boids from each neighbouring location
     def getPossibleNeighbouringBoids(self):
         self.neighbouringLocations = self.simulation.getNeighbouringLocations(self.locationID)
-        # print "This location has the following location neighbours: " + (" ".join([str(l) for l in self.neighbouringLocations]))
 
         # Need the slice operation or else updating 
         self.neighbouringBoids = self.boids[:]
@@ -459,12 +454,10 @@ class Simulation:
             self.locationCoords[2] = self.locationCoords[0] + self.locationSize
             self.locationCoords[3] = self.locationCoords[1] + self.locationSize
 
-            print str(self.locationCoords)
-
             loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount, self.locationColours[i])
             self.locations.append(loc)
 
-        print "======= Press the 'Begin' button to start the simulation"
+        logger.info("- Press the 'Begin' button to start the simulation")
 
         # Start everything going
         self.root.mainloop()
@@ -473,14 +466,16 @@ class Simulation:
     def simulationStep(self):
         if self.pauseSimulation == False:
             for i in range(0, self.locationCount):
-                # print "Calculating next boid positions for location " + str(self.locations[i].locationID) + "..."
+                logger.debug("Calculating next boid positions for location " + 
+                    str(self.locations[i].locationID) + "...")
                 self.locations[i].update(False)
 
-            print "Location boid counts: " + " ".join(str(loc.boidCount) for loc in self.locations)
-            print
+            logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
+                for loc in self.locations))
 
             for i in range(0, self.locationCount):
-                # print "Moving boids to calculated positions for location " + str(self.locations[i].locationID) + "..."
+                logger.debug("Moving boids to calculated positions for location " + 
+                    str(self.locations[i].locationID) + "...")
                 self.locations[i].update(True)
 
             # Update the counter label
@@ -554,9 +549,17 @@ class Simulation:
         self.locations[toID - 1].acceptBoid(boid, fromID)
 
 
-# Start everything off
-boidSimulation = Simulation()
-
-
 if __name__ == '__main__':
-    print "yolo";
+    # Setup logging
+    logger = logging.getLogger('boidSimulation')
+    logger.setLevel(logging.DEBUG)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("[%(levelname)8s] --- %(message)s")
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    # Start everything off
+    boidSimulation = Simulation()
