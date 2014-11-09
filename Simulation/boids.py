@@ -1,17 +1,18 @@
 #!/usr/bin/python
 
-from Tkinter import *       # Used to draw shapes for the simulation
-import numpy as np          # Used in various mathematical operations
-import random               # Used to randomly position the boids on initialisation
-import logging              # Used to handle the textual output
-import time                 # Used to time stuff
+from Tkinter import *               # Used to draw shapes for the simulation
+import matplotlib.pyplot as plt     # Used to plot the graphs
+import numpy as np                  # Used in various mathematical operations
+import random                       # Used to randomly position the boids on initialisation
+import logging                      # Used to handle the textual output
+import time                         # Used to time stuff
 
 import warnings             # Used to catch an invalid divide warning
 
 
 ## MUST DOs ========================================================================================
 # TODO: Implement locations as threads - not needed anymore maybe?
-# TODO: Graphicing, data analysis
+# TODO: Graphing, data analysis
 # TODO: Split into three class files
 
 # FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
@@ -473,6 +474,10 @@ class Simulation:
 
         logger.info("- Press the 'Begin' button to start the simulation")
 
+        # Setup the graphs
+        self.setupGraphs()  
+
+
 
         ## Threading notes
         # Don't want a deamon thread as these are killed somehow
@@ -498,6 +503,51 @@ class Simulation:
 
         # Start everything going
         self.root.mainloop()
+
+
+    # Create the graphs
+    def setupGraphs(self):
+        initX = [0]
+        initY = [self.initialBoidCount]
+        self.lines = []
+
+        self.figure, self.axes = plt.subplots(nrows = 3, ncols = 3)
+
+        for i in range(0, self.locationCount):
+            # Plot a graph in the correct subplot and store the line for the graph
+            axis = self.axes[int(np.floor(i / 3)), (i % 3)]
+            axis.set_title("Location %d" % (i + 1))
+            axis.set_ylim(0, self.boidCount)
+
+            # This works, but need to ensure that the graph limits are kept the same
+            if (i % 3) != 0:
+                axis.yaxis.set_ticklabels([])
+
+            if int(np.floor(i / 3)) != 2:
+                axis.xaxis.set_ticklabels([])
+
+            axis.grid(True)
+            self.lines.append(axis.plot(initX, initY)[0])
+
+        plt.ion()
+        plt.show()
+
+
+    # For each location, get the graph line and set the data to the current data plus the 
+    # new data. Then reformat the axes to accommodate the new data.
+    def updateGraphs(self):
+
+        for i in range(0, self.locationCount):
+            hl = self.lines[i]
+
+            hl.set_xdata(np.append(hl.get_xdata(), hl.get_xdata()[-1:] + 1))
+            hl.set_ydata(np.append(hl.get_ydata(), self.locations[i].boidCount))
+
+            self.axes[int(np.floor(i / 3)), (i % 3)].relim()
+            self.axes[int(np.floor(i / 3)), (i % 3)].autoscale_view()
+
+            plt.draw()
+            
 
 
     def simulationStep(self):
@@ -536,6 +586,8 @@ class Simulation:
 
             self.calcTimings = []
             self.drawTimings = []
+
+            self.updateGraphs()
 
             # Update the counter label
             self.timeStepCounter += 1
