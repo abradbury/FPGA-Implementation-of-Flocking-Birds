@@ -4,13 +4,14 @@ from Tkinter import *       # Used to draw shapes for the simulation
 import numpy as np          # Used in various mathematical operations
 import random               # Used to randomly position the boids on initialisation
 import logging              # Used to handle the textual output
+import time                 # Used to time stuff
 
 import warnings             # Used to catch an invalid divide warning
 
 
 ## MUST DOs ========================================================================================
-# TODO: Implement locations as threads
-# TODO: Add timing functions to computation
+# TODO: Implement locations as threads - not needed anymore maybe?
+# TODO: Graphicing, data analysis
 # TODO: Split into three class files
 
 # FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
@@ -455,6 +456,8 @@ class Simulation:
         self.locationSize = round(self.canvas.winfo_width() / np.sqrt(self.locationCount))
 
         self.locations = []
+        self.calcTimings = []
+        self.drawTimings = []
 
         self.locationColours = ["red", "blue", "green", "yellow", "white", "magenta", "dark grey", "cyan", "dark green"]
 
@@ -470,6 +473,29 @@ class Simulation:
 
         logger.info("- Press the 'Begin' button to start the simulation")
 
+
+        ## Threading notes
+        # Don't want a deamon thread as these are killed somehow
+        # Python doesn't support actual parallelism, just interleaving
+        #   Use the multithreading module for this
+        # thread.start() - starts the thread
+        # thread.join()  - waits until the thread has completed [before progressing?]
+
+        # Don't use threading, just put a timer around the location update call
+        # Use time.clock() over time.time() as the former has much higher precision and only 
+        #   measures the CPU time elapsed (at least on Univ-based OSs i.e. not Windows)
+        # Use the timeit module 
+        #
+        # if sys.platform == 'win32':
+        #     # On Windows, the best timer is time.clock
+        #     default_timer = time.clock
+        # else:
+        #     # On most other platforms the best timer is time.time
+        #     default_timer = time.time
+
+
+
+
         # Start everything going
         self.root.mainloop()
 
@@ -479,15 +505,37 @@ class Simulation:
             for i in range(0, self.locationCount):
                 logger.debug("Calculating next boid positions for location " + 
                     str(self.locations[i].locationID) + "...")
+                
+                self.startTime = time.clock()
                 self.locations[i].update(False)
+                self.endTime = time.clock()
 
-            logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
-                for loc in self.locations))
+                self.calcTimings.append(self.endTime - self.startTime)
 
             for i in range(0, self.locationCount):
                 logger.debug("Moving boids to calculated positions for location " + 
                     str(self.locations[i].locationID) + "...")
+
+                self.startTime = time.clock()
                 self.locations[i].update(True)
+                self.endTime = time.clock()
+
+                self.drawTimings.append(self.endTime - self.startTime)
+
+            logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
+                for loc in self.locations))
+
+            # Print out the timing data then clear
+            # logger.info("Location calc timing: " + " ".join(str(t) for t in self.calcTimings))
+            # logger.info("Location draw timing: " + " ".join(str(t) for t in self.drawTimings))
+
+            logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
+            logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
+            logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
+            logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
+
+            self.calcTimings = []
+            self.drawTimings = []
 
             # Update the counter label
             self.timeStepCounter += 1
@@ -566,7 +614,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
+    ch.setLevel(logging.ERROR)
 
     formatter = logging.Formatter("[%(levelname)8s] --- %(message)s")
     ch.setFormatter(formatter)
