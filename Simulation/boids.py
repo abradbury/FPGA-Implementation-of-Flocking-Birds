@@ -28,7 +28,14 @@ class Boid:
 
     def __init__(self, canvas, _location, _boidID, initPosition, _colour):
         self.location = _location
-        self.colour = _colour
+
+        # Colour the boids based on their original location if debugging
+        if logger.getEffectiveLevel() == logging.DEBUG:
+            self.colour = _colour
+            self.boidWidth = 2
+        else:
+            self.colour = "red"
+            self.boidWidth = 1
 
         # Create the boids
         self.boidID = _boidID
@@ -62,20 +69,11 @@ class Boid:
 
         # Draw the boid
         self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3, fill = self.colour, outline = self.colour, width = 2, tags = ("B" + str(self.boidID)))
+            self.y2, self.x3, self.y3, fill = self.colour, outline = self.colour, width = self.boidWidth, tags = ("B" + str(self.boidID)))
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
         logger.debug("Created boid with ID " + str(self.boidID))
-
-
-    def getPosition(self):
-        return self.position
-
-
-    def getVelocity(self):
-        return self.velocity
-
 
     # Update the boid's position based on the information contained in its neighbourhood. Only 
     # commit the changes when all the boids have calculated their next move. Otherwise, a boid 
@@ -106,6 +104,12 @@ class Boid:
     # Move the boid to the calculate positon
     def draw(self, colour):
         self.velocity += self.movement
+
+        # Specify the boid fill colour based on the debug level
+        if logger.getEffectiveLevel() == logging.DEBUG:
+            self.fillColour = colour
+        else:
+            self.fillColour = "red"
 
         # Bound the velocity to the maximum allowed
         if self.velocity[0] > self.MAX_VELOCITY:
@@ -151,7 +155,7 @@ class Boid:
 
         self.canvas.coords("B" + str(self.boidID), self.x0, self.y0, self.x1, self.y1, self.x2, 
             self.y2, self.x3, self.y3)
-        self.canvas.itemconfig(self.boid, fill = colour) 
+        self.canvas.itemconfig(self.boid, fill = self.fillColour) 
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
@@ -231,8 +235,15 @@ class Boid:
             logging.WARNING(self.alignmentMod)
             logging.WARNING(len(self.neighbouringBoids))
 
-        
-        self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+        self.alignmentModPrev = self.alignmentMod
+        try:
+            self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+        except RuntimeWarning, w:
+            logging.WARNING(w)
+            logging.WARNING(self.alignmentModPrev)
+            logging.WARNING(self.alignmentMod)
+            logging.WARNING(len(self.neighbouringBoids))
+            logging.WARNING(np.linalg.norm(self.alignmentMod))
 
     #       boids.py:222: RuntimeWarning: invalid value encountered in divide
     #           self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
@@ -283,7 +294,16 @@ class Location:
         self.simulation = _simulation
         self.locationID = _locationID
         self.locationCoords = np.copy(_locationCoords)
-        self.colour = _colour
+
+        # Used to hold the plotting data
+        self.xData = []
+        self.yData = []
+        self.y2Data = []
+
+        if logger.getEffectiveLevel() == logging.DEBUG:
+            self.colour = _colour
+        else:  
+            self.colour = "yellow"
 
         self.boids = []
         self.boidCount = _initialBoidCount
@@ -441,6 +461,8 @@ class Simulation:
         self.timeButton.pack(side = LEFT)
         self.pauseButton = Button(frame, text = "Begin", command = self.pause)
         self.pauseButton.pack(side = LEFT)
+        self.graphButton = Button(frame, text = "Update Graphs", command = self.updateGraphs)
+        self.graphButton.pack(side = LEFT)
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
         self.quitButton.pack(side = LEFT)
 
@@ -477,8 +499,6 @@ class Simulation:
         # Setup the graphs
         self.setupGraphs()  
 
-
-
         ## Threading notes
         # Don't want a deamon thread as these are killed somehow
         # Python doesn't support actual parallelism, just interleaving
@@ -507,28 +527,48 @@ class Simulation:
 
     # Create the graphs
     def setupGraphs(self):
-        initX = [0]
-        initY = [self.initialBoidCount]
-        self.lines = []
+        self.xData = []
+        self.yData = []
 
-        self.figure, self.axes = plt.subplots(nrows = 3, ncols = 3)
+        self.lines = []
+        self.lines2 = []
+
+        self.axes = []
 
         for i in range(0, self.locationCount):
-            # Plot a graph in the correct subplot and store the line for the graph
-            axis = self.axes[int(np.floor(i / 3)), (i % 3)]
+            # Create the subplots and sync the axes
+            if i != 0:
+                axis = plt.subplot(3, 3, i+1, sharex = self.axes[0], sharey = self.axes[0])
+            else:
+                axis = plt.subplot(3, 3, i+1)
+
+            # Complete setup of subplot axes
             axis.set_title("Location %d" % (i + 1))
-            axis.set_ylim(0, self.boidCount)
+            axis.grid(True)
+            axis.legend()
+
+            # Add suplot axes to list of axes and subplot lines to list of lines
+            line1, line2 = axis.plot(self.xData, self.yData, self.xData, self.yData)
+            line1.set_label("Calculation time, s")
+            line2.set_label("Drawing time, s")
+            self.lines.append(line1)
+            self.lines2.append(line2)
+
+            axis.legend()
+            self.axes.append(axis)
+
+            # Plot a graph in the correct subplot and store the line for the graph
+#            axis = self.axes[int(np.floor(i / 3)), (i % 3)]
+#            axis.set_ylim(0, self.boidCount)
 
             # This works, but need to ensure that the graph limits are kept the same
-            if (i % 3) != 0:
-                axis.yaxis.set_ticklabels([])
+#            if (i % 3) != 0:
+#                axis.yaxis.set_ticklabels([])
 
-            if int(np.floor(i / 3)) != 2:
-                axis.xaxis.set_ticklabels([])
+#            if int(np.floor(i / 3)) != 2:
+#                axis.xaxis.set_ticklabels([])
 
-            axis.grid(True)
-            self.lines.append(axis.plot(initX, initY)[0])
-
+        # Show the subplots in interactive mode (doesn't block)
         plt.ion()
         plt.show()
 
@@ -537,15 +577,32 @@ class Simulation:
     # new data. Then reformat the axes to accommodate the new data.
     def updateGraphs(self):
 
+        #print len(self.lines)
+
         for i in range(0, self.locationCount):
-            hl = self.lines[i]
+            subplotLine = self.lines[i]
 
-            hl.set_xdata(np.append(hl.get_xdata(), hl.get_xdata()[-1:] + 1))
-            hl.set_ydata(np.append(hl.get_ydata(), self.locations[i].boidCount))
+#            hl.set_xdata(np.append(hl.get_xdata(), hl.get_xdata()[-1:] + 1))
+#            hl.set_ydata(np.append(hl.get_ydata(), self.locations[i].boidCount))
 
-            self.axes[int(np.floor(i / 3)), (i % 3)].relim()
-            self.axes[int(np.floor(i / 3)), (i % 3)].autoscale_view()
+#            newXData = np.append(hl.get_xdata(), self.timeStepCounter)
+#            newYData = np.append(hl.get_ydata(), self.calcTimings[i])
 
+#            self.locations[i].xData.append(self.timeStepCounter)
+#            self.locations[i].yData.append(self.calcTimings[i])
+
+#            print self.locations[i].xData
+#            print self.locations[i].yData
+
+            subplotLine.set_xdata(self.locations[i].xData)
+            subplotLine.set_ydata(self.locations[i].yData)
+
+            self.lines2[i].set_xdata(self.locations[i].xData)
+            self.lines2[i].set_ydata(self.locations[i].y2Data)
+
+#            if self.timeStepCounter % 10 == 0:
+            self.axes[i].relim()
+            self.axes[i].autoscale_view()
             plt.draw()
             
 
@@ -555,46 +612,55 @@ class Simulation:
             for i in range(0, self.locationCount):
                 logger.debug("Calculating next boid positions for location " + 
                     str(self.locations[i].locationID) + "...")
-                
+
+                # Calculate the next boid positions and time this                
                 self.startTime = time.clock()
                 self.locations[i].update(False)
                 self.endTime = time.clock()
 
-                self.calcTimings.append(self.endTime - self.startTime)
+                # Store the timing information
+#                self.calcTimings.append(self.endTime - self.startTime)
+                self.locations[i].xData.append(self.timeStepCounter)
+                self.locations[i].yData.append(self.endTime - self.startTime)
 
             for i in range(0, self.locationCount):
                 logger.debug("Moving boids to calculated positions for location " + 
                     str(self.locations[i].locationID) + "...")
-
+    
+                # Update the canvas with the new boid positions and time this
                 self.startTime = time.clock()
                 self.locations[i].update(True)
                 self.endTime = time.clock()
 
-                self.drawTimings.append(self.endTime - self.startTime)
+                # Store the timing information
+#                self.drawTimings.append(self.endTime - self.startTime)
+                self.locations[i].y2Data.append(self.endTime - self.startTime)
 
             logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
                 for loc in self.locations))
 
             # Print out the timing data then clear
-            # logger.info("Location calc timing: " + " ".join(str(t) for t in self.calcTimings))
-            # logger.info("Location draw timing: " + " ".join(str(t) for t in self.drawTimings))
+#             logger.info("Location calc timing: " + " ".join(str(t) for t in self.calcTimings))
+#             logger.info("Location draw timing: " + " ".join(str(t) for t in self.drawTimings))
 
-            logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
-            logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
-            logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
-            logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
+#            logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
+#            logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
+#            logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
+#            logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
+
+            # Update the graphs every 10 timesteps
+#            if self.timeStepCounter % 10 == 0:
+#            self.updateGraphs()
 
             self.calcTimings = []
             self.drawTimings = []
-
-            self.updateGraphs()
 
             # Update the counter label
             self.timeStepCounter += 1
             self.counterLabel.config(text = self.timeStepCounter)
 
             # Call self after 100ms
-            self.canvas.after(100, self.simulationStep)
+            self.canvas.after(10, self.simulationStep)
 
     
     # Manual timestep increment
@@ -663,10 +729,10 @@ class Simulation:
 if __name__ == '__main__':
     # Setup logging
     logger = logging.getLogger('boidSimulation')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.WARNING)
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
+    ch.setLevel(logging.WARNING)
 
     formatter = logging.Formatter("[%(levelname)8s] --- %(message)s")
     ch.setFormatter(formatter)
