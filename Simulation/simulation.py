@@ -101,13 +101,13 @@ class Simulation:
 
     # Create the graphs
     def setupGraphs(self):
-        self.xData = []
         self.yData = []
 
         self.lines = []
         self.lines2 = []
 
         self.axes = []
+        self.axes2 = []
 
         for i in range(0, self.locationCount):
             # Create the subplots and sync the axes
@@ -116,69 +116,71 @@ class Simulation:
             else:
                 axis = plt.subplot(3, 3, i+1)
 
-            # Complete setup of subplot axes
             axis.set_title("Location %d" % (i + 1))
             axis.grid(True)
-            axis.legend()
+            
+            # Setup the first y axis
+            for tl in axis.get_yticklabels():
+                tl.set_color('b')
+    
+            # Setup the second y axis
+            axis2 = axis.twinx()
+            for tl in axis2.get_yticklabels():
+                tl.set_color('r')
 
-            # Add suplot axes to list of axes and subplot lines to list of lines
-            line1, line2 = axis.plot(self.xData, self.yData, self.xData, self.yData)
-            line1.set_label("Calculation time, s")
-            line2.set_label("Drawing time, s")
+            # Plot each line, returns a list of lines - the comma is needed
+            # If the x data set is not specified, it is assumed to be the number 
+            # of element contained in the y data set - which is fine here.
+            line1, = axis.plot(self.yData, color = 'b')
+            line2, = axis2.plot(self.yData, color = 'r')
+            
+            # Customise the suplot grid so that axes don't overlap
+            if (i % 3) != 0:
+                plt.setp(axis.get_yticklabels(), visible = False)
+            else:
+                axis.set_ylabel("Computation time, seconds", color = 'b')
+
+            if (i % 3) != (3 - 1):
+                plt.setp(axis2.get_yticklabels(), visible = False)
+            else:
+                axis2.set_ylabel("Number of boids", color = 'r')
+
+            if int(np.floor(i / 3)) != 2:
+                plt.setp(axis.get_xticklabels(), visible = False)
+            else:
+                axis.set_xlabel("Number of timesteps")
+
+            # Add the lines to the line lists
             self.lines.append(line1)
             self.lines2.append(line2)
 
-            axis.legend()
+            # Add the axes to the axes lists
             self.axes.append(axis)
-
-            # Plot a graph in the correct subplot and store the line for the graph
-#            axis = self.axes[int(np.floor(i / 3)), (i % 3)]
-#            axis.set_ylim(0, self.boidCount)
-
-            # This works, but need to ensure that the graph limits are kept the same
-#            if (i % 3) != 0:
-#                axis.yaxis.set_ticklabels([])
-
-#            if int(np.floor(i / 3)) != 2:
-#                axis.xaxis.set_ticklabels([])
+            self.axes2.append(axis2)
 
         # Show the subplots in interactive mode (doesn't block)
         plt.ion()
         plt.show()
 
 
-    # For each location, get the graph line and set the data to the current data plus the 
-    # new data. Then reformat the axes to accommodate the new data.
+    # For each location, get the graph lines and set the data to the current data  
+    # plus the new data. Then reformat both axes to accommodate the new data.
     def updateGraphs(self):
 
-        #print len(self.lines)
-
         for i in range(0, self.locationCount):
-            subplotLine = self.lines[i]
-
-#            hl.set_xdata(np.append(hl.get_xdata(), hl.get_xdata()[-1:] + 1))
-#            hl.set_ydata(np.append(hl.get_ydata(), self.locations[i].boidCount))
-
-#            newXData = np.append(hl.get_xdata(), self.timeStepCounter)
-#            newYData = np.append(hl.get_ydata(), self.calcTimings[i])
-
-#            self.locations[i].xData.append(self.timeStepCounter)
-#            self.locations[i].yData.append(self.calcTimings[i])
-
-#            print self.locations[i].xData
-#            print self.locations[i].yData
-
-            subplotLine.set_xdata(self.locations[i].xData)
-            subplotLine.set_ydata(self.locations[i].yData)
+            self.lines[i].set_xdata(self.locations[i].xData)
+            self.lines[i].set_ydata(self.locations[i].yData)
 
             self.lines2[i].set_xdata(self.locations[i].xData)
             self.lines2[i].set_ydata(self.locations[i].y2Data)
 
-#            if self.timeStepCounter % 10 == 0:
             self.axes[i].relim()
             self.axes[i].autoscale_view()
+
+            self.axes2[i].relim()
+            self.axes2[i].autoscale_view()
+
             plt.draw()
-            
 
 
     def simulationStep(self):
@@ -192,8 +194,7 @@ class Simulation:
                 self.locations[i].update(False)
                 self.endTime = time.clock()
 
-                # Store the timing information
-#                self.calcTimings.append(self.endTime - self.startTime)
+                # Store the timing information for later plotting
                 self.locations[i].xData.append(self.timeStepCounter)
                 self.locations[i].yData.append(self.endTime - self.startTime)
 
@@ -201,39 +202,20 @@ class Simulation:
                 self.logger.debug("Moving boids to calculated positions for location " + 
                     str(self.locations[i].locationID) + "...")
     
-                # Update the canvas with the new boid positions and time this
-                self.startTime = time.clock()
+                # Update the canvas with the new boid positions
                 self.locations[i].update(True)
-                self.endTime = time.clock()
 
-                # Store the timing information
-#                self.drawTimings.append(self.endTime - self.startTime)
-                self.locations[i].y2Data.append(self.endTime - self.startTime)
+                # Store the number of boids for later plotting
+                self.locations[i].y2Data.append(self.locations[i].boidCount)
 
             self.logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
                 for loc in self.locations))
-
-            # Print out the timing data then clear
-#             self.logger.info("Location calc timing: " + " ".join(str(t) for t in self.calcTimings))
-#             self.logger.info("Location draw timing: " + " ".join(str(t) for t in self.drawTimings))
-
-#            self.logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
-#            self.logger.info("Max location claculation time: " + str(self.calcTimings.index(max(self.calcTimings)) + 1))
-#            self.logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
-#            self.logger.info("Min location drawing time:     " + str(self.drawTimings.index(min(self.drawTimings)) + 1))
-
-            # Update the graphs every 10 timesteps
-#            if self.timeStepCounter % 10 == 0:
-#            self.updateGraphs()
-
-            self.calcTimings = []
-            self.drawTimings = []
 
             # Update the counter label
             self.timeStepCounter += 1
             self.counterLabel.config(text = self.timeStepCounter)
 
-            # Call self after 100ms
+            # Call self after 10ms
             self.canvas.after(10, self.simulationStep)
 
     

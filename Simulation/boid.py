@@ -17,9 +17,11 @@ class Boid:
         # Colour the boids based on their original location if debugging
         if self.logger.getEffectiveLevel() == logging.DEBUG:
             self.colour = _colour
+            self.outlineColour = _colour
             self.boidWidth = 2
         else:
             self.colour = "red"
+            self.outlineColour = "white"
             self.boidWidth = 1
 
         # Create the boids
@@ -54,7 +56,8 @@ class Boid:
 
         # Draw the boid
         self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3, fill = self.colour, outline = self.colour, width = self.boidWidth, tags = ("B" + str(self.boidID)))
+            self.y2, self.x3, self.y3, fill = self.colour, outline = self.outlineColour, 
+            width = self.boidWidth, tags = ("B" + str(self.boidID)))
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
@@ -216,23 +219,31 @@ class Boid:
         try:
             self.alignmentMod /= len(self.neighbouringBoids)
         except RuntimeWarning, w:
-            logging.WARNING(w)
-            logging.WARNING(self.alignmentModPrev)
-            logging.WARNING(self.alignmentMod)
-            logging.WARNING(len(self.neighbouringBoids))
+            print w
+            print self.alignmentModPrev
+            print self.alignmentMod
+            print len(self.neighbouringBoids)
 
-        self.alignmentModPrev = self.alignmentMod
-        try:
-            self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
-        except RuntimeWarning, w:
-            logging.WARNING(w)
-            logging.WARNING(self.alignmentModPrev)
-            logging.WARNING(self.alignmentMod)
-            logging.WARNING(len(self.neighbouringBoids))
-            logging.WARNING(np.linalg.norm(self.alignmentMod))
+
+        self.norm = np.linalg.norm(self.alignmentMod)
+        if np.all(self.norm == 0):
+            self.alignmentMod = 0
+        else:
+            self.alignmentModPrev = self.alignmentMod
+            try:
+                self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+            except RuntimeWarning, w:
+                print w
+                print self.alignmentModPrev
+                print self.alignmentMod
+                print len(self.neighbouringBoids)
+                print np.linalg.norm(self.alignmentMod)
+
+    # [ 0.  0.] = [ 0.  0.] / 0.0 
 
     #       boids.py:222: RuntimeWarning: invalid value encountered in divide
     #           self.alignmentMod = (self.alignmentMod / np.linalg.norm(self.alignmentMod))
+    # due to 0 values e.g. [0. 0.] in alignment mod
 
         return self.alignmentMod
 
