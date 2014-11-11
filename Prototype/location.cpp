@@ -519,8 +519,8 @@ void printCommand(uint32 *command, bool send) {
 
 void initialiseBoids(uint32 initBoidCount) {
 	// TODO: Create random initial positions and velocity
-	Vector initPos;
-	Vector initVel;
+//	Vector initPos;
+//	Vector initVel;
 
 //	for(int i = 0; i < initBoidCount; i++) {
 //		initPos.rand(0, 10);
@@ -534,12 +534,24 @@ void initialiseBoids(uint32 initBoidCount) {
 	// will provide initial velocities. However, boids 2 and 3 did not move as
 	// their attraction and repulsion cancelled each other out. Hence, a
 	// different initial velocity was needed and now they just fly parallel.
-	initVel = Vector(0, 0, 0);
+	Vector initVel = Vector(0, 0, 0);
 	Vector altInitVel = Vector(-2, -4, 0);
 
-	boidList[0] = new Boid(Vector(2,13,0), initVel, 1);
-	boidList[1] = new Boid(Vector(6,12,0), initVel, 2);
-	boidList[2] = new Boid(Vector(5,10,0), altInitVel, 3);
+	Vector v1 = Vector(2, 13, 0);
+	Vector v2 = Vector(6, 12, 0);
+	Vector v3 = Vector(5, 10, 0);
+
+	Boid b1 = Boid(v1, initVel, 1);
+	Boid b2 = Boid(v2, initVel, 2);
+	Boid b3 = Boid(v3, initVel, 3);
+
+	boidList[0] = &b1;
+	boidList[1] = &b2;
+	boidList[2] = &b3;
+
+	// Using the 'new' command as below, caused errors during synthesis, so
+	// the above boid creation method gets around this issue
+
 //	boidList[3] = new Boid(Vector(9,8,0), initVel, 4);
 //	boidList[4] = new Boid(Vector(8,7,0), initVel, 5);
 //	boidList[5] = new Boid(Vector(7,5,0), initVel, 6);
