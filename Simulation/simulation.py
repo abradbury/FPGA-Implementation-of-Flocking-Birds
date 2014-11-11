@@ -127,6 +127,7 @@ class Simulation:
             axis2 = axis.twinx()
             for tl in axis2.get_yticklabels():
                 tl.set_color('r')
+            axis2.set_ylim([0, self.boidCount])
 
             # Plot each line, returns a list of lines - the comma is needed
             # If the x data set is not specified, it is assumed to be the number 
