@@ -26,6 +26,9 @@ class Simulation:
         self.pauseSimulation = True
         self.timeStepCounter = 0
 
+        # The maximum amount of boids a location should have at any one time
+        self.BOID_THRESHOLD = 30
+
         self.loadBalance = False
 
         # Setup logging
@@ -111,8 +114,11 @@ class Simulation:
     def setupGraphs(self):
         self.yData = []
 
+        # Need to hold a list of lines for each graph, surely there must be a better way to do this?
         self.lines = []
         self.lines2 = []
+        self.thresholdLines = []
+        self.andallLines = []
 
         self.axes = []
         self.axes2 = []
@@ -142,12 +148,16 @@ class Simulation:
             # of element contained in the y data set - which is fine here.
             line1, = axis.plot(self.yData, color = 'b')
             line2, = axis2.plot(self.yData, color = 'r')
+
+            # Add the Andall(sp?) and max boid threshold lines
+            thresholdLine, = axis2.plot([], [], color = 'm')
+            andallLine, = axis2.plot([], [], color = 'g')
             
             # Customise the suplot grid so that axes don't overlap
             if (i % 3) != 0:
                 plt.setp(axis.get_yticklabels(), visible = False)
             else:
-                axis.set_ylabel("Computation time, seconds", color = 'b')
+                axis.set_ylabel("Computation time, ms", color = 'b')
 
             if (i % 3) != (3 - 1):
                 plt.setp(axis2.get_yticklabels(), visible = False)
@@ -162,6 +172,8 @@ class Simulation:
             # Add the lines to the line lists
             self.lines.append(line1)
             self.lines2.append(line2)
+            self.andallLines.append(andallLine)
+            self.thresholdLines.append(thresholdLine)
 
             # Add the axes to the axes lists
             self.axes.append(axis)
@@ -177,18 +189,30 @@ class Simulation:
     def updateGraphs(self):
 
         for i in range(0, self.locationCount):
+            # Update the location boid calculation time lines
             self.lines[i].set_xdata(self.locations[i].xData)
             self.lines[i].set_ydata(self.locations[i].yData)
 
+            # Update the location boid count lines
             self.lines2[i].set_xdata(self.locations[i].xData)
             self.lines2[i].set_ydata(self.locations[i].y2Data)
 
+            # Update the Andall (sp?) lines
+            self.andallLines[i].set_xdata([0, len(self.locations[i].xData)])
+            self.andallLines[i].set_ydata([self.initialBoidCount, self.initialBoidCount])
+
+            # Update the max boid threshold lines
+            self.thresholdLines[i].set_xdata([0, len(self.locations[i].xData)])
+            self.thresholdLines[i].set_ydata([self.BOID_THRESHOLD, self.BOID_THRESHOLD])
+
+            # Adjust the axes accordingly
             self.axes[i].relim()
             self.axes[i].autoscale_view()
 
             self.axes2[i].relim()
             self.axes2[i].autoscale_view()
 
+            # Re-draw the graphs
             plt.draw()
 
 
@@ -205,7 +229,7 @@ class Simulation:
 
                 # Store the timing information for later plotting
                 self.locations[i].xData.append(self.timeStepCounter)
-                self.locations[i].yData.append(self.endTime - self.startTime)
+                self.locations[i].yData.append((self.endTime - self.startTime) * 1000)
 
             for i in range(0, self.locationCount):
                 self.logger.debug("Moving boids to calculated positions for location " + 
