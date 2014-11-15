@@ -11,6 +11,16 @@ import matplotlib.pyplot as plt     # Used to plot the graphs
 import time                         # Used to time stuff
 
 
+## MUST DOs ========================================================================================
+# FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
+# FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
+
+## MAY DOs =========================================================================================
+# TODO: Add keybinding to capture return key and simulate button press
+# TODO: Add acceleration to smooth movement (especially around borders)
+# TODO: Calculate a locations neighbours programmatically - rather than hardcoding
+
+
 # The main application class. Sets up the simulation area and the number of locations that it is to 
 # be divided into. 
 #
@@ -399,31 +409,22 @@ class Simulation:
     def getNeighbouringLocations(self, locationID):
         if locationID == 1:
             self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
-            # self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 9]
         elif locationID == 2:
             self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
-            # self.neighbouringLocations = [1, 3, 4, 5, 6, 7, 8, 9]
         elif locationID == 3:
             self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
-            # self.neighbouringLocations = [2, 1, 4, 5, 6, 7, 8, 9]
         elif locationID == 4:
             self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
-            # self.neighbouringLocations = [2, 3, 1, 5, 6, 7, 8, 9]
         elif locationID == 5:
             self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
-            # self.neighbouringLocations = [2, 3, 4, 1, 6, 7, 8, 9]
         elif locationID == 6:
             self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
-            # self.neighbouringLocations = [2, 3, 4, 5, 1, 7, 8, 9]
         elif locationID == 7:
             self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
-            # self.neighbouringLocations = [2, 3, 4, 5, 6, 1, 8, 9]
         elif locationID == 8:
             self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
-            # self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 1, 9]
         elif locationID == 9:
             self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
-            # self.neighbouringLocations = [2, 3, 4, 5, 6, 7, 8, 1]
 
         return self.neighbouringLocations
 
