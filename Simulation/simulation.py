@@ -88,10 +88,15 @@ class Simulation:
         if self.loadBalance: 
             self.drawDynamicLines()
 
+        # Setup variables to keep track of how many locations exceed the boid threshold
+        self.violationCount = 0
+        self.violationList = []
+
         self.logger.info("- Press the 'Begin' button to start the simulation")
 
         # Setup the graphs
         self.setupGraphs()
+        self.setupSummaryGraph()
 
         # Start everything going
         self.root.mainloop()
@@ -123,12 +128,14 @@ class Simulation:
         self.axes = []
         self.axes2 = []
 
+        self.graphFigure = plt.figure()
+
         for i in range(0, self.locationCount):
             # Create the subplots and sync the axes
             if i != 0:
-                axis = plt.subplot(3, 3, i+1, sharex = self.axes[0], sharey = self.axes[0])
+                axis = self.graphFigure.add_subplot(3, 3, i+1, sharex = self.axes[0], sharey = self.axes[0])
             else:
-                axis = plt.subplot(3, 3, i+1)
+                axis = self.graphFigure.add_subplot(3, 3, i+1)
 
             axis.set_title("Location %d" % (i + 1))
             axis.grid(True)
@@ -184,6 +191,26 @@ class Simulation:
         plt.show()
 
 
+    # Create a sumary graph showing the number of locations exceeding the boid threshold over time
+    def setupSummaryGraph(self):
+        plt.ion()
+
+        self.summaryFigure, self.summaryAxis = plt.subplots(1,1)
+        self.summaryAxis.plot([], [])
+        self.summaryAxis.fill_between([], 0, [])
+
+        self.summaryAxis.set_ylim([0, self.locationCount])
+        
+        self.summaryAxis.set_title("Graph showing number of locations exceeding the boid threshold")
+        self.summaryAxis.grid(True)
+
+        self.summaryAxis.set_xlabel("Number of time steps")
+        self.summaryAxis.set_ylabel("Locations over threshold")
+
+        plt.show()
+
+
+
     # For each location, get the graph lines and set the data to the current data  
     # plus the new data. Then reformat both axes to accommodate the new data.
     def updateGraphs(self):
@@ -213,11 +240,23 @@ class Simulation:
             self.axes2[i].autoscale_view()
 
             # Re-draw the graphs
-            plt.draw()
+            self.graphFigure.canvas.draw()
+
+        # Update summary graph
+        self.summaryAxis.lines[0].set_xdata(range(0, self.timeStepCounter))
+        self.summaryAxis.lines[0].set_ydata(self.violationList)
+        self.summaryAxis.fill_between(range(0, self.timeStepCounter), 0, self.violationList)
+
+        self.summaryAxis.relim()
+        self.summaryAxis.autoscale_view()
+
+        self.summaryFigure.canvas.draw()
 
 
     def simulationStep(self):
         if self.pauseSimulation == False:
+            self.violationCount = 0
+
             for i in range(0, self.locationCount):
                 self.logger.debug("Calculating next boid positions for location " + 
                     str(self.locations[i].locationID) + "...")
@@ -230,6 +269,10 @@ class Simulation:
                 # Store the timing information for later plotting
                 self.locations[i].xData.append(self.timeStepCounter)
                 self.locations[i].yData.append((self.endTime - self.startTime) * 1000)
+
+                # If the location is exceeding the threshold, increment counter
+                if self.locations[i].boidCount > self.BOID_THRESHOLD:
+                    self.violationCount += 1
 
             for i in range(0, self.locationCount):
                 self.logger.debug("Moving boids to calculated positions for location " + 
@@ -248,11 +291,14 @@ class Simulation:
             self.timeStepCounter += 1
             self.counterLabel.config(text = self.timeStepCounter)
 
+            # Update the violation list
+            self.violationList.append(self.violationCount)
+
             if self.loadBalance:
                 self.getLineStatus()
 
-            # Call self after 10ms
-            self.canvas.after(10, self.simulationStep)
+            # Call self after 20ms (50 Hz)
+            self.canvas.after(20, self.simulationStep)
 
     
     # Manual timestep increment
