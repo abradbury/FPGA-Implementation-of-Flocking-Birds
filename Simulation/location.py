@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 
 from boid import Boid               # Import the Boid class
@@ -20,12 +21,16 @@ class Location:
 
         self.logger = self.simulation.logger
 
+        # Define debugging flags
+        self.colourCode = self.simulation.colourCode
+        self.trackBoid = self.simulation.trackBoid
+
         # Used to hold the plotting data
         self.xData = []
         self.yData = []
         self.y2Data = []
 
-        if self.logger.getEffectiveLevel() == logging.DEBUG:
+        if self.colourCode:
             self.colour = _colour
         else:  
             self.colour = "yellow"

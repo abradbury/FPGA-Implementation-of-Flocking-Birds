@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 
 import numpy as np                  # Used in various mathematical operations
@@ -14,8 +15,12 @@ class Boid:
         self.location = _location
         self.logger = self.location.logger
 
+        # Define debugging flags
+        self.colourCode = self.location.colourCode
+        self.trackBoid = self.location.trackBoid
+
         # Colour the boids based on their original location if debugging
-        if self.logger.getEffectiveLevel() == logging.DEBUG:
+        if self.colourCode:
             self.colour = _colour
             self.outlineColour = _colour
             self.boidWidth = 2
@@ -70,12 +75,14 @@ class Boid:
     def update(self, possibleNeighbouringBoids):
         self.possibleNeighbours = possibleNeighbouringBoids
 
-        # for boid in self.neighbouringBoids:
-        #     boid.highlightBoid(False)
-
         self.calculateNeighbours()
-        # self.followBoid(42, True)
 
+        # If tracking boid, highlight its neighbouring boids
+        if self.trackBoid and (self.boidID == 42): 
+            for boid in self.neighbouringBoids:
+                boid.highlightBoid(True)
+
+        # If the boids has neighbours, calculate its next position 
         if len(self.neighbouringBoids) > 0:
             self.cohesionMod = self.coehsion()
             self.alignmentMod = self.alignment()
@@ -93,8 +100,8 @@ class Boid:
     def draw(self, colour):
         self.velocity += self.movement
 
-        # Specify the boid fill colour based on the debug level
-        if self.logger.getEffectiveLevel() == logging.DEBUG:
+        # Specify the boid fill colour based on the debug flag
+        if self.colourCode:
             self.fillColour = colour
         else:
             self.fillColour = "red"
@@ -147,32 +154,24 @@ class Boid:
 
         self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
 
-        # self.followBoid(42, False)
+        # Debugging method - follow a specific boid
+        if self.trackBoid and (self.boidID == 42):  
+            self.followBoid()
 
 
     # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
     # coloured blue. Any neighbouring boid is coloured green. 
-    def followBoid(self, _boidID, update):
-        if self.boidID == _boidID:
-            if update == True:
-                self.canvas.itemconfig(self.boid, fill = "red") 
-                self.canvas.delete("boidCircle")
-                for boid in self.neighbouringBoids:
-                    boid.highlightBoid(False)
+    def followBoid(self):
+        self.canvas.delete("boidCircle")
+        self.canvas.itemconfig(self.boid, fill = "blue")
 
-            else:
-                self.canvas.itemconfig(self.boid, fill = "blue")
+        self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
+            self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
+            self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
 
-                self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
-                    self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
-                    self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
-
-                self.logger.debug("Boid " + str(self.boidID) + " has " + 
-                    str(len(self.neighbouringBoids)) + " neighbouring boids: ")
-                self.logger.debug(" ".join([str(b.boidID) for b in self.neighbouringBoids]))
-
-                for boid in self.neighbouringBoids:
-                    boid.highlightBoid(True)
+        self.logger.debug("Boid " + str(self.boidID) + " has " + 
+            str(len(self.neighbouringBoids)) + " neighbouring boids: ")
+        self.logger.debug(" ".join([str(b.boidID) for b in self.neighbouringBoids]))
 
 
     def highlightBoid(self, on):
@@ -253,6 +252,31 @@ class Boid:
         self.repulsionMod = 0
         for boid in self.neighbouringBoids:
             self.repulsionMod += (boid.position - self.position)
+
+        # Also repel from the simulation edges
+        # So check if any boundaries are within the boid radius and repel from them
+        # self.repulsionMod
+
+        # dist = np.linalg.norm(boid.position - self.position)
+        #         if dist < self.VISION_RADIUS:
+        #             self.neighbouringBoids.append(boid)
+
+        # if self.position[0] < 0:
+        #     self.velocity = -self.velocity
+        #     self.position += self.velocity
+
+        # elif self.position[0] > self.canvas.winfo_width():
+        #     self.velocity = -self.velocity
+        #     self.position += self.velocity
+
+        # elif self.position[1] < 0:
+        #     self.velocity = -self.velocity
+        #     self.position += self.velocity
+
+        # elif self.position[1] > self.canvas.winfo_width():
+        #     self.velocity = -self.velocity
+        #     self.position += self.velocity
+
 
         self.repulsionMod /= len(self.neighbouringBoids)
         self.repulsionMod *= -1

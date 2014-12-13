@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 
 from location import Location       # Import the Location class
@@ -14,6 +15,10 @@ import time                         # Used to time stuff
 ## MUST DOs ========================================================================================
 # FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
+
+# TODO: Modify code to handle different load balancing protocols
+# TODO: Implement load balancing algorithm 1
+# TODO: Implement load balancing algorithm 2
 
 ## MAY DOs =========================================================================================
 # TODO: Add keybinding to capture return key and simulate button press
@@ -40,6 +45,10 @@ class Simulation:
         self.BOID_THRESHOLD = 30
 
         self.loadBalance = False
+
+        # Define debugging flags
+        self.colourCode = False
+        self.trackBoid = True
 
         # Setup logging
         self.setupLogging()
@@ -115,7 +124,7 @@ class Simulation:
     # Setup logging
     def setupLogging(self):   
         self.logger = logging.getLogger('boidSimulation')
-        self.logger.setLevel(logging.WARNING)
+        self.logger.setLevel(logging.DEBUG)
 
         self.ch = logging.StreamHandler()
         self.ch.setLevel(logging.WARNING)
@@ -230,8 +239,10 @@ class Simulation:
             self.lines[i].set_xdata(self.locations[i].xData)
             self.lines[i].set_ydata(self.locations[i].yData)
 
-            # Update the location boid count lines
-            self.lines2[i].set_xdata(self.locations[i].xData)
+            # Update the location boid count lines. Because the draw routine is called first, but 
+            # not on time step 1, it has one less data element in than the values for the update 
+            # stage. Therefore, [0:-1] is used to ignore the last x value.
+            self.lines2[i].set_xdata(self.locations[i].xData[0:-1])
             self.lines2[i].set_ydata(self.locations[i].y2Data)
 
             # Update the Andall (sp?) lines
@@ -267,6 +278,21 @@ class Simulation:
         if self.pauseSimulation == False:
             self.violationCount = 0
 
+            # The draw method is called first to enable a the neighbours of a boid to be highlighted 
+            # when a boid is being followed (during debugging). As no new boid positions have been 
+            # calculated, the draw function isn't called on the first time step.
+            if self.timeStepCounter != 0:
+                for i in range(0, self.locationCount):
+                    self.logger.debug("Moving boids to calculated positions for location " + 
+                        str(self.locations[i].locationID) + "...")
+        
+                    # Update the canvas with the new boid positions
+                    self.locations[i].update(True)
+
+                    # Store the number of boids for later plotting
+                    self.locations[i].y2Data.append(self.locations[i].boidCount)
+
+            # Update the boid
             for i in range(0, self.locationCount):
                 self.logger.debug("Calculating next boid positions for location " + 
                     str(self.locations[i].locationID) + "...")
@@ -284,16 +310,6 @@ class Simulation:
                 if self.locations[i].boidCount > self.BOID_THRESHOLD:
                     self.violationCount += 1
 
-            for i in range(0, self.locationCount):
-                self.logger.debug("Moving boids to calculated positions for location " + 
-                    str(self.locations[i].locationID) + "...")
-    
-                # Update the canvas with the new boid positions
-                self.locations[i].update(True)
-
-                # Store the number of boids for later plotting
-                self.locations[i].y2Data.append(self.locations[i].boidCount)
-
             self.logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
                 for loc in self.locations))
 
@@ -308,7 +324,7 @@ class Simulation:
                 self.getLineStatus()
 
             # Call self after 20ms (50 Hz)
-            self.canvas.after(20, self.simulationStep)
+            self.canvas.after(10, self.simulationStep)
 
     
     # Manual timestep increment
