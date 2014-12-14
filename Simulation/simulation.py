@@ -15,6 +15,7 @@ import time                         # Used to time stuff
 ## MUST DOs ========================================================================================
 # FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
+# FIXME: Obstacle avoidance does not seem to work well
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Implement load balancing algorithm 1

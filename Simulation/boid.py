@@ -255,34 +255,46 @@ class Boid:
 
         # Also repel from the simulation edges
         # So check if any boundaries are within the boid radius and repel from them
-        # self.repulsionMod
+        nearEdgeCount = 0
 
-        # dist = np.linalg.norm(boid.position - self.position)
-        #         if dist < self.VISION_RADIUS:
-        #             self.neighbouringBoids.append(boid)
+        # toTop = self.distanceFromBoidToBoundary([0, 0], [self.canvas.winfo_width(), 0], self.position)
+        # toLeft = self.distanceFromBoidToBoundary([0, 0], [0, self.canvas.winfo_width()], self.position)
+        # toBottom = self.distanceFromBoidToBoundary([0, self.canvas.winfo_width()], [self.canvas.winfo_width(), self.canvas.winfo_width()], self.position)
+        # toRight = self.distanceFromBoidToBoundary([self.canvas.winfo_width(), 0], [self.canvas.winfo_width(), self.canvas.winfo_width()], self.position)
 
-        # if self.position[0] < 0:
-        #     self.velocity = -self.velocity
-        #     self.position += self.velocity
+        # if toTop <= boid.VISION_RADIUS:
+        #     self.repulsionMod += ([self.position[0], 0] - self.position)
+        #     nearEdgeCount += 1
+        # if toLeft <= boid.VISION_RADIUS:
+        #     self.repulsionMod += ([0, self.position[1]] - self.position)
+        #     nearEdgeCount += 1
+        # if toBottom <= boid.VISION_RADIUS:
+        #     self.repulsionMod += ([self.position[0], self.canvas.winfo_width()] - self.position)
+        #     nearEdgeCount += 1
+        # if toRight <= boid.VISION_RADIUS:
+        #     self.repulsionMod += ([self.canvas.winfo_width(), self.position[1]] - self.position)
+        #     nearEdgeCount += 1
 
-        # elif self.position[0] > self.canvas.winfo_width():
-        #     self.velocity = -self.velocity
-        #     self.position += self.velocity
-
-        # elif self.position[1] < 0:
-        #     self.velocity = -self.velocity
-        #     self.position += self.velocity
-
-        # elif self.position[1] > self.canvas.winfo_width():
-        #     self.velocity = -self.velocity
-        #     self.position += self.velocity
-
-
-        self.repulsionMod /= len(self.neighbouringBoids)
+        self.repulsionMod /= (len(self.neighbouringBoids) + nearEdgeCount)
         self.repulsionMod *= -1
         self.repulsionMod = (self.repulsionMod / np.linalg.norm(self.repulsionMod))
 
         return self.repulsionMod
+
+
+    # Calculates the shortest distance from a boid to a boundary line
+    # From http://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line 
+    def distanceFromBoidToBoundary(self, lineStart, lineEnd, boidPosition):
+        lineEnd[1] - lineStart[1]
+
+        partOne = ((lineEnd[1] - lineStart[1]) * boidPosition[0]) - ((lineEnd[0] - lineStart[0]) * 
+            boidPosition[1]) + (lineEnd[0] * lineStart[1]) - (lineEnd[1] * lineStart[0])
+
+        partTwo = ((lineEnd[1] - lineStart[1]) ** 2) + ((lineEnd[0] - lineStart[0]) ** 2)
+
+        result = abs(partOne) / np.sqrt(partTwo)
+
+        return result
 
 
     # Rotation definition based on an answer from StackOverflow: http://stackoverflow.com/a/3409039
