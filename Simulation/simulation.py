@@ -19,6 +19,8 @@ import time                         # Used to time stuff
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Implement load balancing algorithm 1
+#       - Locations should know if they are overloaded
+#       - They should signal the controller with a requested boundary step change
 # TODO: Implement load balancing algorithm 2
 
 ## MAY DOs =========================================================================================
@@ -100,8 +102,11 @@ class Simulation:
             self.locationCoords[2] = self.locationCoords[0] + self.locationSize
             self.locationCoords[3] = self.locationCoords[1] + self.locationSize
 
+            # Define the location's position in the grid of locations [row, col]
+            self.locationGridPos = [int(np.floor(i / 3)), (i % 3)]
+
             loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount, 
-                self.locationColours[i])
+                self.locationColours[i], self.locationGridPos)
             self.locations.append(loc)
 
         # Draw the dynamic lines to test the load balancing
@@ -311,7 +316,7 @@ class Simulation:
                 if self.locations[i].boidCount > self.BOID_THRESHOLD:
                     self.violationCount += 1
 
-            self.logger.info("Location boid counts: " + " ".join(str(loc.boidCount) 
+            self.logger.debug("Location boid counts: " + " ".join(str(loc.boidCount) 
                 for loc in self.locations))
 
             # Update the counter label
@@ -345,6 +350,114 @@ class Simulation:
             self.pauseSimulation = False
             self.pauseButton.config(text = "Pause")
             self.simulationStep()
+
+
+    # Currently, this method changes the bounds of all the applicable edges of an overloaded 
+    # location and the other bounds of the other locations that would be affected by this change.
+    #
+    # FIXME: Cannot currently handle when multiple locations are overloaded
+    # FIXME: Assumes that an overloaded location wishes to shrink all its boundaries
+    def locationOverloaded(self, locationID):
+        stepSize = 20
+
+        self.logger.debug("Location " + str(locationID) + " overloaded")
+
+        # 1) Query the other locations to determine how the requested change would affect them
+        # 2) Determine what action to take
+        # 3) Implement change
+
+        # Determine the row and column of the location that is requesting load balancing
+        [row, col] = self.locations[locationID - 1].gridPosition
+
+        # # Determine which locations would be affected by this change
+        locationsToChange = self.identifyAffectedLocations(row, col)
+
+        # # Update the edges on the locations
+        for edge in locationsToChange.keys():
+            for locID in locationsToChange.get(edge):
+                self.locations[locID - 1].changeBounds(edge, stepSize, [row, col])
+
+
+    # Based on the position of the location in the simulation grid, determine which of the sides of 
+    # the location would need changing (sides on simulation edge cannot be changed)
+    def identifyAffectedLocations(self, row, col):
+        top = False
+        right = False
+        bottom = False
+        left = False
+
+        # Used as a temporary value for the location width of the simulation (i.e. 3 by 3)
+        locationThing = 3 
+
+        # Corners
+        if col == 0 and row == 0:
+            right = True
+            bottom = True
+        elif (col == locationThing - 1) and (row == locationThing - 1):
+            top = True
+            left = True
+        elif col == 0 and (row == locationThing - 1):
+            top = True
+            right = True
+        elif (col == locationThing - 1) and row == 0:
+            bottom = True
+            left = True
+
+        # Edges
+        elif col == 0:
+            top = True 
+            right = True 
+            bottom = True
+        elif row == 0:
+            right = True
+            bottom = True
+            left = True
+        elif (col == locationThing - 1):
+            top = True
+            bottom = True
+            left = True
+        elif (row == locationThing - 1):
+            top = True
+            right = True
+            left = True
+        
+        # Middle
+        else:
+            top = True
+            right = True
+            bottom = True
+            left = True
+
+        # Iterate over the locations to determine the IDs of those locations that would be affected 
+        # by the requested change and which edges of the locations would need changing
+        locationsToChange = {'top': [], 'right': [], 'bottom': [], 'left': []}
+        for l in self.locations:
+            if top and (l.gridPosition[0] == row - 1):
+                locationsToChange['bottom'].append(l.locationID)
+
+            if right and (l.gridPosition[1] == col + 1):
+                locationsToChange['left'].append(l.locationID)
+
+            if bottom and (l.gridPosition[0] == row + 1):
+                locationsToChange['top'].append(l.locationID)
+
+            if left and (l.gridPosition[1] == col - 1):
+                locationsToChange['right'].append(l.locationID)
+
+
+            if top and (l.gridPosition[0] == row):
+                locationsToChange['top'].append(l.locationID)
+
+            if right and (l.gridPosition[1] == col):
+                locationsToChange['right'].append(l.locationID)
+
+            if bottom and (l.gridPosition[0] == row):
+                locationsToChange['bottom'].append(l.locationID)
+
+            if left and (l.gridPosition[1] == col):
+                locationsToChange['left'].append(l.locationID)
+
+        return locationsToChange
 
 
     # Create dynamic lines that are initially over the location boundaries

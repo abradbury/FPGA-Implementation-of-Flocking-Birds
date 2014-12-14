@@ -95,16 +95,7 @@ class Boid:
         else:
             self.movement = 0
            
-
-    # Move the boid to the calculate positon
-    def draw(self, colour):
         self.velocity += self.movement
-
-        # Specify the boid fill colour based on the debug flag
-        if self.colourCode:
-            self.fillColour = colour
-        else:
-            self.fillColour = "red"
 
         # Bound the velocity to the maximum allowed
         if self.velocity[0] > self.MAX_VELOCITY:
@@ -137,6 +128,14 @@ class Boid:
         elif self.position[1] > self.canvas.winfo_width():
             self.velocity = -self.velocity
             self.position += self.velocity
+
+    # Move the boid to the calculate positon
+    def draw(self, colour):
+        # Specify the boid fill colour based on the debug flag
+        if self.colourCode:
+            self.fillColour = colour
+        else:
+            self.fillColour = "red"
 
         # Calculate the position of the points of the boid object
         self.x0 = self.position[0] - self.step
