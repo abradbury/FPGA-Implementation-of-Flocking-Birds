@@ -9,10 +9,10 @@ import logging                      # Used to handle the textual output
 import random                       # Used to randomly position the boids on initialisation
 
 
-# A class representing a location. A location is an entity that controls all the 
+# A class representing a BoidCPU. A BoidCPU is an entity that controls all the 
 # boids that enter its section of the simulation space. When boids exit a 
-# location's space, they are transfered to a neighbouring location.
-class Location:
+# BoidCPU's space, they are transfered to a neighbouring BoidCPU.
+class BoidCPU:
 
     def __init__(self, boidGPU, _simulation, _locationID, _locationCoords, _initialBoidCount, _colour, _gridPosition):
         self.simulation = _simulation
