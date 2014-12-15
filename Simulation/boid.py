@@ -15,12 +15,11 @@ class Boid:
         self.boidCPU = _boidCPU
         self.logger = self.boidCPU.logger
 
-        # Define debugging flags
-        self.colourCode = self.boidCPU.colourCode
-        self.trackBoid = self.boidCPU.trackBoid
+        # Make the system configuration list available
+        self.config = self.boidCPU.config
 
         # Colour the boids based on their original boidCPU if debugging
-        if self.colourCode:
+        if self.config['colourCode']:
             self.colour = _colour
             self.outlineColour = _colour
             self.boidWidth = 2
@@ -38,15 +37,8 @@ class Boid:
 
         self.neighbouringBoids = []
 
-        self.MAX_VELOCITY = 10
-        self.VISION_RADIUS = 200
-
-        self.ALIGNMENT_WEIGHT = 1
-        self.COHESION_WEIGHT = 1
-        self.REPULSION_WEIGHT = 1
-
-        self.randomVelX = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
-        self.randomVelY = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
+        self.randomVelX = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
+        self.randomVelY = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
         self.velocity = np.array([self.randomVelX, self.randomVelY], dtype = np.float_)
 
         # Draw the boid
@@ -64,7 +56,7 @@ class Boid:
         self.calculateNeighbours()
 
         # If tracking boid, highlight its neighbouring boids
-        if self.trackBoid and (self.boidID == 42): 
+        if self.config['trackBoid'] and (self.boidID == 42): 
             for boid in self.neighbouringBoids:
                 self.boidGPU.highlightBoid(True, boid.boidID)
 
@@ -74,9 +66,9 @@ class Boid:
             self.alignmentMod = self.alignment()
             self.repulsionMod = self.repulsion()
 
-            self.movement = ((self.COHESION_WEIGHT * self.cohesionMod) + 
-                (self.ALIGNMENT_WEIGHT * self.alignmentMod) + 
-                (self.REPULSION_WEIGHT * self.repulsionMod))
+            self.movement = ((self.config['COHESION_WEIGHT'] * self.cohesionMod) + 
+                (self.config['ALIGNMENT_WEIGHT'] * self.alignmentMod) + 
+                (self.config['REPULSION_WEIGHT'] * self.repulsionMod))
 
         else:
             self.movement = 0
@@ -84,17 +76,17 @@ class Boid:
         self.velocity += self.movement
 
         # Bound the velocity to the maximum allowed
-        if self.velocity[0] > self.MAX_VELOCITY:
-            self.velocity[0] = self.MAX_VELOCITY
+        if self.velocity[0] > self.config['MAX_VELOCITY']:
+            self.velocity[0] = self.config['MAX_VELOCITY']
 
-        if self.velocity[1] > self.MAX_VELOCITY:
-            self.velocity[1] = self.MAX_VELOCITY
+        if self.velocity[1] > self.config['MAX_VELOCITY']:
+            self.velocity[1] = self.config['MAX_VELOCITY']
 
-        if self.velocity[0] < -self.MAX_VELOCITY:
-            self.velocity[0] = -self.MAX_VELOCITY
+        if self.velocity[0] < -self.config['MAX_VELOCITY']:
+            self.velocity[0] = -self.config['MAX_VELOCITY']
 
-        if self.velocity[1] < -self.MAX_VELOCITY:
-            self.velocity[1] = -self.MAX_VELOCITY
+        if self.velocity[1] < -self.config['MAX_VELOCITY']:
+            self.velocity[1] = -self.config['MAX_VELOCITY']
 
         self.position += self.velocity
 
@@ -119,7 +111,7 @@ class Boid:
     def draw(self, colour):
 
         # Specify the boid fill colour based on the debug flag
-        if self.colourCode:
+        if self.config['colourCode']:
             self.fillColour = colour
         else:
             self.fillColour = "red"
@@ -135,7 +127,7 @@ class Boid:
         for boid in self.possibleNeighbours:
             if boid.boidID != self.boidID:
                 dist = np.linalg.norm(boid.position - self.position)
-                if dist < self.VISION_RADIUS:
+                if dist < self.config['VISION_RADIUS']:
                     self.neighbouringBoids.append(boid)
 
 

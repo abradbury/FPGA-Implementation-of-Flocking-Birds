@@ -22,14 +22,13 @@ class BoidCPU:
         self.gridPosition = _gridPosition
         self.boidGPU = boidGPU
 
+        # Make the system configuration list available
+        self.config = self.simulation.config
+
         # Define boid structures
         self.boids = []
         self.initialBoidCount = _initialBoidCount
         self.boidCount = self.initialBoidCount
-
-        # Define debugging flags
-        self.colourCode = self.simulation.colourCode
-        self.trackBoid = self.simulation.trackBoid
 
         # Used to hold the plotting data
         self.xData = []
@@ -37,7 +36,7 @@ class BoidCPU:
         self.y2Data = []
 
         # If the boidCPU bounds are to be coloured differently, use the given colour 
-        if self.colourCode:
+        if self.config['colourCode']:
             self.colour = _colour
         else:  
             self.colour = "yellow"
@@ -72,7 +71,7 @@ class BoidCPU:
                 self.boids[i].update(self.possibleNeighbouringBoids)
 
             # If the number of boids in the boidCPU are greater than a threshold, signal controller
-            if self.boidCount >= self.simulation.BOID_THRESHOLD:
+            if self.boidCount >= self.config['BOID_THRESHOLD']:
                 self.simulation.boidCPUOverloaded(self.boidCPUID)
 
             # Determine if the new positions of the boids lie outside the boidCPU's bounds

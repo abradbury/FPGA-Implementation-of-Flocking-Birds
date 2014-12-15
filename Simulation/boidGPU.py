@@ -10,12 +10,11 @@ import numpy as np                  # Used in various mathematical operations
 class BoidGPU:
 
     def __init__(self, _simulation):
-        # Define window size
-        self.width = 700
-        self.height = 700
-
         # Link back to simulation
         self.simulation = _simulation
+
+        # Make the system configuration list available
+        self.config = self.simulation.config
 
         # Create the window
         self.root = Tk()
@@ -24,7 +23,7 @@ class BoidGPU:
         frame = Frame(self.root)
         frame.pack()
         
-        self.canvas = Canvas(frame, bg = "black", width = self.width, height = self.height)
+        self.canvas = Canvas(frame, bg = "black", width = self.config['width'], height = self.config['height'])
         self.canvas.pack();
         
         # Create the buttons
@@ -67,11 +66,6 @@ class BoidGPU:
         self.bearing = np.pi
         self.step = 10
 
-        self.colourCode = self.simulation.colourCode
-        self.trackBoid = self.simulation.trackBoid
-
-        self.MAX_VELOCITY = 10
-        self.VISION_RADIUS = 200
 
     # Creates a boidCPU object and draws on the screen
     def drawBoidCPU(self, coords, locID, colour):
@@ -142,7 +136,7 @@ class BoidGPU:
         self.rotateBoid(boidID, velocity, position, points)
 
         # Debugging method - follow a specific boid
-        if self.trackBoid and (boidID == 42):  
+        if self.config['trackBoid'] and (boidID == 42):  
             self.followBoid(position, boidID)
 
 
@@ -179,9 +173,9 @@ class BoidGPU:
         self.canvas.delete("boidCircle")
         self.canvas.itemconfig("B" + str(boidID), fill = "blue")
 
-        self.canvas.create_oval(position[0] - self.VISION_RADIUS, 
-            position[1] - self.VISION_RADIUS, position[0] + self.VISION_RADIUS, 
-            position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
+        self.canvas.create_oval(position[0] - self.config['VISION_RADIUS'], 
+            position[1] - self.config['VISION_RADIUS'], position[0] + self.config['VISION_RADIUS'], 
+            position[1] + self.config['VISION_RADIUS'], outline = "yellow", tags = "boidCircle")
 
 
     # Highlights or de-highlights a specific boid based on the given boidID

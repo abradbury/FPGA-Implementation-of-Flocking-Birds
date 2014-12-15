@@ -20,7 +20,6 @@ import time                         # Used to time stuff
 #         direct neighbour of the current boidCPU which the boid resides in
 # FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup)
 
-# TODO: Redo configuration settings, i.e. collate and provide from one place (dictionary?)
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Implement load balancing algorithm 1
 #       - boidCPUs should know if they are overloaded
@@ -43,16 +42,27 @@ class Simulation:
 
     def __init__(self):
         # Setup the simulation parameters
-        self.boidCount = 90
         self.pauseSimulation = True
         self.timeStepCounter = 0
 
-        # The maximum amount of boids a boidCPU should have at any one time
-        self.BOID_THRESHOLD = 30
+        # Define configuration parameters
+        self.config = {}
 
-        # Define debugging flags
-        self.colourCode = False
-        self.trackBoid = True
+        self.config['width'] = 700              # Define window size
+        self.config['height'] = 700
+        self.config['boidCount'] = 90
+        
+        self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
+        self.config['trackBoid'] = True         # True to track boid 42 and neighbours
+
+        self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should have
+        
+        self.config['MAX_VELOCITY'] = 10
+        self.config['VISION_RADIUS'] = 200
+
+        self.config['ALIGNMENT_WEIGHT'] = 1
+        self.config['COHESION_WEIGHT'] = 1
+        self.config['REPULSION_WEIGHT'] = 1
 
         # Setup logging
         self.setupLogging()
@@ -64,7 +74,7 @@ class Simulation:
         # Create the boidCPUs
         self.allowedBoidCPUCounts = np.array([1, 2, 4, 9, 16, 25, 36])
         self.boidCPUCount = self.allowedBoidCPUCounts[3]
-        self.initialBoidCount = self.boidCount / self.boidCPUCount
+        self.initialBoidCount = self.config['boidCount'] / self.boidCPUCount
         self.boidCPUSize = round(self.boidGPU.getWindowSize()[0] / np.sqrt(self.boidCPUCount))
 
         self.boidCPUs = []
@@ -148,7 +158,7 @@ class Simulation:
             axis2 = axis.twinx()
             for tl in axis2.get_yticklabels():
                 tl.set_color('r')
-            axis2.set_ylim([0, self.boidCount])
+            axis2.set_ylim([0, self.config['boidCount']])
 
             # Plot each line, returns a list of lines - the comma is needed
             # If the x data set is not specified, it is assumed to be the number 
@@ -231,7 +241,7 @@ class Simulation:
 
             # Update the max boid threshold lines
             self.thresholdLines[i].set_xdata([0, len(self.boidCPUs[i].xData)])
-            self.thresholdLines[i].set_ydata([self.BOID_THRESHOLD, self.BOID_THRESHOLD])
+            self.thresholdLines[i].set_ydata([self.config['BOID_THRESHOLD'], self.config['BOID_THRESHOLD']])
 
             # Adjust the axes accordingly
             self.axes[i].relim()
@@ -287,7 +297,7 @@ class Simulation:
                 self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
 
                 # If the boidCPU is exceeding the threshold, increment counter
-                if self.boidCPUs[i].boidCount > self.BOID_THRESHOLD:
+                if self.boidCPUs[i].boidCount > self.config['BOID_THRESHOLD']:
                     self.violationCount += 1
 
             self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
