@@ -14,13 +14,13 @@ import random                       # Used to randomly position the boids on ini
 # location's space, they are transfered to a neighbouring location.
 class Location:
 
-    def __init__(self, canvas, _simulation, _locationID, _locationCoords, _initialBoidCount, _colour, _gridPosition):
+    def __init__(self, boidGPU, _simulation, _locationID, _locationCoords, _initialBoidCount, _colour, _gridPosition):
         self.simulation = _simulation
         self.locationID = _locationID
         self.locationCoords = np.copy(_locationCoords)
         self.logger = self.simulation.logger
         self.gridPosition = _gridPosition
-        self.canvas = canvas    # Used to change location bounds
+        self.boidGPU = boidGPU
 
         # Define boid structures
         self.boids = []
@@ -42,9 +42,8 @@ class Location:
         else:  
             self.colour = "yellow"
 
-        # Draw the location bounds
-        self.canvas.create_rectangle(self.locationCoords[0], self.locationCoords[1], self.locationCoords[2], 
-            self.locationCoords[3], outline = self.colour, tags = "L" + str(self.locationID))
+        # # Draw the location bounds
+        self.boidGPU.drawLocation(self.locationCoords, self.locationID, self.colour)
 
         # Draw the location's boids
         for i in range (0, self.boidCount):
@@ -54,7 +53,7 @@ class Location:
             self.initialPosition = np.array([self.randomX, self.randomY], dtype = np.float_)
             self.boidID = ((self.locationID - 1) * self.boidCount) + i + 1
 
-            boid = Boid(self.canvas, self, self.boidID, self.initialPosition, self.colour)
+            boid = Boid(self.boidGPU, self, self.boidID, self.initialPosition, self.colour)
             self.boids.append(boid)
 
         self.logger.info("Created location " + str(self.locationID) + " with " + 
@@ -128,7 +127,7 @@ class Location:
                 self.locationCoords[0] -= stepSize
                 # print "Decreased the left edge of location " + str(self.locationID) + " by " + str(stepSize)    
 
-        self.canvas.coords("L" + str(self.locationID), self.locationCoords[0], self.locationCoords[1], self.locationCoords[2], self.locationCoords[3])
+        self.boidGPU.updateLocation(self.locationID, self.locationCoords)
 
 
     def determineBoidTransfer(self, boid):

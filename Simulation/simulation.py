@@ -16,7 +16,11 @@ import time                         # Used to time stuff
 # FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 # FIXME: Obstacle avoidance does not seem to work well
+# FIXME: Now that the locations resize, a boid's vision radius could cover a location that is not a 
+#         direct neighbour of the current location which the boid resides in
+# FIXME: Boids sometimes jump over the locations boundaries (i.e. temporary speedup)
 
+# TODO: Redo configuration settings, i.e. collate and provide from one place (dictionary?)
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Implement load balancing algorithm 1
 #       - Locations should know if they are overloaded
@@ -27,6 +31,7 @@ import time                         # Used to time stuff
 # TODO: Add keybinding to capture return key and simulate button press
 # TODO: Add acceleration to smooth movement (especially around borders)
 # TODO: Calculate a locations neighbours programmatically - rather than hardcoding
+# TODO: Avoid double drawing - once for new position then again for rotation
 
 
 # The main application class. Sets up the simulation area and the number of locations that it is to 
@@ -38,8 +43,6 @@ class Simulation:
 
     def __init__(self):
         # Setup the simulation parameters
-        # self.width = 700
-        # self.height = 700
         self.boidCount = 90
         self.pauseSimulation = True
         self.timeStepCounter = 0
@@ -58,35 +61,7 @@ class Simulation:
 
         # Instantiate the BoidGPU
         self.boidGPU = BoidGPU(self)
-
-        # Create the window
-        # self.root = Tk()
-        # self.root.wm_title("Boid Simulation")
-
-        # frame = Frame(self.root)
-        # frame.pack()
-        
-        # self.canvas = Canvas(frame, bg = "black", width = self.width, height = self.height)
-        # self.canvas.pack();
-        
-        # # Create the buttons
-        # self.timeButton = Button(frame, text = "Next Time Step", command = self.nextStepButton)
-        # self.timeButton.pack(side = LEFT)
-        # self.pauseButton = Button(frame, text = "Begin", command = self.pause)
-        # self.pauseButton.pack(side = LEFT)
-        # self.graphButton = Button(frame, text = "Update Graphs", command = self.updateGraphs)
-        # self.graphButton.pack(side = LEFT)
-        # self.quitButton = Button(frame, text = "Quit", command = frame.quit)
-        # self.quitButton.pack(side = LEFT)
-
-        # self.counterLabel = Label(frame, text = self.timeStepCounter, width = 6)
-        # self.counterLabel.pack(side = RIGHT)
-
-        # # Needed so that the canvas sizes can be used later
-        # self.root.update()
-
-        # Temporary
-        self.canvas = self.boidGPU.getCanvas()
+        self.boidGPU.initialiseSimulation()
 
         # Create the locations
         self.allowedLocationCounts = np.array([1, 2, 4, 9, 16, 25, 36])
@@ -111,7 +86,7 @@ class Simulation:
             # Define the location's position in the grid of locations [row, col]
             self.locationGridPos = [int(np.floor(i / 3)), (i % 3)]
 
-            loc = Location(self.canvas, self, i + 1, self.locationCoords, self.initialBoidCount, 
+            loc = Location(self.boidGPU, self, i + 1, self.locationCoords, self.initialBoidCount, 
                 self.locationColours[i], self.locationGridPos)
             self.locations.append(loc)
 
@@ -129,6 +104,7 @@ class Simulation:
         self.setupGraphs()
         self.setupSummaryGraph()
 
+        # Start everything going
         self.boidGPU.beginMainLoop()
 
 
@@ -240,7 +216,6 @@ class Simulation:
         plt.show()
 
 
-
     # For each location, get the graph lines and set the data to the current data  
     # plus the new data. Then reformat both axes to accommodate the new data.
     def updateGraphs(self):
@@ -326,7 +301,6 @@ class Simulation:
 
             # Update the counter label
             self.timeStepCounter += 1
-            # self.counterLabel.config(text = self.timeStepCounter)
             self.boidGPU.updateTimeStepLabel(self.timeStepCounter)
 
             # Update the violation list
@@ -336,7 +310,8 @@ class Simulation:
                 self.getLineStatus()
 
             # Call self after 20ms (50 Hz)
-            self.canvas.after(10, self.simulationStep)
+            self.boidGPU.nextSimulationStep(10)
+            
 
     
     # Manual timestep increment
@@ -350,12 +325,10 @@ class Simulation:
     def pause(self):
         if self.pauseSimulation == False:
             self.pauseSimulation = True
-            # self.pauseButton.config(text = "Resume")
             self.boidGPU.togglePauseButton(False)
 
         else:
             self.pauseSimulation = False
-            # self.pauseButton.config(text = "Pause")
             self.boidGPU.togglePauseButton(True)
             self.simulationStep()
 

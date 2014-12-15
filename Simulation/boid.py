@@ -11,7 +11,7 @@ import warnings                     # Used to catch an invalid divide warning
 # A class representing an individual boid
 class Boid:
 
-    def __init__(self, canvas, _location, _boidID, initPosition, _colour):
+    def __init__(self, boidGPU, _location, _boidID, initPosition, _colour):
         self.location = _location
         self.logger = self.location.logger
 
@@ -31,9 +31,9 @@ class Boid:
 
         # Create the boids
         self.boidID = _boidID
-        self.bearing = np.pi
-        self.step = 10
-        self.canvas = canvas
+        # self.bearing = np.pi
+        # self.step = 10
+        self.boidGPU = boidGPU
         self.position = initPosition
 
         self.neighbouringBoids = []
@@ -49,22 +49,8 @@ class Boid:
         self.randomVelY = random.randint(-self.MAX_VELOCITY, self.MAX_VELOCITY)
         self.velocity = np.array([self.randomVelX, self.randomVelY], dtype = np.float_)
 
-        # Define the boid polygon points
-        self.x0 = self.position[0] - self.step
-        self.y0 = self.position[1] - self.step
-        self.x1 = self.position[0]
-        self.y1 = self.position[1] + self.step
-        self.x2 = self.position[0] + self.step
-        self.y2 = self.position[1] - self.step
-        self.x3 = self.position[0]
-        self.y3 = self.position[1] - (self.step/2)
-
         # Draw the boid
-        self.boid = self.canvas.create_polygon(self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3, fill = self.colour, outline = self.outlineColour, 
-            width = self.boidWidth, tags = ("B" + str(self.boidID)))
-
-        self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
+        self.boidGPU.createBoid(self.position, self.velocity, self.colour, self.outlineColour, self.boidWidth, self.boidID)
 
         self.logger.debug("Created boid with ID " + str(self.boidID))
 
@@ -80,7 +66,7 @@ class Boid:
         # If tracking boid, highlight its neighbouring boids
         if self.trackBoid and (self.boidID == 42): 
             for boid in self.neighbouringBoids:
-                boid.highlightBoid(True)
+                self.boidGPU.highlightBoid(True, boid.boidID)
 
         # If the boids has neighbours, calculate its next position 
         if len(self.neighbouringBoids) > 0:
@@ -117,7 +103,7 @@ class Boid:
             self.velocity = -self.velocity
             self.position += self.velocity
 
-        elif self.position[0] > self.canvas.winfo_width():
+        elif self.position[0] > self.boidGPU.getWindowSize()[0]:
             self.velocity = -self.velocity
             self.position += self.velocity
 
@@ -125,59 +111,20 @@ class Boid:
             self.velocity = -self.velocity
             self.position += self.velocity
 
-        elif self.position[1] > self.canvas.winfo_width():
+        elif self.position[1] > self.boidGPU.getWindowSize()[0]:
             self.velocity = -self.velocity
             self.position += self.velocity
 
     # Move the boid to the calculate positon
     def draw(self, colour):
+
         # Specify the boid fill colour based on the debug flag
         if self.colourCode:
             self.fillColour = colour
         else:
             self.fillColour = "red"
 
-        # Calculate the position of the points of the boid object
-        self.x0 = self.position[0] - self.step
-        self.y0 = self.position[1] - self.step
-        self.x1 = self.position[0]
-        self.y1 = self.position[1] + self.step
-        self.x2 = self.position[0] + self.step
-        self.y2 = self.position[1] - self.step
-        self.x3 = self.position[0]
-        self.y3 = self.position[1] - (self.step/2)
-
-        self.canvas.coords("B" + str(self.boidID), self.x0, self.y0, self.x1, self.y1, self.x2, 
-            self.y2, self.x3, self.y3)
-        self.canvas.itemconfig(self.boid, fill = self.fillColour) 
-
-        self.rotate(np.arctan2(self.velocity[0], self.velocity[1]))
-
-        # Debugging method - follow a specific boid
-        if self.trackBoid and (self.boidID == 42):  
-            self.followBoid()
-
-
-    # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
-    # coloured blue. Any neighbouring boid is coloured green. 
-    def followBoid(self):
-        self.canvas.delete("boidCircle")
-        self.canvas.itemconfig(self.boid, fill = "blue")
-
-        self.canvas.create_oval(self.position[0] - self.VISION_RADIUS, 
-            self.position[1] - self.VISION_RADIUS, self.position[0] + self.VISION_RADIUS, 
-            self.position[1] + self.VISION_RADIUS, outline = "yellow", tags = "boidCircle")
-
-        self.logger.debug("Boid " + str(self.boidID) + " has " + 
-            str(len(self.neighbouringBoids)) + " neighbouring boids: ")
-        self.logger.debug(" ".join([str(b.boidID) for b in self.neighbouringBoids]))
-
-
-    def highlightBoid(self, on):
-        if on:
-            self.canvas.itemconfig(self.boid, fill = "green")
-        else:
-            self.canvas.itemconfig(self.boid, fill = "red")
+        self.boidGPU.updateBoid(self.position, self.velocity, self.fillColour, self.boidID)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
@@ -294,28 +241,4 @@ class Boid:
         result = abs(partOne) / np.sqrt(partTwo)
 
         return result
-
-
-    # Rotation definition based on an answer from StackOverflow: http://stackoverflow.com/a/3409039
-    def rotate(self, radians):
-        # Convert to radians for trig functions
-        # radians = degrees * np.pi / 180
-        self.bearing -= radians
-        self.bearing = self.bearing % (2 * np.pi)
-
-        def _rot(x, y):
-            # Note: the rotation is done in the opposite fashion from for a right-handed coordinate 
-            #   system due to the left-handedness of computer coordinates
-            x -= self.position[0]
-            y -= self.position[1]
-            _x = x * np.cos(radians) + y * np.sin(radians)
-            _y = -x * np.sin(radians) + y * np.cos(radians)
-            return _x + self.position[0], _y + self.position[1]
-
-        self.x0, self.y0 = _rot(self.x0, self.y0)
-        self.x1, self.y1 = _rot(self.x1, self.y1)
-        self.x2, self.y2 = _rot(self.x2, self.y2)
-        self.x3, self.y3 = _rot(self.x3, self.y3)
-
-        self.canvas.coords(self.boid, self.x0, self.y0, self.x1, self.y1, self.x2, self.y2, self.x3, self.y3)
 
