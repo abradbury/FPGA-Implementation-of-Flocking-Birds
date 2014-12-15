@@ -4,9 +4,9 @@
 
 from location import Location       # Import the Location class
 from boid import Boid               # Import the Boid class
+from boidGPU import BoidGPU         # Import the BoidGPU class
 
 import logging                      # Used to handle the textual output
-from Tkinter import *               # Used to draw shapes for the simulation
 import numpy as np                  # Used in various mathematical operations
 import matplotlib.pyplot as plt     # Used to plot the graphs
 import time                         # Used to time stuff
@@ -38,8 +38,8 @@ class Simulation:
 
     def __init__(self):
         # Setup the simulation parameters
-        self.width = 700
-        self.height = 700
+        # self.width = 700
+        # self.height = 700
         self.boidCount = 90
         self.pauseSimulation = True
         self.timeStepCounter = 0
@@ -56,37 +56,43 @@ class Simulation:
         # Setup logging
         self.setupLogging()
 
+        # Instantiate the BoidGPU
+        self.boidGPU = BoidGPU(self)
+
         # Create the window
-        self.root = Tk()
-        self.root.wm_title("Boid Simulation")
+        # self.root = Tk()
+        # self.root.wm_title("Boid Simulation")
 
-        frame = Frame(self.root)
-        frame.pack()
+        # frame = Frame(self.root)
+        # frame.pack()
         
-        self.canvas = Canvas(frame, bg = "black", width = self.width, height = self.height)
-        self.canvas.pack();
+        # self.canvas = Canvas(frame, bg = "black", width = self.width, height = self.height)
+        # self.canvas.pack();
         
-        # Create the buttons
-        self.timeButton = Button(frame, text = "Next Time Step", command = self.nextStepButton)
-        self.timeButton.pack(side = LEFT)
-        self.pauseButton = Button(frame, text = "Begin", command = self.pause)
-        self.pauseButton.pack(side = LEFT)
-        self.graphButton = Button(frame, text = "Update Graphs", command = self.updateGraphs)
-        self.graphButton.pack(side = LEFT)
-        self.quitButton = Button(frame, text = "Quit", command = frame.quit)
-        self.quitButton.pack(side = LEFT)
+        # # Create the buttons
+        # self.timeButton = Button(frame, text = "Next Time Step", command = self.nextStepButton)
+        # self.timeButton.pack(side = LEFT)
+        # self.pauseButton = Button(frame, text = "Begin", command = self.pause)
+        # self.pauseButton.pack(side = LEFT)
+        # self.graphButton = Button(frame, text = "Update Graphs", command = self.updateGraphs)
+        # self.graphButton.pack(side = LEFT)
+        # self.quitButton = Button(frame, text = "Quit", command = frame.quit)
+        # self.quitButton.pack(side = LEFT)
 
-        self.counterLabel = Label(frame, text = self.timeStepCounter, width = 6)
-        self.counterLabel.pack(side = RIGHT)
+        # self.counterLabel = Label(frame, text = self.timeStepCounter, width = 6)
+        # self.counterLabel.pack(side = RIGHT)
 
-        # Needed so that the canvas sizes can be used later
-        self.root.update()
+        # # Needed so that the canvas sizes can be used later
+        # self.root.update()
+
+        # Temporary
+        self.canvas = self.boidGPU.getCanvas()
 
         # Create the locations
         self.allowedLocationCounts = np.array([1, 2, 4, 9, 16, 25, 36])
         self.locationCount = self.allowedLocationCounts[3]
         self.initialBoidCount = self.boidCount / self.locationCount
-        self.locationSize = round(self.canvas.winfo_width() / np.sqrt(self.locationCount))
+        self.locationSize = round(self.boidGPU.getWindowSize()[0] / np.sqrt(self.locationCount))
 
         self.locations = []
         self.calcTimings = []
@@ -123,8 +129,7 @@ class Simulation:
         self.setupGraphs()
         self.setupSummaryGraph()
 
-        # Start everything going
-        self.root.mainloop()
+        self.boidGPU.beginMainLoop()
 
 
     # Setup logging
@@ -321,7 +326,8 @@ class Simulation:
 
             # Update the counter label
             self.timeStepCounter += 1
-            self.counterLabel.config(text = self.timeStepCounter)
+            # self.counterLabel.config(text = self.timeStepCounter)
+            self.boidGPU.updateTimeStepLabel(self.timeStepCounter)
 
             # Update the violation list
             self.violationList.append(self.violationCount)
@@ -344,11 +350,13 @@ class Simulation:
     def pause(self):
         if self.pauseSimulation == False:
             self.pauseSimulation = True
-            self.pauseButton.config(text = "Resume")
+            # self.pauseButton.config(text = "Resume")
+            self.boidGPU.togglePauseButton(False)
 
         else:
             self.pauseSimulation = False
-            self.pauseButton.config(text = "Pause")
+            # self.pauseButton.config(text = "Pause")
+            self.boidGPU.togglePauseButton(True)
             self.simulationStep()
 
 
