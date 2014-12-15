@@ -73,13 +73,13 @@ class BoidGPU:
         self.MAX_VELOCITY = 10
         self.VISION_RADIUS = 200
 
-    # Creates a location object and draws on the screen
-    def drawLocation(self, coords, locID, colour):
+    # Creates a boidCPU object and draws on the screen
+    def drawBoidCPU(self, coords, locID, colour):
         self.canvas.create_rectangle(coords[0], coords[1], coords[2], coords[3], outline = colour, 
             tags = "L" + str(locID))
 
-    # Redraws the bounds of the location
-    def updateLocation(self, locID, coords):
+    # Redraws the bounds of the boidCPU
+    def updateBoidCPU(self, locID, coords):
         self.canvas.coords("L" + str(locID), coords[0], coords[1], coords[2], coords[3])
 
 

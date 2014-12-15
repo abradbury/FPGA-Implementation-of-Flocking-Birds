@@ -11,15 +11,15 @@ import warnings                     # Used to catch an invalid divide warning
 # A class representing an individual boid
 class Boid:
 
-    def __init__(self, boidGPU, _location, _boidID, initPosition, _colour):
-        self.location = _location
-        self.logger = self.location.logger
+    def __init__(self, boidGPU, _boidCPU, _boidID, initPosition, _colour):
+        self.boidCPU = _boidCPU
+        self.logger = self.boidCPU.logger
 
         # Define debugging flags
-        self.colourCode = self.location.colourCode
-        self.trackBoid = self.location.trackBoid
+        self.colourCode = self.boidCPU.colourCode
+        self.trackBoid = self.boidCPU.trackBoid
 
-        # Colour the boids based on their original location if debugging
+        # Colour the boids based on their original boidCPU if debugging
         if self.colourCode:
             self.colour = _colour
             self.outlineColour = _colour
@@ -128,7 +128,7 @@ class Boid:
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
-    # the possible neighbour. Possible neighbouring boids include boids from neighbouring locations.
+    # the possible neighbour. Possible neighbouring boids include boids from neighbouring boidCPUs.
     def calculateNeighbours(self):
         self.neighbouringBoids = []
 

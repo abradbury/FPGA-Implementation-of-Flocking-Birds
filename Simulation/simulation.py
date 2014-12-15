@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from location import Location       # Import the Location class
+from boidCPU import BoidCPU       # Import the BoidCPU class
 from boid import Boid               # Import the Boid class
 from boidGPU import BoidGPU         # Import the BoidGPU class
 
@@ -16,25 +16,25 @@ import time                         # Used to time stuff
 # FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 # FIXME: Obstacle avoidance does not seem to work well
-# FIXME: Now that the locations resize, a boid's vision radius could cover a location that is not a 
-#         direct neighbour of the current location which the boid resides in
-# FIXME: Boids sometimes jump over the locations boundaries (i.e. temporary speedup)
+# FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
+#         direct neighbour of the current boidCPU which the boid resides in
+# FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup)
 
 # TODO: Redo configuration settings, i.e. collate and provide from one place (dictionary?)
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Implement load balancing algorithm 1
-#       - Locations should know if they are overloaded
+#       - boidCPUs should know if they are overloaded
 #       - They should signal the controller with a requested boundary step change
 # TODO: Implement load balancing algorithm 2
 
 ## MAY DOs =========================================================================================
 # TODO: Add keybinding to capture return key and simulate button press
 # TODO: Add acceleration to smooth movement (especially around borders)
-# TODO: Calculate a locations neighbours programmatically - rather than hardcoding
+# TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding
 # TODO: Avoid double drawing - once for new position then again for rotation
 
 
-# The main application class. Sets up the simulation area and the number of locations that it is to 
+# The main application class. Sets up the simulation area and the number of boidCPUs that it is to 
 # be divided into. 
 #
 # Note that the simulation begins with a user pressing the pauseButton (initially labelled 'Begin'). 
@@ -47,7 +47,7 @@ class Simulation:
         self.pauseSimulation = True
         self.timeStepCounter = 0
 
-        # The maximum amount of boids a location should have at any one time
+        # The maximum amount of boids a boidCPU should have at any one time
         self.BOID_THRESHOLD = 30
 
         # Define debugging flags
@@ -61,34 +61,34 @@ class Simulation:
         self.boidGPU = BoidGPU(self)
         self.boidGPU.initialiseSimulation()
 
-        # Create the locations
-        self.allowedLocationCounts = np.array([1, 2, 4, 9, 16, 25, 36])
-        self.locationCount = self.allowedLocationCounts[3]
-        self.initialBoidCount = self.boidCount / self.locationCount
-        self.locationSize = round(self.boidGPU.getWindowSize()[0] / np.sqrt(self.locationCount))
+        # Create the boidCPUs
+        self.allowedBoidCPUCounts = np.array([1, 2, 4, 9, 16, 25, 36])
+        self.boidCPUCount = self.allowedBoidCPUCounts[3]
+        self.initialBoidCount = self.boidCount / self.boidCPUCount
+        self.boidCPUSize = round(self.boidGPU.getWindowSize()[0] / np.sqrt(self.boidCPUCount))
 
-        self.locations = []
+        self.boidCPUs = []
         self.calcTimings = []
         self.drawTimings = []
 
-        self.locationColours = ["red", "blue", "green", "yellow", "white", "magenta", "dark grey", 
+        self.boidCPUColours = ["red", "blue", "green", "yellow", "white", "magenta", "dark grey", 
             "cyan", "dark green"]
 
-        self.locationCoords = np.array([0, 0, 0, 0])
-        for i in range(0, self.locationCount):
-            self.locationCoords[0] = (i % 3) * self.locationSize
-            self.locationCoords[1] = int(np.floor(i / 3)) * self.locationSize
-            self.locationCoords[2] = self.locationCoords[0] + self.locationSize
-            self.locationCoords[3] = self.locationCoords[1] + self.locationSize
+        self.boidCPUCoords = np.array([0, 0, 0, 0])
+        for i in range(0, self.boidCPUCount):
+            self.boidCPUCoords[0] = (i % 3) * self.boidCPUSize
+            self.boidCPUCoords[1] = int(np.floor(i / 3)) * self.boidCPUSize
+            self.boidCPUCoords[2] = self.boidCPUCoords[0] + self.boidCPUSize
+            self.boidCPUCoords[3] = self.boidCPUCoords[1] + self.boidCPUSize
 
-            # Define the location's position in the grid of locations [row, col]
-            self.locationGridPos = [int(np.floor(i / 3)), (i % 3)]
+            # Define the boidCPU's position in the grid of boidCPUs [row, col]
+            self.boidCPUGridPos = [int(np.floor(i / 3)), (i % 3)]
 
-            loc = Location(self.boidGPU, self, i + 1, self.locationCoords, self.initialBoidCount, 
-                self.locationColours[i], self.locationGridPos)
-            self.locations.append(loc)
+            loc = BoidCPU(self.boidGPU, self, i + 1, self.boidCPUCoords, self.initialBoidCount, 
+                self.boidCPUColours[i], self.boidCPUGridPos)
+            self.boidCPUs.append(loc)
 
-        # Setup variables to keep track of how many locations exceed the boid threshold
+        # Setup variables to keep track of how many boidCPUs exceed the boid threshold
         self.violationCount = 0
         self.violationList = []
 
@@ -130,14 +130,14 @@ class Simulation:
 
         self.graphFigure = plt.figure()
 
-        for i in range(0, self.locationCount):
+        for i in range(0, self.boidCPUCount):
             # Create the subplots and sync the axes
             if i != 0:
                 axis = self.graphFigure.add_subplot(3, 3, i+1, sharex = self.axes[0], sharey = self.axes[0])
             else:
                 axis = self.graphFigure.add_subplot(3, 3, i+1)
 
-            axis.set_title("Location %d" % (i + 1))
+            axis.set_title("BoidCPU %d" % (i + 1))
             axis.grid(True)
             
             # Setup the first y axis
@@ -191,7 +191,7 @@ class Simulation:
         plt.show()
 
 
-    # Create a sumary graph showing the number of locations exceeding the boid threshold over time
+    # Create a sumary graph showing the number of boidCPUs exceeding the boid threshold over time
     def setupSummaryGraph(self):
         plt.ion()
 
@@ -199,38 +199,38 @@ class Simulation:
         self.summaryAxis.plot([], [])
         self.summaryAxis.fill_between([], 0, [])
 
-        self.summaryAxis.set_ylim([0, self.locationCount])
+        self.summaryAxis.set_ylim([0, self.boidCPUCount])
         
-        self.summaryAxis.set_title("Graph showing number of locations exceeding the boid threshold")
+        self.summaryAxis.set_title("Graph showing number of boidCPUs exceeding the boid threshold")
         self.summaryAxis.grid(True)
 
         self.summaryAxis.set_xlabel("Number of time steps")
-        self.summaryAxis.set_ylabel("Locations over threshold")
+        self.summaryAxis.set_ylabel("BoidCPUs over threshold")
 
         plt.show()
 
 
-    # For each location, get the graph lines and set the data to the current data  
+    # For each boidCPU, get the graph lines and set the data to the current data  
     # plus the new data. Then reformat both axes to accommodate the new data.
     def updateGraphs(self):
 
-        for i in range(0, self.locationCount):
-            # Update the location boid calculation time lines
-            self.lines[i].set_xdata(self.locations[i].xData)
-            self.lines[i].set_ydata(self.locations[i].yData)
+        for i in range(0, self.boidCPUCount):
+            # Update the boidCPU boid calculation time lines
+            self.lines[i].set_xdata(self.boidCPUs[i].xData)
+            self.lines[i].set_ydata(self.boidCPUs[i].yData)
 
-            # Update the location boid count lines. Because the draw routine is called first, but 
+            # Update the boidCPU boid count lines. Because the draw routine is called first, but 
             # not on time step 1, it has one less data element in than the values for the update 
             # stage. Therefore, [0:-1] is used to ignore the last x value.
-            self.lines2[i].set_xdata(self.locations[i].xData[0:-1])
-            self.lines2[i].set_ydata(self.locations[i].y2Data)
+            self.lines2[i].set_xdata(self.boidCPUs[i].xData[0:-1])
+            self.lines2[i].set_ydata(self.boidCPUs[i].y2Data)
 
             # Update the Andall (sp?) lines
-            self.andallLines[i].set_xdata([0, len(self.locations[i].xData)])
+            self.andallLines[i].set_xdata([0, len(self.boidCPUs[i].xData)])
             self.andallLines[i].set_ydata([self.initialBoidCount, self.initialBoidCount])
 
             # Update the max boid threshold lines
-            self.thresholdLines[i].set_xdata([0, len(self.locations[i].xData)])
+            self.thresholdLines[i].set_xdata([0, len(self.boidCPUs[i].xData)])
             self.thresholdLines[i].set_ydata([self.BOID_THRESHOLD, self.BOID_THRESHOLD])
 
             # Adjust the axes accordingly
@@ -262,36 +262,36 @@ class Simulation:
             # when a boid is being followed (during debugging). As no new boid positions have been 
             # calculated, the draw function isn't called on the first time step.
             if self.timeStepCounter != 0:
-                for i in range(0, self.locationCount):
-                    self.logger.debug("Moving boids to calculated positions for location " + 
-                        str(self.locations[i].locationID) + "...")
+                for i in range(0, self.boidCPUCount):
+                    self.logger.debug("Moving boids to calculated positions for boidCPU " + 
+                        str(self.boidCPUs[i].boidCPUID) + "...")
         
                     # Update the canvas with the new boid positions
-                    self.locations[i].update(True)
+                    self.boidCPUs[i].update(True)
 
                     # Store the number of boids for later plotting
-                    self.locations[i].y2Data.append(self.locations[i].boidCount)
+                    self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
 
             # Update the boid
-            for i in range(0, self.locationCount):
-                self.logger.debug("Calculating next boid positions for location " + 
-                    str(self.locations[i].locationID) + "...")
+            for i in range(0, self.boidCPUCount):
+                self.logger.debug("Calculating next boid positions for boidCPU " + 
+                    str(self.boidCPUs[i].boidCPUID) + "...")
 
                 # Calculate the next boid positions and time this                
                 self.startTime = time.clock()
-                self.locations[i].update(False)
+                self.boidCPUs[i].update(False)
                 self.endTime = time.clock()
 
                 # Store the timing information for later plotting
-                self.locations[i].xData.append(self.timeStepCounter)
-                self.locations[i].yData.append((self.endTime - self.startTime) * 1000)
+                self.boidCPUs[i].xData.append(self.timeStepCounter)
+                self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
 
-                # If the location is exceeding the threshold, increment counter
-                if self.locations[i].boidCount > self.BOID_THRESHOLD:
+                # If the boidCPU is exceeding the threshold, increment counter
+                if self.boidCPUs[i].boidCount > self.BOID_THRESHOLD:
                     self.violationCount += 1
 
-            self.logger.debug("Location boid counts: " + " ".join(str(loc.boidCount) 
-                for loc in self.locations))
+            self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
+                for loc in self.boidCPUs))
 
             # Update the counter label
             self.timeStepCounter += 1
@@ -325,53 +325,53 @@ class Simulation:
 
 
     # Currently, this method changes the bounds of all the applicable edges of an overloaded 
-    # location and the other bounds of the other locations that would be affected by this change.
+    # boidCPU and the other bounds of the other boidCPUs that would be affected by this change.
     #
-    # FIXME: Cannot currently handle when multiple locations are overloaded
-    # FIXME: Assumes that an overloaded location wishes to shrink all its boundaries
-    def locationOverloaded(self, locationID):
+    # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
+    # FIXME: Assumes that an overloaded boidCPU wishes to shrink all its boundaries
+    def boidCPUOverloaded(self, boidCPUID):
         stepSize = 20
 
-        self.logger.debug("Location " + str(locationID) + " overloaded")
+        self.logger.debug("BoidCPU " + str(boidCPUID) + " overloaded")
 
-        # 1) Query the other locations to determine how the requested change would affect them
+        # 1) Query the other boidCPUs to determine how the requested change would affect them
         # 2) Determine what action to take
         # 3) Implement change
 
-        # Determine the row and column of the location that is requesting load balancing
-        [row, col] = self.locations[locationID - 1].gridPosition
+        # Determine the row and column of the boidCPU that is requesting load balancing
+        [row, col] = self.boidCPUs[boidCPUID - 1].gridPosition
 
-        # # Determine which locations would be affected by this change
-        locationsToChange = self.identifyAffectedLocations(row, col)
+        # # Determine which boidCPUs would be affected by this change
+        boidCPUsToChange = self.identifyAffectedBoidCPUs(row, col)
 
-        # # Update the edges on the locations
-        for edge in locationsToChange.keys():
-            for locID in locationsToChange.get(edge):
-                self.locations[locID - 1].changeBounds(edge, stepSize, [row, col])
+        # # Update the edges on the boidCPUs
+        for edge in boidCPUsToChange.keys():
+            for locID in boidCPUsToChange.get(edge):
+                self.boidCPUs[locID - 1].changeBounds(edge, stepSize, [row, col])
 
 
-    # Based on the position of the location in the simulation grid, determine which of the sides of 
-    # the location would need changing (sides on simulation edge cannot be changed)
-    def identifyAffectedLocations(self, row, col):
+    # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
+    # the boidCPU would need changing (sides on simulation edge cannot be changed)
+    def identifyAffectedBoidCPUs(self, row, col):
         top = False
         right = False
         bottom = False
         left = False
 
-        # Used as a temporary value for the location width of the simulation (i.e. 3 by 3)
-        locationThing = 3 
+        # Used as a temporary value for the boidCPU width of the simulation (i.e. 3 by 3)
+        boidCPUThing = 3 
 
         # Corners
         if col == 0 and row == 0:
             right = True
             bottom = True
-        elif (col == locationThing - 1) and (row == locationThing - 1):
+        elif (col == boidCPUThing - 1) and (row == boidCPUThing - 1):
             top = True
             left = True
-        elif col == 0 and (row == locationThing - 1):
+        elif col == 0 and (row == boidCPUThing - 1):
             top = True
             right = True
-        elif (col == locationThing - 1) and row == 0:
+        elif (col == boidCPUThing - 1) and row == 0:
             bottom = True
             left = True
 
@@ -384,11 +384,11 @@ class Simulation:
             right = True
             bottom = True
             left = True
-        elif (col == locationThing - 1):
+        elif (col == boidCPUThing - 1):
             top = True
             bottom = True
             left = True
-        elif (row == locationThing - 1):
+        elif (row == boidCPUThing - 1):
             top = True
             right = True
             left = True
@@ -400,72 +400,72 @@ class Simulation:
             bottom = True
             left = True
 
-        # Iterate over the locations to determine the IDs of those locations that would be affected 
-        # by the requested change and which edges of the locations would need changing
-        locationsToChange = {'top': [], 'right': [], 'bottom': [], 'left': []}
-        for l in self.locations:
+        # Iterate over the boidCPUs to determine the IDs of those boidCPUs that would be affected 
+        # by the requested change and which edges of the boidCPUs would need changing
+        boidCPUsToChange = {'top': [], 'right': [], 'bottom': [], 'left': []}
+        for l in self.boidCPUs:
             if top and (l.gridPosition[0] == row - 1):
-                locationsToChange['bottom'].append(l.locationID)
+                boidCPUsToChange['bottom'].append(l.boidCPUID)
 
             if right and (l.gridPosition[1] == col + 1):
-                locationsToChange['left'].append(l.locationID)
+                boidCPUsToChange['left'].append(l.boidCPUID)
 
             if bottom and (l.gridPosition[0] == row + 1):
-                locationsToChange['top'].append(l.locationID)
+                boidCPUsToChange['top'].append(l.boidCPUID)
 
             if left and (l.gridPosition[1] == col - 1):
-                locationsToChange['right'].append(l.locationID)
+                boidCPUsToChange['right'].append(l.boidCPUID)
 
 
             if top and (l.gridPosition[0] == row):
-                locationsToChange['top'].append(l.locationID)
+                boidCPUsToChange['top'].append(l.boidCPUID)
 
             if right and (l.gridPosition[1] == col):
-                locationsToChange['right'].append(l.locationID)
+                boidCPUsToChange['right'].append(l.boidCPUID)
 
             if bottom and (l.gridPosition[0] == row):
-                locationsToChange['bottom'].append(l.locationID)
+                boidCPUsToChange['bottom'].append(l.boidCPUID)
 
             if left and (l.gridPosition[1] == col):
-                locationsToChange['left'].append(l.locationID)
+                boidCPUsToChange['left'].append(l.boidCPUID)
 
-        return locationsToChange
+        return boidCPUsToChange
 
 
-    # Get the neighbouring locations of the specified location. Currently, this simply returns a 
-    # hard-coded list of neighbours tailored to the asking location. Ideally, the neighbours would 
+    # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
+    # hard-coded list of neighbours tailored to the asking boidCPU. Ideally, the neighbours would 
     # be calculated in a programmatic way.
-    def getNeighbouringLocations(self, locationID):
-        if locationID == 1:
-            self.neighbouringLocations = [0, 0, 0, 2, 5, 4, 0, 0]
-        elif locationID == 2:
-            self.neighbouringLocations = [0, 0, 0, 3, 6, 5, 4, 1]
-        elif locationID == 3:
-            self.neighbouringLocations = [0, 0, 0, 0, 0, 6, 5, 2]
-        elif locationID == 4:
-            self.neighbouringLocations = [0, 1, 2, 5, 8, 7, 0, 0]
-        elif locationID == 5:
-            self.neighbouringLocations = [1, 2, 3, 6, 9, 8, 7, 4]
-        elif locationID == 6:
-            self.neighbouringLocations = [2, 3, 0, 0, 0, 9, 8, 5]
-        elif locationID == 7:
-            self.neighbouringLocations = [0, 4, 5, 8, 0, 0, 0, 0]
-        elif locationID == 8:
-            self.neighbouringLocations = [4, 5, 6, 9, 0, 0, 0, 7]
-        elif locationID == 9:
-            self.neighbouringLocations = [5, 6, 0, 0, 0, 0, 0, 8]
+    def getNeighbouringBoidCPUs(self, boidCPUID):
+        if boidCPUID == 1:
+            self.neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
+        elif boidCPUID == 2:
+            self.neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
+        elif boidCPUID == 3:
+            self.neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
+        elif boidCPUID == 4:
+            self.neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
+        elif boidCPUID == 5:
+            self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
+        elif boidCPUID == 6:
+            self.neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
+        elif boidCPUID == 7:
+            self.neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
+        elif boidCPUID == 8:
+            self.neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
+        elif boidCPUID == 9:
+            self.neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
 
-        return self.neighbouringLocations
-
-
-    # Return a list of the boids for a specified location
-    def getLocationBoids(self, locationID):
-        return self.locations[locationID - 1].getBoids()
+        return self.neighbouringBoidCPUs
 
 
-    # Transfer a boid from one location to another
+    # Return a list of the boids for a specified boidCPU
+    def getBoidCPUBoids(self, boidCPUID):
+        return self.boidCPUs[boidCPUID - 1].getBoids()
+
+
+    # Transfer a boid from one boidCPU to another
     def transferBoid(self, boid, toID, fromID):
-        self.locations[toID - 1].acceptBoid(boid, fromID)
+        self.boidCPUs[toID - 1].acceptBoid(boid, fromID)
 
 
 if __name__ == '__main__':
