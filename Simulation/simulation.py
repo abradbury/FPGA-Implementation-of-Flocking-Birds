@@ -50,8 +50,6 @@ class Simulation:
         # The maximum amount of boids a location should have at any one time
         self.BOID_THRESHOLD = 30
 
-        self.loadBalance = False
-
         # Define debugging flags
         self.colourCode = False
         self.trackBoid = True
@@ -89,10 +87,6 @@ class Simulation:
             loc = Location(self.boidGPU, self, i + 1, self.locationCoords, self.initialBoidCount, 
                 self.locationColours[i], self.locationGridPos)
             self.locations.append(loc)
-
-        # Draw the dynamic lines to test the load balancing
-        if self.loadBalance: 
-            self.drawDynamicLines()
 
         # Setup variables to keep track of how many locations exceed the boid threshold
         self.violationCount = 0
@@ -306,9 +300,6 @@ class Simulation:
             # Update the violation list
             self.violationList.append(self.violationCount)
 
-            if self.loadBalance:
-                self.getLineStatus()
-
             # Call self after 20ms (50 Hz)
             self.boidGPU.nextSimulationStep(10)
             
@@ -439,79 +430,6 @@ class Simulation:
                 locationsToChange['left'].append(l.locationID)
 
         return locationsToChange
-
-
-    # Create dynamic lines that are initially over the location boundaries
-    # FIXME: Avoid hardcoding to 9 locations
-    def drawDynamicLines(self):
-        line1 = self.canvas.create_line(self.locationSize, 0, self.locationSize, 
-            self.canvas.winfo_width(), fill = "green", tags = "D1")
-        line2 = self.canvas.create_line(self.locationSize * 2, 0, self.locationSize * 2, 
-            self.canvas.winfo_width(), fill = "green", tags = "D2")
-
-        line3 = self.canvas.create_line(0, self.locationSize, self.canvas.winfo_width(), 
-            self.locationSize, fill = "green", tags = "D3")
-        line4 = self.canvas.create_line(0, self.locationSize * 2, self.canvas.winfo_width(), 
-            self.locationSize * 2, fill = "green", tags = "D4")
-
-        self.dynamicLines = [line1, line2, line3, line4]
-
-
-    # Move the lines depending on the number of boids to either side of the line. Designed to show 
-    # how the location boundaries could change in order to balance the load.
-    #
-    # FIXME: If the lines move, the no. of boids either side is calculated from the initial position
-    # FIXME: Avoid hardcoding to 9 locations
-    def getLineStatus(self):
-        self.lineStep = 10
-
-        row1 = self.locations[0].boidCount + self.locations[1].boidCount + self.locations[2].boidCount
-        row2 = self.locations[3].boidCount + self.locations[4].boidCount + self.locations[5].boidCount
-        row3 = self.locations[6].boidCount + self.locations[7].boidCount + self.locations[8].boidCount
-
-        col1 = self.locations[0].boidCount + self.locations[3].boidCount + self.locations[6].boidCount
-        col2 = self.locations[1].boidCount + self.locations[4].boidCount + self.locations[7].boidCount
-        col3 = self.locations[2].boidCount + self.locations[5].boidCount + self.locations[8].boidCount
-
-        if row1 > row2: 
-            move = "up"
-            self.canvas.move("D3", 0, -self.lineStep)
-        elif row2 > row1:
-            move = "down"
-            self.canvas.move("D3", 0, self.lineStep)
-        else:
-            move = "-"
-        # print "Line 1 has " + str(row1) + " above and " + str(row2) + " below - should move " + move 
-
-        if row2 > row3: 
-            move = "up"
-            self.canvas.move("D4", 0, -self.lineStep)
-        elif row3 > row2:
-            move = "down"
-            self.canvas.move("D4", 0, self.lineStep)
-        else:
-            move = "-"
-        # print "Line 2 has " + str(row2) + " above and " + str(row3) + " below - should move " + move  
-
-        if col1 > col2: 
-            move = "left"
-            self.canvas.move("D1", -self.lineStep, 0)
-        elif col2 > col1:
-            move = "right"
-            self.canvas.move("D1", self.lineStep, 0)
-        else:
-            move = "-"
-        # print "Line 3 has " + str(col1) + " left and " + str(col2) + " right - should move " + move 
-
-        if col2 > col3: 
-            move = "left"
-            self.canvas.move("D2", -self.lineStep, 0)
-        elif col3 > col2:
-            move = "right"
-            self.canvas.move("D2", self.lineStep, 0)
-        else:
-            move = "-"
-        # print "Line 4 has " + str(col2) + " left and " + str(col3) + " right - should move " + move 
 
 
     # Get the neighbouring locations of the specified location. Currently, this simply returns a 
