@@ -70,9 +70,10 @@ class BoidCPU:
             for i in range(0, self.boidCount):
                 self.boids[i].update(self.possibleNeighbouringBoids)
 
-            # If the number of boids in the boidCPU are greater than a threshold, signal controller
-            if self.boidCount >= self.config['BOID_THRESHOLD']:
-                self.simulation.boidCPUOverloaded(self.boidCPUID)
+            if self.config['loadBalance']:
+                # If the number of boids in the boidCPU are greater than a threshold, signal controller
+                if self.boidCount >= self.config['BOID_THRESHOLD']:
+                    self.simulation.boidCPUOverloaded(self.boidCPUID)
 
             # Determine if the new positions of the boids lie outside the boidCPU's bounds
             for boid in self.boids:

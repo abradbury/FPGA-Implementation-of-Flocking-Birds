@@ -18,7 +18,8 @@ import time                         # Used to time stuff
 # FIXME: Obstacle avoidance does not seem to work well
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
 #         direct neighbour of the current boidCPU which the boid resides in
-# FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup)
+# FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup). Also happens 
+#         when the load balancing isn't done
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Implement load balancing algorithm 1
@@ -31,6 +32,9 @@ import time                         # Used to time stuff
 # TODO: Add acceleration to smooth movement (especially around borders)
 # TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding
 # TODO: Avoid double drawing - once for new position then again for rotation
+
+# TODO: Only allow boids to see in front of them when looking at neighbours
+# TODO: Add something so the boids can't immediately change direction - they have to turn
 
 
 # The main application class. Sets up the simulation area and the number of boidCPUs that it is to 
@@ -54,11 +58,12 @@ class Simulation:
         
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
         self.config['trackBoid'] = True         # True to track boid 42 and neighbours
+        self.config['loadBalance'] = False      # True to enable load balancing
 
         self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should have
         
         self.config['MAX_VELOCITY'] = 10
-        self.config['VISION_RADIUS'] = 200
+        self.config['VISION_RADIUS'] = 116      # Currently set to the width of a BoidGPU
 
         self.config['ALIGNMENT_WEIGHT'] = 1
         self.config['COHESION_WEIGHT'] = 1
