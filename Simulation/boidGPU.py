@@ -136,7 +136,7 @@ class BoidGPU:
         self.rotateBoid(boidID, velocity, position, points)
 
         # Debugging method - follow a specific boid
-        if self.config['trackBoid'] and (boidID == 42):  
+        if self.config['trackBoid'] and (boidID == self.config['boidToTrack']):  
             self.followBoid(position, boidID)
 
 
@@ -184,4 +184,14 @@ class BoidGPU:
             self.canvas.itemconfig("B" + str(boidID), fill = "green")
         else:
             self.canvas.itemconfig("B" + str(boidID), fill = "red")
+
+
+    # Draws or updates a line on the screen, depending on if the tag can be found
+    def drawLine(self, startPoints, endPoints, tag):
+        handle = self.canvas.find_withtag(tag)
+
+        if handle:
+            self.canvas.coords(tag, startPoints[0], startPoints[1], endPoints[0], endPoints[1])
+        else:
+            self.canvas.create_line([startPoints[0], startPoints[1], endPoints[0], endPoints[1]], fill = "red", tags = tag)
 
