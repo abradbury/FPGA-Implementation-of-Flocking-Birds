@@ -55,9 +55,11 @@ class Simulation:
         self.config['width'] = 700              # Define window size
         self.config['height'] = 700
         self.config['boidCount'] = 90
+        self.config['updateInterval'] = 10
         
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
         self.config['trackBoid'] = True         # True to track boid 42 and neighbours
+        self.config['boidToTrack'] = 2
         self.config['loadBalance'] = False      # True to enable load balancing
 
         self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should have
@@ -316,7 +318,7 @@ class Simulation:
             self.violationList.append(self.violationCount)
 
             # Call self after 20ms (50 Hz)
-            self.boidGPU.nextSimulationStep(10)
+            self.boidGPU.nextSimulationStep(self.config['updateInterval'])
             
 
     
