@@ -70,10 +70,15 @@ class BoidCPU:
             for i in range(0, self.boidCount):
                 self.boids[i].update(self.possibleNeighbouringBoids)
 
+            # If the number of boids in the boidCPU are greater than a threshold, signal controller
             if self.config['loadBalance']:
-                # If the number of boids in the boidCPU are greater than a threshold, signal controller
                 if self.boidCount >= self.config['BOID_THRESHOLD']:
-                    self.simulation.boidCPUOverloaded(self.boidCPUID)
+
+                    # Analyse the distribution of the boids in this BoidCPU to determine the step
+                    self.createBoidDistribution()
+                    self.analyseBoidDistribution()
+
+                    # self.simulation.boidCPUOverloaded(self.boidCPUID)
 
             # Determine if the new positions of the boids lie outside the boidCPU's bounds
             for boid in self.boids:
@@ -82,6 +87,183 @@ class BoidCPU:
         else:
             for i in range(0, self.boidCount):
                 self.boids[i].draw(self.colour)
+
+
+    # Analyses the distribution of boids for the current BoidCPU to determine which edges should be 
+    # modified, and by how much, to reduce the number of boids in the overloaded BoidCPU.
+    #
+    # While the number of boids released is less than a certain amount, the effect of moving each 
+    # of the edges by one step size is analysed. The edge that releases the most boids is selected 
+    # and the process repeats. On the repeat, the edges that were no chosen are not recalculated 
+    # and the edge that was is analysed for its second step. Again, the edge that releases the most 
+    # boids is chosen.
+    # 
+    # TODO: If there is no single maximum, choose the edge that has had the least step changes
+    # TODO: Put a limit on the number of step sizes to ensure the BoidCPU doesn't collapse
+    def analyseBoidDistribution(self):
+        requestedStepChanges = [0, 0, 0, 0]     # The number of step changes per border
+        boidsReleasedPerEdge = [0, 0, 0, 0]     # The number of boids released per edge
+        recalculate = [True, True, True, True]  # Used to save recalculation if not needed
+        
+        edgeNames = ["TOP", "RIGHT", "BOTTOM", "LEFT"]
+
+        distHeight = self.distribution.shape[0]
+        distWidth = self.distribution.shape[1]
+
+        numberOfBoidsReleased = 0
+
+        while numberOfBoidsReleased <= 5:
+            if self.validEdge(0) and recalculate[0]:    # Top edge
+                bound = requestedStepChanges[0]
+                boidsReleasedPerEdge[0] = np.sum(self.distribution[bound, :])
+            
+            if self.validEdge(1) and recalculate[1]:    # Right edge
+                bound = requestedStepChanges[1]
+                boidsReleasedPerEdge[1] = np.sum(self.distribution[:, distWidth - 1 - bound])
+            
+            if self.validEdge(2) and recalculate[2]:    # Bottom edge
+                bound = requestedStepChanges[2]
+                boidsReleasedPerEdge[2] = np.sum(self.distribution[distHeight - 1 - bound, :])
+            
+            if self.validEdge(3) and recalculate[3]:    # Left edge
+                bound = requestedStepChanges[3]
+                boidsReleasedPerEdge[3] = np.sum(self.distribution[:, bound])
+
+            # Check for all zero values
+            if np.count_nonzero(boidsReleasedPerEdge):
+                # Get the index of the edge that releases the most boids
+                maxIndex = boidsReleasedPerEdge.index(max(boidsReleasedPerEdge))
+
+                # Increment the step change counter for that edge
+                requestedStepChanges[maxIndex] += 1
+
+                # Increment the total number of boids release
+                numberOfBoidsReleased += boidsReleasedPerEdge[maxIndex]
+
+                # Do not recalculate the non-max values
+                for i, v in enumerate(recalculate):
+                    if i != maxIndex:
+                        recalculate[i] = False 
+                    else:
+                        recalculate[i] = True
+
+                # print str(self.boidCPUID) + " Moving the " + edgeNames[maxIndex] + " edge releases " + str(boidsReleasedPerEdge[maxIndex]) + " boids (total: " + str(numberOfBoidsReleased) + ")"
+                # print str(requestedStepChanges) + " " + str(boidsReleasedPerEdge) + " " + str(recalculate)
+
+            # If boidsReleasedPerEdge is all zero, forcably increment the step count of all of the 
+            # valid zero edges by 1 and raise the recalculation barrier
+            else:
+                if self.validEdge(0):                   # Top
+                    requestedStepChanges[0] += 1
+                    recalculate[0] = True
+                if self.validEdge(1):                   # Right
+                    requestedStepChanges[1] += 1
+                    recalculate[0] = True
+                if self.validEdge(2):                   # Bottom
+                    requestedStepChanges[2] += 1
+                    recalculate[0] = True
+                if self.validEdge(3):                   # Left
+                    requestedStepChanges[3] += 1
+                    recalculate[0] = True
+
+                # print "Forcing step count increment due to zero-filled array"
+
+        return requestedStepChanges
+
+
+    # Determines if the edge represented by the given edgeID is valid for the current BoidCPU. For 
+    # example, a BoidCPU on the top of the simulation area would not have its top edge as valid. 
+    def validEdge(self, edgeID):
+        [row, col] = self.gridPosition
+
+        # Top left position
+        if col == 0 and row == 0:
+            validEdges = [False, True, True, False]
+
+        # Bottom right position
+        elif (col == self.config['widthInBoidCPUs'] - 1) and (row == self.config['widthInBoidCPUs'] - 1):
+            validEdges = [True, False, False, True]
+        
+        # Bottom left position
+        elif col == 0 and (row == self.config['widthInBoidCPUs'] - 1):
+            validEdges = [True, True, False, False]
+        
+        # Top right position
+        elif (col == self.config['widthInBoidCPUs'] - 1) and row == 0:
+            validEdges = [False, False, True, True]
+
+         # Left column
+        elif col == 0:
+            validEdges = [True, True, True, False]
+
+        # Top row
+        elif row == 0:
+            validEdges = [False, True, True, True]
+
+        # Right column
+        elif (col == self.config['widthInBoidCPUs'] - 1):
+            validEdges = [True, False, True, True]
+
+        # Bottom row
+        elif (row == self.config['widthInBoidCPUs'] - 1):
+            validEdges = [True, True, False, True]
+        
+        # Middle
+        else:
+            validEdges = [True, True, True, True]
+
+        return validEdges[edgeID]
+
+
+    # Analyses the distribution of the boids in the current BoidCPU to determine what size step 
+    # change to request and which boundary to request the change on. Requires that the BoidCPUs 
+    # only resize using a multiple of step size.
+    #
+    # FIXME: Works in general, but seems to be slightly off due to draw/udpdate offset
+    # FIXME: Come up with a better algorithm, this one is horrendous
+    def createBoidDistribution(self):
+        boidCPUWidth = self.boidCPUCoords[2] - self.boidCPUCoords[0]
+        boidCPUHeight = self.boidCPUCoords[3] - self.boidCPUCoords[1]
+
+        widthSegments = boidCPUWidth / self.config['stepSize']
+        heightSegments = boidCPUHeight / self.config['stepSize']
+
+        # Draw a grid on for the BoidCPU
+        # self.boidGPU.drawBoidCPUGrid(self.boidCPUCoords, widthSegments, heightSegments)
+
+        # Create a multidimensional array of the based on the number of segments
+        # distribution = [[0 for i in range(widthSegments)] for i in range(heightSegments)]
+        self.distribution = np.zeros((heightSegments, widthSegments))
+        counter = 0
+
+        # For every boid in the BoidCPU
+        for boid in self.boids:
+            boidNotPlaced = True
+            # For each step size segment in width
+            for wStep in range(widthSegments):
+                # If the boid is in that width segment
+                wStepValue = (((wStep + 1) * self.config['stepSize']) + self.boidCPUCoords[0])
+                if boidNotPlaced and boid.position[0] < wStepValue:
+                    # For each step size segment in height
+                    for hStep in range(heightSegments):
+                        # If the boid is in that height segment
+                        hStepValue = (((hStep + 1) * self.config['stepSize']) + self.boidCPUCoords[1])
+                        if boidNotPlaced and boid.position[1] < hStepValue:
+                            # Add it to the distribution array
+                            self.distribution[hStep, wStep] += 1
+                            boidNotPlaced = False
+                            counter += 1
+
+        # print self.distribution
+
+        # Remove the BoidGPU grid
+        # self.boidGPU.removeBoidCPUGrid()
+
+
+    # Evaluates the requested boundary adjustment to determine what the state of the current BoidCPU 
+    # would be if the change is made. Returns either the predicted numer of boids or the status. 
+    def evaluateRequestedBoundaryChange(self, edge, step):
+        print
 
 
     # Changes the bounds of the boidCPU by the specifed step size. Used during load balancing.
