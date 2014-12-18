@@ -195,3 +195,17 @@ class BoidGPU:
         else:
             self.canvas.create_line([startPoints[0], startPoints[1], endPoints[0], endPoints[1]], fill = "red", tags = tag)
 
+
+    def drawBoidCPUGrid(self, boidCPUCoords, segmentWidth, segmentHieght):
+        for i in range(segmentWidth):
+            x = boidCPUCoords[0] + (i * self.config['stepSize'])
+            self.canvas.create_line([x, boidCPUCoords[1], x, boidCPUCoords[3]], fill = "green", tags = "gridLines")
+
+        for i in range(segmentHieght):
+            y = boidCPUCoords[1] + (i * self.config['stepSize'])
+            self.canvas.create_line([boidCPUCoords[0], y, boidCPUCoords[2], y], fill = "green", tags = "gridLines")
+
+    def removeBoidCPUGrid(self):
+        self.canvas.delete("gridLines")
+
+
