@@ -52,18 +52,23 @@ class Simulation:
         # Define configuration parameters
         self.config = {}
 
-        self.config['width'] = 700              # Define window size
-        self.config['height'] = 700
+        self.config['width'] = 720              # Define window size
+        self.config['height'] = 720
         self.config['boidCount'] = 90
-        self.config['updateInterval'] = 10
+        self.config['updateInterval'] = 10      # The interval between successful update calls (ms) 
+        self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
         
+        # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
-        self.config['trackBoid'] = True         # True to track boid 42 and neighbours
+        self.config['trackBoid'] = True         # True to track the specified boid and neighbours
         self.config['boidToTrack'] = 2
-        self.config['loadBalance'] = False      # True to enable load balancing
-
-        self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should have
         
+        # Load balancing parameters
+        self.config['loadBalance'] = True       # True to enable load balancing
+        self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
+        self.config['stepSize'] = 20            # The step size to change the boundaries
+
+        # Boid movement parameters
         self.config['MAX_VELOCITY'] = 10
         self.config['VISION_RADIUS'] = 116      # Currently set to the width of a BoidGPU
 
@@ -347,8 +352,6 @@ class Simulation:
     # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
     # FIXME: Assumes that an overloaded boidCPU wishes to shrink all its boundaries
     def boidCPUOverloaded(self, boidCPUID):
-        stepSize = 20
-
         self.logger.debug("BoidCPU " + str(boidCPUID) + " overloaded")
 
         # 1) Query the other boidCPUs to determine how the requested change would affect them
@@ -364,7 +367,7 @@ class Simulation:
         # # Update the edges on the boidCPUs
         for edge in boidCPUsToChange.keys():
             for locID in boidCPUsToChange.get(edge):
-                self.boidCPUs[locID - 1].changeBounds(edge, stepSize, [row, col])
+                self.boidCPUs[locID - 1].changeBounds(edge, self.config['stepSize'], [row, col])
 
 
     # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
@@ -375,20 +378,17 @@ class Simulation:
         bottom = False
         left = False
 
-        # Used as a temporary value for the boidCPU width of the simulation (i.e. 3 by 3)
-        boidCPUThing = 3 
-
         # Corners
         if col == 0 and row == 0:
             right = True
             bottom = True
-        elif (col == boidCPUThing - 1) and (row == boidCPUThing - 1):
+        elif (col == self.config['widthInBoidCPUs'] - 1) and (row == self.config['widthInBoidCPUs'] - 1):
             top = True
             left = True
-        elif col == 0 and (row == boidCPUThing - 1):
+        elif col == 0 and (row == self.config['widthInBoidCPUs'] - 1):
             top = True
             right = True
-        elif (col == boidCPUThing - 1) and row == 0:
+        elif (col == self.config['widthInBoidCPUs'] - 1) and row == 0:
             bottom = True
             left = True
 
@@ -401,11 +401,11 @@ class Simulation:
             right = True
             bottom = True
             left = True
-        elif (col == boidCPUThing - 1):
+        elif (col == self.config['widthInBoidCPUs'] - 1):
             top = True
             bottom = True
             left = True
-        elif (row == boidCPUThing - 1):
+        elif (row == self.config['widthInBoidCPUs'] - 1):
             top = True
             right = True
             left = True
