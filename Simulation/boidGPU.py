@@ -97,12 +97,11 @@ class BoidGPU:
 
     def createBoid(self, position, velocity, colour, outlineColour, boidWidth, boidID):
         points = self.calcBoidPoints(position)
+        points = self.rotateBoid(velocity, position, points)
 
         # Draw the boid
         self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7], fill = colour, outline = 
             outlineColour, width = boidWidth, tags = ("B" + str(boidID)))
-
-        self.rotateBoid(boidID, velocity, position, points)
 
 
     def nextSimulationStep(self, milliseconds):
@@ -129,11 +128,10 @@ class BoidGPU:
     # Move the boid on the screen based on the new velocity and position
     def updateBoid(self, position, velocity, colour, boidID):
         points = self.calcBoidPoints(position)
+        points = self.rotateBoid(velocity, position, points)
 
         self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7])
         self.canvas.itemconfig("B" + str(boidID), fill = colour) 
-
-        self.rotateBoid(boidID, velocity, position, points)
 
         # Debugging method - follow a specific boid
         if self.config['trackBoid'] and (boidID == self.config['boidToTrack']):  
@@ -142,7 +140,7 @@ class BoidGPU:
 
     # Rotate the specified boid based on its velocity / orientation
     # Rotation definition based on an answer from StackOverflow: http://stackoverflow.com/a/3409039
-    def rotateBoid(self, boidID, velocity, position, points):
+    def rotateBoid(self, velocity, position, points):
         radians = np.arctan2(velocity[0], velocity[1])
 
         # Convert to radians for trig functions
@@ -164,7 +162,8 @@ class BoidGPU:
         points[4], points[5] = _rot(points[4], points[5])
         points[6], points[7] = _rot(points[6], points[7])
 
-        self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7])
+        # self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7])
+        return points
 
 
     # Follows a boid as it moves around the area. The boid has its vision circle shown and is 

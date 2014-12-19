@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from boidCPU import BoidCPU       # Import the BoidCPU class
+from boidCPU import BoidCPU         # Import the BoidCPU class
 from boid import Boid               # Import the Boid class
 from boidGPU import BoidGPU         # Import the BoidGPU class
 
@@ -13,7 +13,6 @@ import time                         # Used to time stuff
 
 
 ## MUST DOs ========================================================================================
-# FIXME: Investigate arithmetic warning on rule calculation (causes boid to disappear from GUI)
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 # FIXME: Obstacle avoidance does not seem to work well
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
@@ -22,16 +21,13 @@ import time                         # Used to time stuff
 #         when the load balancing isn't done
 
 # TODO: Modify code to handle different load balancing protocols
-# TODO: Implement load balancing algorithm 1
-#       - boidCPUs should know if they are overloaded
-#       - They should signal the controller with a requested boundary step change
-# TODO: Implement load balancing algorithm 2
+# TODO: Enhance load balancing algorithm 1 so that BoidCPUs can be queried on proposed change
+# TODO: Implement load balancing algorithm 2 - distribution already exists
 
 ## MAY DOs =========================================================================================
 # TODO: Add keybinding to capture return key and simulate button press
 # TODO: Add acceleration to smooth movement (especially around borders)
 # TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding
-# TODO: Avoid double drawing - once for new position then again for rotation
 
 # TODO: Only allow boids to see in front of them when looking at neighbours
 # TODO: Add something so the boids can't immediately change direction - they have to turn
@@ -60,12 +56,12 @@ class Simulation:
         
         # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
-        self.config['trackBoid'] = True         # True to track the specified boid and neighbours
+        self.config['trackBoid'] = False         # True to track the specified boid and neighbours
         self.config['boidToTrack'] = 2
         
         # Load balancing parameters
-        self.config['loadBalance'] = True       # True to enable load balancing
-        self.config['loadBalanceType'] = 1
+        self.config['loadBalance'] = False       # True to enable load balancing
+        self.config['loadBalanceType'] = 2
         self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
 
@@ -115,7 +111,16 @@ class Simulation:
         self.violationCount = 0
         self.violationList = []
 
-        self.logger.info("- Press the 'Begin' button to start the simulation")
+        if self.config['loadBalance']:
+            if self.config['loadBalanceType'] == 1:
+                self.logger.info("BoidCPUs will signal when overloaded")
+            elif self.config['loadBalanceType'] == 2:
+                self.logger.info("BoidCPUs will analyse boid distribution to request load " +  
+                    "balancing amounts")
+        else:
+            self.logger.info("No load balancing will be performed")
+        
+        self.logger.info("Press the 'Begin' button to start the simulation")
 
         # Setup the graphs
         self.setupGraphs()
@@ -125,18 +130,222 @@ class Simulation:
         self.boidGPU.beginMainLoop()
 
 
+    def simulationStep(self):
+        if self.pauseSimulation == False:
+            self.violationCount = 0
+
+            # The draw method is called first to enable a the neighbours of a boid to be highlighted 
+            # when a boid is being followed (during debugging). As no new boid positions have been 
+            # calculated, the draw function isn't called on the first time step.
+            if self.timeStepCounter != 0:
+                for i in range(0, self.boidCPUCount):
+                    self.logger.debug("Moving boids to calculated positions for boidCPU " + 
+                        str(self.boidCPUs[i].boidCPUID) + "...")
+        
+                    # Update the canvas with the new boid positions
+                    self.boidCPUs[i].update(True)
+
+                    # Store the number of boids for later plotting
+                    self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
+
+            # Update the boid
+            for i in range(0, self.boidCPUCount):
+                self.logger.debug("Calculating next boid positions for boidCPU " + 
+                    str(self.boidCPUs[i].boidCPUID) + "...")
+
+                # Calculate the next boid positions and time this                
+                self.startTime = time.clock()
+                self.boidCPUs[i].update(False)
+                self.endTime = time.clock()
+
+                # Store the timing information for later plotting
+                self.boidCPUs[i].xData.append(self.timeStepCounter)
+                self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
+
+                # If the boidCPU is exceeding the threshold, increment counter
+                if self.boidCPUs[i].boidCount > self.config['BOID_THRESHOLD']:
+                    self.violationCount += 1
+
+            self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
+                for loc in self.boidCPUs))
+
+            # Update the counter label
+            self.timeStepCounter += 1
+            self.boidGPU.updateTimeStepLabel(self.timeStepCounter)
+
+            # Update the violation list
+            self.violationList.append(self.violationCount)
+
+            # Call self after 20ms (50 Hz)
+            self.boidGPU.nextSimulationStep(self.config['updateInterval'])
+
+
+    # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
+    # hard-coded list of neighbours tailored to the asking boidCPU. Ideally, the neighbours would 
+    # be calculated in a programmatic way.
+    def getNeighbouringBoidCPUs(self, boidCPUID):
+        if boidCPUID == 1:
+            self.neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
+        elif boidCPUID == 2:
+            self.neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
+        elif boidCPUID == 3:
+            self.neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
+        elif boidCPUID == 4:
+            self.neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
+        elif boidCPUID == 5:
+            self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
+        elif boidCPUID == 6:
+            self.neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
+        elif boidCPUID == 7:
+            self.neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
+        elif boidCPUID == 8:
+            self.neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
+        elif boidCPUID == 9:
+            self.neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
+
+        return self.neighbouringBoidCPUs
+
+
+    # Return a list of the boids for a specified boidCPU
+    def getBoidCPUBoids(self, boidCPUID):
+        return self.boidCPUs[boidCPUID - 1].getBoids()
+
+
+    # Transfer a boid from one boidCPU to another
+    def transferBoid(self, boid, toID, fromID):
+        self.boidCPUs[toID - 1].acceptBoid(boid, fromID)
+
+
+    # Manual timestep increment
+    def nextStepButton(self):
+        self.pauseSimulation = False
+        self.simulationStep()
+        self.pauseSimulation = True
+
+
+    # Sets a flag that is used to pause and resume the simulation 
+    def pause(self):
+        if self.pauseSimulation == False:
+            self.pauseSimulation = True
+            self.boidGPU.togglePauseButton(False)
+
+        else:
+            self.pauseSimulation = False
+            self.boidGPU.togglePauseButton(True)
+            self.simulationStep()
+
+
     # Setup logging
     def setupLogging(self):   
         self.logger = logging.getLogger('boidSimulation')
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
 
         self.ch = logging.StreamHandler()
-        self.ch.setLevel(logging.WARNING)
+        self.ch.setLevel(logging.INFO)
 
         self.formatter = logging.Formatter("[%(levelname)8s] --- %(message)s")
         self.ch.setFormatter(self.formatter)
         self.logger.addHandler(self.ch)
 
+
+    ################################################################################################
+    ## Load Balancing Functions ------------------------------------------------------------------##
+    #############################€##################################################################
+
+    # Currently, this method changes the bounds of all the applicable edges of an overloaded 
+    # boidCPU and the other bounds of the other boidCPUs that would be affected by this change.
+    #
+    # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
+    def boidCPUOverloaded(self, boidCPUID, requestedChange):
+        self.logger.debug("BoidCPU " + str(boidCPUID) + " overloaded")
+
+        # 1) Query the other boidCPUs to determine how the requested change would affect them
+        # 2) Determine what action to take
+        # 3) Implement change
+
+        # logString = "BoidCPU " + str(boidCPUID) + " requests changing "
+        # if requestedChange[0]:
+        #     logString += "the TOP edge by " + str(requestedChange[0]) + " steps, "
+        # if requestedChange[1]:
+        #     logString += "the RIGHT edge by " + str(requestedChange[1]) + " steps, "
+        # if requestedChange[2]:
+        #     logString += "the BOTTOM edge by " + str(requestedChange[2]) + " steps, "
+        # if requestedChange[3]:
+        #     logString += "the LEFT edge by " + str(requestedChange[3]) + " steps, "
+        # print logString
+
+        # Determine the row and column of the boidCPU that is requesting load balancing
+        [row, col] = self.boidCPUs[boidCPUID - 1].gridPosition
+
+        # Determine which other BoidCPUs would be affected by this change
+        boidCPUsToChange = self.identifyAffectedBoidCPUs(boidCPUID, row, col, requestedChange)
+
+        # Update the edges of the affected BoidCPUs by the specified step size
+        for edgeIndex, edgeBoidCPUs in enumerate(boidCPUsToChange):
+            for boidCPU in edgeBoidCPUs:
+                self.boidCPUs[boidCPU[0] - 1].changeBounds(edgeIndex, boidCPU[1], [row, col])
+
+        # If there is a group of 60 boids, then as these pass between BoidCPUs, both BoidCPUs will 
+        # request a edge change and there will be a bit of toing and froing.
+
+
+    # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
+    # the boidCPU would need changing (sides on simulation edge cannot be changed)
+    def identifyAffectedBoidCPUs(self, boidCPUID, row, col, requestedChange):
+        
+        # If the BoidCPU doesn't specify a request for changing the edge, use 1 step for valid edges
+        if not requestedChange:
+            requestedChange = [0, 0, 0, 0] 
+            if self.boidCPUs[boidCPUID - 1].validEdge(0):       # Top
+                requestedChange[0] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(1):       # Right
+                requestedChange[1] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(2):       # Bottom
+                requestedChange[2] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(3):       # Left
+                requestedChange[3] = 1
+
+        # Create a list that is true if a change is requested for that edge and false otherwise
+        edgeChanges = [True if v else False for v in requestedChange]
+
+        # A structure to hold the BoidCPU edges to change. Used as follows:
+        #  boidCPUsToChange[edgeIndex][boidCPUs][index 0 = boidCPUID, index 1 = stepChange]
+        boidCPUsToChange = [[], [], [], []]
+
+        # Iterate over the boidCPUs to determine the IDs of those boidCPUs that would be affected 
+        # by the requested change and which edges of the boidCPUs would need changing
+        for l in self.boidCPUs:
+            if edgeChanges[0] and (l.gridPosition[0] == row - 1):
+                boidCPUsToChange[2].append([l.boidCPUID, requestedChange[0]])
+
+            if edgeChanges[1] and (l.gridPosition[1] == col + 1):
+                boidCPUsToChange[3].append([l.boidCPUID, requestedChange[1]])
+
+            if edgeChanges[2] and (l.gridPosition[0] == row + 1):
+                boidCPUsToChange[0].append([l.boidCPUID, requestedChange[2]])
+
+            if edgeChanges[3] and (l.gridPosition[1] == col - 1):
+                boidCPUsToChange[1].append([l.boidCPUID, requestedChange[3]])
+
+
+            if edgeChanges[0] and (l.gridPosition[0] == row):
+                boidCPUsToChange[0].append([l.boidCPUID, requestedChange[0]])
+
+            if edgeChanges[1] and (l.gridPosition[1] == col):
+                boidCPUsToChange[1].append([l.boidCPUID, requestedChange[1]])
+
+            if edgeChanges[2] and (l.gridPosition[0] == row):
+                boidCPUsToChange[2].append([l.boidCPUID, requestedChange[2]])
+
+            if edgeChanges[3] and (l.gridPosition[1] == col):
+                boidCPUsToChange[3].append([l.boidCPUID, requestedChange[3]])
+
+        return boidCPUsToChange
+
+
+    ################################################################################################
+    ## Graphical Functions -----------------------------------------------------------------------##
+    ################################################################################################
 
     # Create the graphs
     def setupGraphs(self):
@@ -275,207 +484,6 @@ class Simulation:
         self.summaryAxis.autoscale_view()
 
         self.summaryFigure.canvas.draw()
-
-
-    def simulationStep(self):
-        if self.pauseSimulation == False:
-            self.violationCount = 0
-
-            # The draw method is called first to enable a the neighbours of a boid to be highlighted 
-            # when a boid is being followed (during debugging). As no new boid positions have been 
-            # calculated, the draw function isn't called on the first time step.
-            if self.timeStepCounter != 0:
-                for i in range(0, self.boidCPUCount):
-                    self.logger.debug("Moving boids to calculated positions for boidCPU " + 
-                        str(self.boidCPUs[i].boidCPUID) + "...")
-        
-                    # Update the canvas with the new boid positions
-                    self.boidCPUs[i].update(True)
-
-                    # Store the number of boids for later plotting
-                    self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
-
-            # Update the boid
-            for i in range(0, self.boidCPUCount):
-                self.logger.debug("Calculating next boid positions for boidCPU " + 
-                    str(self.boidCPUs[i].boidCPUID) + "...")
-
-                # Calculate the next boid positions and time this                
-                self.startTime = time.clock()
-                self.boidCPUs[i].update(False)
-                self.endTime = time.clock()
-
-                # Store the timing information for later plotting
-                self.boidCPUs[i].xData.append(self.timeStepCounter)
-                self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
-
-                # If the boidCPU is exceeding the threshold, increment counter
-                if self.boidCPUs[i].boidCount > self.config['BOID_THRESHOLD']:
-                    self.violationCount += 1
-
-            self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
-                for loc in self.boidCPUs))
-
-            # Update the counter label
-            self.timeStepCounter += 1
-            self.boidGPU.updateTimeStepLabel(self.timeStepCounter)
-
-            # Update the violation list
-            self.violationList.append(self.violationCount)
-
-            # Call self after 20ms (50 Hz)
-            self.boidGPU.nextSimulationStep(self.config['updateInterval'])
-            
-
-    
-    # Manual timestep increment
-    def nextStepButton(self):
-        self.pauseSimulation = False
-        self.simulationStep()
-        self.pauseSimulation = True
-
-
-    # Sets a flag that is used to pause and resume the simulation 
-    def pause(self):
-        if self.pauseSimulation == False:
-            self.pauseSimulation = True
-            self.boidGPU.togglePauseButton(False)
-
-        else:
-            self.pauseSimulation = False
-            self.boidGPU.togglePauseButton(True)
-            self.simulationStep()
-
-
-    # Currently, this method changes the bounds of all the applicable edges of an overloaded 
-    # boidCPU and the other bounds of the other boidCPUs that would be affected by this change.
-    #
-    # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
-    def boidCPUOverloaded(self, boidCPUID, requestedChange):
-        self.logger.debug("BoidCPU " + str(boidCPUID) + " overloaded")
-
-        # 1) Query the other boidCPUs to determine how the requested change would affect them
-        # 2) Determine what action to take
-        # 3) Implement change
-
-        # logString = "BoidCPU " + str(boidCPUID) + " requests changing "
-        # if requestedChange[0]:
-        #     logString += "the TOP edge by " + str(requestedChange[0]) + " steps, "
-        # if requestedChange[1]:
-        #     logString += "the RIGHT edge by " + str(requestedChange[1]) + " steps, "
-        # if requestedChange[2]:
-        #     logString += "the BOTTOM edge by " + str(requestedChange[2]) + " steps, "
-        # if requestedChange[3]:
-        #     logString += "the LEFT edge by " + str(requestedChange[3]) + " steps, "
-        # print logString
-
-        # Determine the row and column of the boidCPU that is requesting load balancing
-        [row, col] = self.boidCPUs[boidCPUID - 1].gridPosition
-
-        # Determine which other BoidCPUs would be affected by this change
-        boidCPUsToChange = self.identifyAffectedBoidCPUs(boidCPUID, row, col, requestedChange)
-
-        # Update the edges of the affected BoidCPUs by the specified step size
-        for edgeIndex, edgeBoidCPUs in enumerate(boidCPUsToChange):
-            for boidCPU in edgeBoidCPUs:
-                self.boidCPUs[boidCPU[0] - 1].changeBounds(edgeIndex, boidCPU[1], [row, col])
-
-        # self.pause()
-
-        # If there is a group of 60 boids, then as these pass between BoidCPUs, both BoidCPUs will 
-        # request a edge change and there will be a bit of toing and froing.
-
-
-    # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
-    # the boidCPU would need changing (sides on simulation edge cannot be changed)
-    def identifyAffectedBoidCPUs(self, boidCPUID, row, col, requestedChange):
-        
-        # If the BoidCPU doesn't specify a request for changing the edge, use 1 step for valid edges
-        if not requestedChange:
-            requestedChange = [0, 0, 0, 0] 
-            if self.boidCPUs[boidCPUID - 1].validEdge(0):                   # Top
-                requestedChange[0] = 1
-            if self.boidCPUs[boidCPUID - 1].validEdge(1):                   # Right
-                requestedChange[1] = 1
-            if self.boidCPUs[boidCPUID - 1].validEdge(2):                   # Bottom
-                requestedChange[2] = 1
-            if self.boidCPUs[boidCPUID - 1].validEdge(3):                   # Left
-                requestedChange[3] = 1
-
-        # Create a list that is true if a change is requested for that edge and false otherwise
-        edgeChanges = [True if v else False for v in requestedChange]
-
-        # A structure to hold the BoidCPU edges to change. Used as follows:
-        #  boidCPUsToChange[edgeIndex][boidCPUs][index 0 = boidCPUID, index 1 = stepChange]
-        boidCPUsToChange = [[], [], [], []]
-
-        # Iterate over the boidCPUs to determine the IDs of those boidCPUs that would be affected 
-        # by the requested change and which edges of the boidCPUs would need changing
-        for l in self.boidCPUs:
-            if edgeChanges[0] and (l.gridPosition[0] == row - 1):
-                boidCPUsToChange[2].append([l.boidCPUID, requestedChange[0]])
-
-            if edgeChanges[1] and (l.gridPosition[1] == col + 1):
-                boidCPUsToChange[3].append([l.boidCPUID, requestedChange[1]])
-
-            if edgeChanges[2] and (l.gridPosition[0] == row + 1):
-                boidCPUsToChange[0].append([l.boidCPUID, requestedChange[2]])
-
-            if edgeChanges[3] and (l.gridPosition[1] == col - 1):
-                boidCPUsToChange[1].append([l.boidCPUID, requestedChange[3]])
-
-
-            if edgeChanges[0] and (l.gridPosition[0] == row):
-                boidCPUsToChange[0].append([l.boidCPUID, requestedChange[0]])
-
-            if edgeChanges[1] and (l.gridPosition[1] == col):
-                boidCPUsToChange[1].append([l.boidCPUID, requestedChange[1]])
-
-            if edgeChanges[2] and (l.gridPosition[0] == row):
-                boidCPUsToChange[2].append([l.boidCPUID, requestedChange[2]])
-
-            if edgeChanges[3] and (l.gridPosition[1] == col):
-                boidCPUsToChange[3].append([l.boidCPUID, requestedChange[3]])
-
-        # print boidCPUsToChange
-
-        return boidCPUsToChange
-
-
-    # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
-    # hard-coded list of neighbours tailored to the asking boidCPU. Ideally, the neighbours would 
-    # be calculated in a programmatic way.
-    def getNeighbouringBoidCPUs(self, boidCPUID):
-        if boidCPUID == 1:
-            self.neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
-        elif boidCPUID == 2:
-            self.neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
-        elif boidCPUID == 3:
-            self.neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
-        elif boidCPUID == 4:
-            self.neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
-        elif boidCPUID == 5:
-            self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
-        elif boidCPUID == 6:
-            self.neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
-        elif boidCPUID == 7:
-            self.neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
-        elif boidCPUID == 8:
-            self.neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
-        elif boidCPUID == 9:
-            self.neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
-
-        return self.neighbouringBoidCPUs
-
-
-    # Return a list of the boids for a specified boidCPU
-    def getBoidCPUBoids(self, boidCPUID):
-        return self.boidCPUs[boidCPUID - 1].getBoids()
-
-
-    # Transfer a boid from one boidCPU to another
-    def transferBoid(self, boid, toID, fromID):
-        self.boidCPUs[toID - 1].acceptBoid(boid, fromID)
 
 
 if __name__ == '__main__':
