@@ -75,8 +75,13 @@ class BoidCPU:
                 if self.boidCount >= self.config['BOID_THRESHOLD']:
 
                     # Analyse the distribution of the boids in this BoidCPU to determine the step
-                    self.createBoidDistribution()
-                    self.analyseBoidDistribution()
+                    if self.config['loadBalanceType'] == 2: 
+                        self.createBoidDistribution()
+                        requestedChange = self.analyseBoidDistribution()
+                    elif self.config['loadBalanceType'] == 1: 
+                        requestedChange = None
+
+                    self.simulation.boidCPUOverloaded(self.boidCPUID, requestedChange)
 
                     # self.simulation.boidCPUOverloaded(self.boidCPUID)
 
@@ -267,47 +272,48 @@ class BoidCPU:
 
 
     # Changes the bounds of the boidCPU by the specifed step size. Used during load balancing.
-    def changeBounds(self, edgeType, stepSize, overloadedBoidCPUPosition):
+    def changeBounds(self, edgeType, steps, overloadedBoidCPUPosition):
         [row, col] = overloadedBoidCPUPosition
+        stepChange = steps * self.config['stepSize']
 
         # If the boidCPU is in the same row or column as the boidCPU that is overloaded, then the 
         # boidCPU boundaries need changing in the opporsite way than if the boidCPU was in a 
         # different row to the boidCPU that is overloaded
 
         if row == self.gridPosition[0]:
-            if edgeType == "top":
-                self.boidCPUCoords[1] += stepSize
-                # print "Increased the top edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            if edgeType == 0:         # Top
+                self.boidCPUCoords[1] += stepChange
+                # print "Increased the top edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
 
-            elif edgeType == "bottom":
-                self.boidCPUCoords[3] -= stepSize
-                # print "Decreased the bottom edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            elif edgeType == 2:       # Bottom
+                self.boidCPUCoords[3] -= stepChange
+                # print "Decreased the bottom edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
         else:
-            if edgeType == "top":
-                self.boidCPUCoords[1] -= stepSize
-                # print "Decreased the top edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            if edgeType == 0:         # Top
+                self.boidCPUCoords[1] -= stepChange
+                # print "Decreased the top edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
 
-            elif edgeType == "bottom":
-                self.boidCPUCoords[3] += stepSize
-                # print "Increased the bottom edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            elif edgeType == 2:       # Bottom
+                self.boidCPUCoords[3] += stepChange
+                # print "Increased the bottom edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
 
         if col == self.gridPosition[1]:
-            if edgeType == "right":
-                self.boidCPUCoords[2] -= stepSize
-                # print "Decreased the right edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            if edgeType == 1:         # Right
+                self.boidCPUCoords[2] -= stepChange
+                # print "Decreased the right edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
 
-            elif edgeType == "left":
-                self.boidCPUCoords[0] += stepSize
-                # print "Increased the left edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            elif edgeType == 3:       # Left
+                self.boidCPUCoords[0] += stepChange
+                # print "Increased the left edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
 
         else:
-            if edgeType == "right":
-                self.boidCPUCoords[2] += stepSize
-                # print "Increased the right edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)
+            if edgeType == 1:         # Right
+                self.boidCPUCoords[2] += stepChange
+                # print "Increased the right edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)
 
-            elif edgeType == "left":
-                self.boidCPUCoords[0] -= stepSize
-                # print "Decreased the left edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepSize)    
+            elif edgeType == 3:       # Left
+                self.boidCPUCoords[0] -= stepChange
+                # print "Decreased the left edge of boidCPU " + str(self.boidCPUID) + " by " + str(stepChange)    
 
         self.boidGPU.updateBoidCPU(self.boidCPUID, self.boidCPUCoords)
 

@@ -65,6 +65,7 @@ class Simulation:
         
         # Load balancing parameters
         self.config['loadBalance'] = True       # True to enable load balancing
+        self.config['loadBalanceType'] = 1
         self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
 
@@ -350,101 +351,93 @@ class Simulation:
     # boidCPU and the other bounds of the other boidCPUs that would be affected by this change.
     #
     # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
-    # FIXME: Assumes that an overloaded boidCPU wishes to shrink all its boundaries
-    def boidCPUOverloaded(self, boidCPUID):
+    def boidCPUOverloaded(self, boidCPUID, requestedChange):
         self.logger.debug("BoidCPU " + str(boidCPUID) + " overloaded")
 
         # 1) Query the other boidCPUs to determine how the requested change would affect them
         # 2) Determine what action to take
         # 3) Implement change
 
+        # logString = "BoidCPU " + str(boidCPUID) + " requests changing "
+        # if requestedChange[0]:
+        #     logString += "the TOP edge by " + str(requestedChange[0]) + " steps, "
+        # if requestedChange[1]:
+        #     logString += "the RIGHT edge by " + str(requestedChange[1]) + " steps, "
+        # if requestedChange[2]:
+        #     logString += "the BOTTOM edge by " + str(requestedChange[2]) + " steps, "
+        # if requestedChange[3]:
+        #     logString += "the LEFT edge by " + str(requestedChange[3]) + " steps, "
+        # print logString
+
         # Determine the row and column of the boidCPU that is requesting load balancing
         [row, col] = self.boidCPUs[boidCPUID - 1].gridPosition
 
-        # # Determine which boidCPUs would be affected by this change
-        boidCPUsToChange = self.identifyAffectedBoidCPUs(row, col)
+        # Determine which other BoidCPUs would be affected by this change
+        boidCPUsToChange = self.identifyAffectedBoidCPUs(boidCPUID, row, col, requestedChange)
 
-        # # Update the edges on the boidCPUs
-        for edge in boidCPUsToChange.keys():
-            for locID in boidCPUsToChange.get(edge):
-                self.boidCPUs[locID - 1].changeBounds(edge, self.config['stepSize'], [row, col])
+        # Update the edges of the affected BoidCPUs by the specified step size
+        for edgeIndex, edgeBoidCPUs in enumerate(boidCPUsToChange):
+            for boidCPU in edgeBoidCPUs:
+                self.boidCPUs[boidCPU[0] - 1].changeBounds(edgeIndex, boidCPU[1], [row, col])
+
+        # self.pause()
+
+        # If there is a group of 60 boids, then as these pass between BoidCPUs, both BoidCPUs will 
+        # request a edge change and there will be a bit of toing and froing.
 
 
     # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
     # the boidCPU would need changing (sides on simulation edge cannot be changed)
-    def identifyAffectedBoidCPUs(self, row, col):
-        top = False
-        right = False
-        bottom = False
-        left = False
-
-        # Corners
-        if col == 0 and row == 0:
-            right = True
-            bottom = True
-        elif (col == self.config['widthInBoidCPUs'] - 1) and (row == self.config['widthInBoidCPUs'] - 1):
-            top = True
-            left = True
-        elif col == 0 and (row == self.config['widthInBoidCPUs'] - 1):
-            top = True
-            right = True
-        elif (col == self.config['widthInBoidCPUs'] - 1) and row == 0:
-            bottom = True
-            left = True
-
-        # Edges
-        elif col == 0:
-            top = True 
-            right = True 
-            bottom = True
-        elif row == 0:
-            right = True
-            bottom = True
-            left = True
-        elif (col == self.config['widthInBoidCPUs'] - 1):
-            top = True
-            bottom = True
-            left = True
-        elif (row == self.config['widthInBoidCPUs'] - 1):
-            top = True
-            right = True
-            left = True
+    def identifyAffectedBoidCPUs(self, boidCPUID, row, col, requestedChange):
         
-        # Middle
-        else:
-            top = True
-            right = True
-            bottom = True
-            left = True
+        # If the BoidCPU doesn't specify a request for changing the edge, use 1 step for valid edges
+        if not requestedChange:
+            requestedChange = [0, 0, 0, 0] 
+            if self.boidCPUs[boidCPUID - 1].validEdge(0):                   # Top
+                requestedChange[0] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(1):                   # Right
+                requestedChange[1] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(2):                   # Bottom
+                requestedChange[2] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(3):                   # Left
+                requestedChange[3] = 1
+
+        # Create a list that is true if a change is requested for that edge and false otherwise
+        edgeChanges = [True if v else False for v in requestedChange]
+
+        # A structure to hold the BoidCPU edges to change. Used as follows:
+        #  boidCPUsToChange[edgeIndex][boidCPUs][index 0 = boidCPUID, index 1 = stepChange]
+        boidCPUsToChange = [[], [], [], []]
 
         # Iterate over the boidCPUs to determine the IDs of those boidCPUs that would be affected 
         # by the requested change and which edges of the boidCPUs would need changing
-        boidCPUsToChange = {'top': [], 'right': [], 'bottom': [], 'left': []}
         for l in self.boidCPUs:
-            if top and (l.gridPosition[0] == row - 1):
-                boidCPUsToChange['bottom'].append(l.boidCPUID)
+            if edgeChanges[0] and (l.gridPosition[0] == row - 1):
+                boidCPUsToChange[2].append([l.boidCPUID, requestedChange[0]])
 
-            if right and (l.gridPosition[1] == col + 1):
-                boidCPUsToChange['left'].append(l.boidCPUID)
+            if edgeChanges[1] and (l.gridPosition[1] == col + 1):
+                boidCPUsToChange[3].append([l.boidCPUID, requestedChange[1]])
 
-            if bottom and (l.gridPosition[0] == row + 1):
-                boidCPUsToChange['top'].append(l.boidCPUID)
+            if edgeChanges[2] and (l.gridPosition[0] == row + 1):
+                boidCPUsToChange[0].append([l.boidCPUID, requestedChange[2]])
 
-            if left and (l.gridPosition[1] == col - 1):
-                boidCPUsToChange['right'].append(l.boidCPUID)
+            if edgeChanges[3] and (l.gridPosition[1] == col - 1):
+                boidCPUsToChange[1].append([l.boidCPUID, requestedChange[3]])
 
 
-            if top and (l.gridPosition[0] == row):
-                boidCPUsToChange['top'].append(l.boidCPUID)
+            if edgeChanges[0] and (l.gridPosition[0] == row):
+                boidCPUsToChange[0].append([l.boidCPUID, requestedChange[0]])
 
-            if right and (l.gridPosition[1] == col):
-                boidCPUsToChange['right'].append(l.boidCPUID)
+            if edgeChanges[1] and (l.gridPosition[1] == col):
+                boidCPUsToChange[1].append([l.boidCPUID, requestedChange[1]])
 
-            if bottom and (l.gridPosition[0] == row):
-                boidCPUsToChange['bottom'].append(l.boidCPUID)
+            if edgeChanges[2] and (l.gridPosition[0] == row):
+                boidCPUsToChange[2].append([l.boidCPUID, requestedChange[2]])
 
-            if left and (l.gridPosition[1] == col):
-                boidCPUsToChange['left'].append(l.boidCPUID)
+            if edgeChanges[3] and (l.gridPosition[1] == col):
+                boidCPUsToChange[3].append([l.boidCPUID, requestedChange[3]])
+
+        # print boidCPUsToChange
 
         return boidCPUsToChange
 
