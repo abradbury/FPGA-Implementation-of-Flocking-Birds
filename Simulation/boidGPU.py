@@ -23,16 +23,22 @@ class BoidGPU:
         frame = Frame(self.root)
         frame.pack()
         
-        self.canvas = Canvas(frame, bg = "black", width = self.config['width'], height = self.config['height'])
+        self.canvas = Canvas(frame, bg = "black", width = self.config['width'], 
+            height = self.config['height'])
         self.canvas.pack();
         
         # Create the buttons
-        self.timeButton = Button(frame, text = "Next Time Step", command = self.simulation.nextStepButton)
+        self.timeButton = Button(frame, text = "Next Time Step", 
+            command = self.simulation.nextStepButton)
         self.timeButton.pack(side = LEFT)
+
         self.pauseButton = Button(frame, text = "Begin", command = self.simulation.pause)
         self.pauseButton.pack(side = LEFT)
-        self.graphButton = Button(frame, text = "Update Graphs", command = self.simulation.updateGraphs)
+
+        self.graphButton = Button(frame, text = "Update Graphs", 
+            command = self.simulation.updateGraphs)
         self.graphButton.pack(side = LEFT)
+        
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
         self.quitButton.pack(side = LEFT)
 
@@ -100,7 +106,8 @@ class BoidGPU:
         points = self.rotateBoid(velocity, position, points)
 
         # Draw the boid
-        self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7], fill = colour, outline = 
+        self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], points[5], 
+            points[6], points[7], fill = colour, outline = 
             outlineColour, width = boidWidth, tags = ("B" + str(boidID)))
 
 
@@ -130,7 +137,8 @@ class BoidGPU:
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
-        self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7])
+        self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], 
+            points[5], points[6], points[7])
         self.canvas.itemconfig("B" + str(boidID), fill = colour) 
 
         # Debugging method - follow a specific boid
@@ -162,7 +170,6 @@ class BoidGPU:
         points[4], points[5] = _rot(points[4], points[5])
         points[6], points[7] = _rot(points[6], points[7])
 
-        # self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], points[5], points[6], points[7])
         return points
 
 
@@ -192,17 +199,20 @@ class BoidGPU:
         if handle:
             self.canvas.coords(tag, startPoints[0], startPoints[1], endPoints[0], endPoints[1])
         else:
-            self.canvas.create_line([startPoints[0], startPoints[1], endPoints[0], endPoints[1]], fill = "red", tags = tag)
+            self.canvas.create_line([startPoints[0], startPoints[1], endPoints[0], endPoints[1]], 
+                fill = "red", tags = tag)
 
 
     def drawBoidCPUGrid(self, boidCPUCoords, segmentWidth, segmentHieght):
         for i in range(segmentWidth):
             x = boidCPUCoords[0] + (i * self.config['stepSize'])
-            self.canvas.create_line([x, boidCPUCoords[1], x, boidCPUCoords[3]], fill = "green", tags = "gridLines")
+            self.canvas.create_line([x, boidCPUCoords[1], x, boidCPUCoords[3]], fill = "green", 
+                tags = "gridLines")
 
         for i in range(segmentHieght):
             y = boidCPUCoords[1] + (i * self.config['stepSize'])
-            self.canvas.create_line([boidCPUCoords[0], y, boidCPUCoords[2], y], fill = "green", tags = "gridLines")
+            self.canvas.create_line([boidCPUCoords[0], y, boidCPUCoords[2], y], fill = "green", 
+                tags = "gridLines")
 
     def removeBoidCPUGrid(self):
         self.canvas.delete("gridLines")
