@@ -75,7 +75,7 @@ class BoidCPU:
                 if self.boidCount >= self.config['BOID_THRESHOLD']:
 
                     # Analyse the distribution of the boids in this BoidCPU to determine the step
-                    if self.config['loadBalanceType'] == 2: 
+                    if (self.config['loadBalanceType'] == 2) or (self.config['loadBalanceType'] == 3): 
                         self.createBoidDistribution()
                         requestedChange = self.analyseBoidDistribution()
                     elif self.config['loadBalanceType'] == 1: 
