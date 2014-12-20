@@ -72,42 +72,20 @@ class Boid:
                 (self.config['ALIGNMENT_WEIGHT'] * self.alignmentMod) + 
                 (self.config['REPULSION_WEIGHT'] * self.repulsionMod))
 
+        # Avoid obstacles
+        self.avoidObstacles()
+
         # Bound the velocity to the maximum allowed
-        if self.velocity[0] > self.config['MAX_VELOCITY']:
-            self.velocity[0] = self.config['MAX_VELOCITY']
+        self.limitVelocity()
 
-        if self.velocity[1] > self.config['MAX_VELOCITY']:
-            self.velocity[1] = self.config['MAX_VELOCITY']
-
-        if self.velocity[0] < -self.config['MAX_VELOCITY']:
-            self.velocity[0] = -self.config['MAX_VELOCITY']
-
-        if self.velocity[1] < -self.config['MAX_VELOCITY']:
-            self.velocity[1] = -self.config['MAX_VELOCITY']
+        # Contain the boids in the simulation area
+        self.containBoids()
 
         # Update the position of the boid
         self.position += self.velocity
 
         # Contain the boids in the simulation area
-        # Left
-        if self.position[0] < 0:
-            self.velocity[0] = -self.velocity[0]
-            self.position += self.velocity
-
-        # Right
-        elif self.position[0] > self.config['width']:
-            self.velocity[0] = -self.velocity[0]
-            self.position += self.velocity
-
-        # Top
-        elif self.position[1] < 0:
-            self.velocity[1] = -self.velocity[1]
-            self.position += self.velocity
-
-        # Bottom
-        elif self.position[1] > self.config['width']:
-            self.velocity[1] = -self.velocity[1]
-            self.position += self.velocity
+        self.containBoids()
 
 
     # Move the boid to the calculate positon
@@ -172,12 +150,191 @@ class Boid:
         return self.repulsionMod
 
 
+    # Limit the boid's velocity to the maximum allowed
+    def limitVelocity(self):
+        # if self.velocity[0] > self.config['MAX_VELOCITY']:
+        #     self.velocity[0] = self.config['MAX_VELOCITY']
+
+        # if self.velocity[1] > self.config['MAX_VELOCITY']:
+        #     self.velocity[1] = self.config['MAX_VELOCITY']
+
+        # if self.velocity[0] < -self.config['MAX_VELOCITY']:
+        #     self.velocity[0] = -self.config['MAX_VELOCITY']
+
+        # if self.velocity[1] < -self.config['MAX_VELOCITY']:
+        #     self.velocity[1] = -self.config['MAX_VELOCITY']
+
+        # Results in slightly different behaviour, though not better
+        if self.absolute(self.velocity) > self.config['MAX_VELOCITY']:
+            self.velocity = self.normalise(self.velocity) * self.config['MAX_VELOCITY']
+
+
+    # Contain the boids within the simulation area
+    def containBoids(self):
+        # Left
+        if self.position[0] < 0:
+            self.velocity[0] = -self.velocity[0]
+            self.position += self.velocity
+
+        # Right
+        elif self.position[0] > self.config['width']:
+            self.velocity[0] = -self.velocity[0]
+            self.position += self.velocity
+
+        # Top
+        elif self.position[1] < 0:
+            self.velocity[1] = -self.velocity[1]
+            self.position += self.velocity
+
+        # Bottom
+        elif self.position[1] > self.config['width']:
+            self.velocity[1] = -self.velocity[1]
+            self.position += self.velocity
+
+        # Alternative method
+        # Doesn't strictly conatain then, but slightly changes velocity to move back
+        # step = 5
+        # if self.position[0] < 0:
+        #     self.velocity[0] = step
+        # elif self.position[0] > self.config['width']:
+        #     self.velocity[0] = -step
+
+        # if self.position[1] < 0:
+        #     self.velocity[1] = step
+        # elif self.position[1] > self.config['width']:
+        #     self.velocity[1] = -step
+
+
+    def avoidObstacles(self):
+        ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
+
+        self.boidGPU.drawLine(self.position, ahead, ("AheadLine" + str(self.boidID)))
+
+        # Look at the obstacles ahead, find the intersection edge, compute a force to push the boid
+        # to the edge of the obstacle
+        step = 5
+
+        # Top edge
+        if ahead[1] < 0:
+            print "BoidCPU " + str(self.boidID) + " ahead is beyond TOP edge"
+            # lineA = [0, 0, self.config['width'], 0]
+            # lineB = np.concatenate((self.position, ahead), axis = 1)
+            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
+            # self.velocity[1] = step
+            
+            # Find intersection(s) between vision radius circle and edge line
+            # Get the one that is nearest to either the ahead-edge intersection or the ahead point
+            # Work back from this new point to get the new velocity
+
+            # y = 0
+            [x, y] = self.circleLineIntercept(None, 0, ahead)
+            print [x, y]
+            self.boidGPU.drawCircle([x, y], 10, ("insersectionPoint" + str(self.boidID)))
+
+            # v = [0, 0]
+            # v[0] = (x / self.config['VISION_RADIUS']) #- self.position[0]
+            # v[1] = (y / self.config['VISION_RADIUS']) #- self.position[1]
+            # print v
+            # print self.velocity
+            # 
+            
+            # Alternatively do a simple mod of the velocity based on angle of approach and the 
+            # closer it gets the stronger the turn 
+            print self.position
+            print self.velocity
+
+            if x > self.position[0]:
+                print "Intersection x greater than position x"
+                self.velocity[0] += 1
+            else:
+                print "Intersection x less than position x"
+                self.velocity[0] -= 1
+
+            print self.velocity
+
+            # print "Ahead:    " + str(ahead)
+            # print "Velocity: " + str(self.velocity)
+            # scale = ahead / self.velocity
+            # print "Scale:    " + str(scale)
+
+            # print "XY:       " + str([x, y])
+            # v = [x, y] / scale
+            # print "New Vel:  " + str(v)
+            # # self.boidGPU.drawCircle(v, 10, ("insersectionPoint1" + str(self.boidID)))
+            # # self.velocity[0] = v[0]
+            # # self.velocity[1] = v[1]
+
+            # # Get the direction of the new vector, change the old velocity to use this direction
+
+            # aDash = [x - self.position[0] , y - self.position[1]]
+            # radians = np.arctan2(aDash[1], aDash[0])
+            # print "aDash:    " + str(aDash)
+            # print "radians:    " + str(radians)
+
+            # c = np.cross(self.velocity, aDash)
+            # print c
+            # c = self.normalise(c)
+            # f = np.cross(c, self.velocity)
+            # g = (np.cos(0.2) * self.velocity) + (np.sin(0.2) * f)
+            # print g
+
+        # Bottom edge
+        elif ahead[1] > self.config['width']:
+            print "BoidCPU " + str(self.boidID) + " ahead is beyond BOTTOM edge"
+            # lineA = [0, self.config['width'], self.config['width'], self.config['width']]
+            # lineB = np.concatenate((self.position, ahead), axis = 1)
+            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
+            # self.velocity[1] = -step
+        # Left edge
+        elif ahead[0] < 0:
+            print "BoidCPU " + str(self.boidID) + " ahead is beyond LEFT edge"
+            # lineA = [0, 0, 0, self.config['width']]
+            # lineB = np.concatenate((self.position, ahead), axis = 1)
+            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
+            # self.velocity[0] = step
+        # Right edge
+        elif ahead[0] > self.config['width']:
+            print "BoidCPU " + str(self.boidID) + " ahead is beyond RIGHT edge"
+            # lineA = [0, self.config['width'], self.config['width'], self.config['width']]
+            # lineB = np.concatenate((self.position, ahead), axis = 1)
+            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
+            # self.velocity[0] = -step
+
+
+    def circleLineIntercept(self, x, y, ahead):
+        print x
+        print y
+
+        if (x >= 0) and not y:
+            # y = b ± sqrt(r^2 - (x - a)^2)
+            yPos = self.position[1] + math.sqrt((self.config['VISION_RADIUS'] ** 2) - ((x - self.position[0]) ** 2))
+            yNeg = self.position[1] - math.sqrt((self.config['VISION_RADIUS'] ** 2) - ((x - self.position[0]) ** 2))
+        
+            if abs(yPos - ahead[1]) > abs(yNeg - ahead[1]):
+                result = [x, yNeg]
+            else:
+                result = [x, yPos]
+
+        elif (y >= 0) and not x:
+            # x = a ± sqrt(r^2 - (y - b)^2)
+            xPos = self.position[0] + math.sqrt((self.config['VISION_RADIUS'] ** 2) - ((y - self.position[1]) ** 2))
+            xNeg = self.position[0] - math.sqrt((self.config['VISION_RADIUS'] ** 2) - ((y - self.position[1]) ** 2))
+
+            if abs(xPos - ahead[0]) > abs(xNeg - ahead[0]):
+                result = [xNeg, y]
+            else:
+                result = [xPos, y]
+
+        return result
+
+
     # Used to normalise a 2D or 3D vector
     def normalise(self, vector):
-        if len(vector) == 2:
-            magnetude = math.sqrt((vector[0] ** 2) + (vector[1] ** 2))
-        elif len(vector) == 3:
-            magnetude = math.sqrt((vector[0] ** 2) + (vector[1] ** 2) + (vector[2] ** 2))
+        magnetude = self.absolute(vector)
 
         if magnetude:
             result = vector / magnetude
@@ -187,133 +344,142 @@ class Boid:
         return result 
 
 
+    # Calculate the magnetude or absolute value of the given vector
+    def absolute(self, vector):
+        if len(vector) == 2:
+            magnetude = math.sqrt((vector[0] ** 2) + (vector[1] ** 2))
+        elif len(vector) == 3:
+            magnetude = math.sqrt((vector[0] ** 2) + (vector[1] ** 2) + (vector[2] ** 2))
+
+        return magnetude
 
 
     ################################################################################################
     # The code below is not finalised - was an attempt to improve the boid movement
     ################################################################################################
 
-    # # Limit a vector to a maximum value
-    # def truncate(self, vector, limit):
-    #     ratio = limit / len(vector)
+    # Limit a vector to a maximum value
+    def truncate(self, vector, limit):
+        ratio = limit / len(vector)
 
-    #     if ratio < 1:
-    #         result = 1
-    #     else:
-    #         result = ratio
+        if ratio < 1:
+            result = 1
+        else:
+            result = ratio
 
-    #     return vector * result
+        return vector * result
 
 
-    # def update0(self, possibleNeighbouringBoids):
+    def update0(self, possibleNeighbouringBoids):
+        self.config['MAX_VELOCITY'] = 4
 
-    #     # Calculate the neighbouring boids for the current boid
-    #     self.possibleNeighbours = possibleNeighbouringBoids
-    #     self.calculateNeighbours()
+        # Calculate the neighbouring boids for the current boid
+        self.possibleNeighbours = possibleNeighbouringBoids
+        self.calculateNeighbours()
 
-    #     # If tracking boid, highlight its neighbouring boids
-    #     if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
-    #         for boid in self.neighbouringBoids:
-    #             self.boidGPU.highlightBoid(True, boid.boidID)
+        # If tracking boid, highlight its neighbouring boids
+        if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
+            for boid in self.neighbouringBoids:
+                self.boidGPU.highlightBoid(True, boid.boidID)
 
-    #     # Use the properties of the neighbouring boids to determine where the current boid should go
-    #     if len(self.neighbouringBoids) > 0:
-    #         alignment = self.alignment()
-    #         cohesion = self.coehsion()
-    #         repulsion = self.repulsion()
+        # Use the properties of the neighbouring boids to determine where the current boid should go
+        if len(self.neighbouringBoids) > 0:
+            alignment = self.alignment()
+            cohesion = self.coehsion()
+            repulsion = self.repulsion()
 
-    #         # Identify a target point
-    #         target = self.position + (alignment + cohesion + repulsion)
+            # Identify a target point
+            target = self.position + (alignment + cohesion + repulsion)
 
-    #     else:
-    #         # TODO: If a boid has no neighbours, probably want it to wander
-    #         target = self.position + self.velocity
+        else:
+            # TODO: If a boid has no neighbours, probably want it to wander
+            target = self.position + self.velocity
 
-    #     # Seek -------------------------------------------------------------------------------------
-    #     # The desired velocity is a vector from the boid to the target
-    #     desiredVelocity = (self.normalise(self.position - target)) * self.config['MAX_VELOCITY']
+        # Seek -------------------------------------------------------------------------------------
+        # The desired velocity is a vector from the boid to the target
+        desiredVelocity = (self.normalise(self.position - target)) * self.config['MAX_VELOCITY']
 
-    #     # The steering force is the result of the desired velocity subtracted by the current 
-    #     # velocity and it pushes the character towards the target. 
-    #     steering = desiredVelocity - self.velocity       
+        # The steering force is the result of the desired velocity subtracted by the current 
+        # velocity and it pushes the character towards the target. 
+        steering = desiredVelocity - self.velocity       
 
-    #     # Contain ----------------------------------------------------------------------------------
-    #     # TODO: Move the steer point if it outside the simulation area
+        # Contain ----------------------------------------------------------------------------------
+        # TODO: Move the steer point if it outside the simulation area
 
-    #     # Obstacle Avoidance -----------------------------------------------------------------------
-    #     if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
-    #         # dynamicLength = abs(self.velocity) / self.config['MAX_VELOCITY']
-    #         ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
-    #         ahead2 = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS'] * 0.5
+        # Obstacle Avoidance -----------------------------------------------------------------------
+        # if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
+        #     # dynamicLength = abs(self.velocity) / self.config['MAX_VELOCITY']
+        #     ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
+        #     ahead2 = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS'] * 0.5
 
-    #         print "Position: " + str(self.position)
-    #         print "Ahead:    " + str(ahead)
-    #         print "velocity: " + str(self.velocity)
+        #     print "Position: " + str(self.position)
+        #     print "Ahead:    " + str(ahead)
+        #     print "velocity: " + str(self.velocity)
 
-    #         self.boidGPU.drawLine(self.position, ahead, "AheadLine")
+        #     self.boidGPU.drawLine(self.position, ahead, "AheadLine")
 
-    #         obstacle = True
+        #     obstacle = True
 
-    #         # Top edge
-    #         if ahead[1] < 0:
-    #             lineA = [0, 0, self.config['width'], 0]
-    #             lineB = np.concatenate((self.position, ahead), axis = 1)
-    #             obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-    #         # Bottom edge
-    #         elif ahead[1] > self.config['width']:
-    #             lineA = [0, self.config['width'], self.config['width'], self.config['width']]
-    #             lineB = np.concatenate((self.position, ahead), axis = 1)
-    #             obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-    #         # Left edge
-    #         elif ahead[0] < 0:
-    #             lineA = [0, 0, 0, self.config['width']]
-    #             lineB = np.concatenate((self.position, ahead), axis = 1)
-    #             obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-    #         # Right edge
-    #         elif ahead[0] > self.config['width']:
-    #             lineA = [0, self.config['width'], self.config['width'], self.config['width']]
-    #             lineB = np.concatenate((self.position, ahead), axis = 1)
-    #             obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-    #         else:
-    #             obstacle = False
+        #     # Top edge
+        #     if ahead[1] < 0:
+        #         lineA = [0, 0, self.config['width'], 0]
+        #         lineB = np.concatenate((self.position, ahead), axis = 1)
+        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+        #     # Bottom edge
+        #     elif ahead[1] > self.config['width']:
+        #         lineA = [0, self.config['width'], self.config['width'], self.config['width']]
+        #         lineB = np.concatenate((self.position, ahead), axis = 1)
+        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+        #     # Left edge
+        #     elif ahead[0] < 0:
+        #         lineA = [0, 0, 0, self.config['width']]
+        #         lineB = np.concatenate((self.position, ahead), axis = 1)
+        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+        #     # Right edge
+        #     elif ahead[0] > self.config['width']:
+        #         lineA = [0, self.config['width'], self.config['width'], self.config['width']]
+        #         lineB = np.concatenate((self.position, ahead), axis = 1)
+        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
+        #     else:
+        #         obstacle = False
 
-    #         if obstacle:
-    #             MAX_AVOID_FORCE = 1
-    #             avoidanceForce = ahead - obstacleCenter
-    #             avoidanceForce = self.normalise(avoidanceForce) * MAX_AVOID_FORCE
+        #     if obstacle:
+        #         MAX_AVOID_FORCE = 1
+        #         avoidanceForce = ahead - obstacleCenter
+        #         avoidanceForce = self.normalise(avoidanceForce) * MAX_AVOID_FORCE
 
-    #             print "Obstacle Center: " + str(obstacleCenter)
-    #             print "Aoidance Force:  " + str(avoidanceForce)
+        #         print "Obstacle Center: " + str(obstacleCenter)
+        #         print "Aoidance Force:  " + str(avoidanceForce)
 
-    #             steering += avoidanceForce
+        #         steering += avoidanceForce
 
-    #     # Update -----------------------------------------------------------------------------------
-    #     # The steering force is truncated to ensure it does not exceed the maximum force on boid
-    #     # steering = self.truncate (steering, max_force)
+        # Update -----------------------------------------------------------------------------------
+        # The steering force is truncated to ensure it does not exceed the maximum force on boid
+        # steering = self.truncate (steering, max_force)
         
-    #     # The velocity vector is truncated to limit the speed of a boid
-    #     self.velocity = self.truncate(self.velocity + steering, self.config['MAX_VELOCITY'])
+        # The velocity vector is truncated to limit the speed of a boid
+        self.velocity = self.truncate(self.velocity + steering, self.config['MAX_VELOCITY'])
 
-    #     # Calculate the boid's position
-    #     self.position = self.position + self.velocity
-
-
-
-    #     # Obstacle avoidance - assume everything is a sphere
-    #     # Need a bar ahead of the boid of length vision radius and width that of the sphere containing the boid
-    #     # Determines if an ostacle intersects this bar
-    #     # Steering to avoid the nearest obstacle is computed by negating the (lateral) side-up projection
-    #     # of the obstacle's centre
+        # Calculate the boid's position
+        self.position = self.position + self.velocity
 
 
-    #     # Wall containment
-    #     # First predict the boid's future position. If the future position is not in the allowed 
-    #     # region, then the boid need to steer back to the allowed region.
-    #     # This can be done using seek with an inside point
-    #     # OR determine the intersection with the boundary, get the surface normal at the point
 
-    #     # Acceleration??
-    #     # acceleration = steering_force / mass
+        # Obstacle avoidance - assume everything is a sphere
+        # Need a bar ahead of the boid of length vision radius and width that of the sphere containing the boid
+        # Determines if an ostacle intersects this bar
+        # Steering to avoid the nearest obstacle is computed by negating the (lateral) side-up projection
+        # of the obstacle's centre
+
+
+        # Wall containment
+        # First predict the boid's future position. If the future position is not in the allowed 
+        # region, then the boid need to steer back to the allowed region.
+        # This can be done using seek with an inside point
+        # OR determine the intersection with the boundary, get the surface normal at the point
+
+        # Acceleration??
+        # acceleration = steering_force / mass
 
 
 
@@ -459,27 +625,25 @@ class Boid:
     #     return avoidance_force
 
 
-    # # Intersection of two lines
-    # # From: http://stackoverflow.com/questions/4543506/algorithm-for-intersection-of-2-lines
-    # def intersectionBetweenTwoLines(self, lineA, lineB):
-    #     A1 = lineA[3] - lineA[1]
-    #     B1 = lineA[0] - lineA[2]
-    #     C1 = (A1 * lineA[0]) + (B1 * lineA[1])
+    # Intersection of two lines
+    # From: http://stackoverflow.com/questions/4543506/algorithm-for-intersection-of-2-lines
+    def intersectionBetweenTwoLines(self, lineA, lineB):
+        A1 = lineA[3] - lineA[1]
+        B1 = lineA[0] - lineA[2]
+        C1 = (A1 * lineA[0]) + (B1 * lineA[1])
 
-    #     A2 = lineB[3] - lineB[1]
-    #     B2 = lineB[0] - lineB[2]
-    #     C2 = (A2 * lineB[0]) + (B2 * lineB[1])
+        A2 = lineB[3] - lineB[1]
+        B2 = lineB[0] - lineB[2]
+        C2 = (A2 * lineB[0]) + (B2 * lineB[1])
 
-    #     delta = (A1 * B2) - (A2 * B1)
-    #     if delta == 0:
-    #         raise ZeroDivisionError("Lines are parallel")
+        delta = (A1 * B2) - (A2 * B1)
+        if delta == 0:
+            raise ZeroDivisionError("Lines are parallel")
 
-    #     print delta
+        x = ((B2 * C1) - (B1 * C2)) / delta
+        y = ((A1 * C2) - (A2 * C1)) / delta
 
-    #     x = ((B2 * C1) - (B1 * C2)) / delta
-    #     y = ((A1 * C2) - (A2 * C1)) / delta
-
-    #     return [x, y]
+        return [x, y]
 
 
     # # Calculates the shortest distance from a boid to a boundary line

@@ -38,7 +38,7 @@ class BoidGPU:
         self.graphButton = Button(frame, text = "Update Graphs", 
             command = self.simulation.updateGraphs)
         self.graphButton.pack(side = LEFT)
-        
+
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
         self.quitButton.pack(side = LEFT)
 
@@ -144,6 +144,9 @@ class BoidGPU:
         # Debugging method - follow a specific boid
         if self.config['trackBoid'] and (boidID == self.config['boidToTrack']):  
             self.followBoid(position, boidID)
+        # If boidToTrack is 0, track all boids
+        elif self.config['trackBoid'] and not self.config['boidToTrack']:
+            self.followBoid(position, boidID)
 
 
     # Rotate the specified boid based on its velocity / orientation
@@ -176,12 +179,12 @@ class BoidGPU:
     # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
     # coloured blue. Any neighbouring boid is coloured green. 
     def followBoid(self, position, boidID):
-        self.canvas.delete("boidCircle")
+        self.canvas.delete(("boidCircle" + str(boidID)))
         self.canvas.itemconfig("B" + str(boidID), fill = "blue")
 
         self.canvas.create_oval(position[0] - self.config['VISION_RADIUS'], 
             position[1] - self.config['VISION_RADIUS'], position[0] + self.config['VISION_RADIUS'], 
-            position[1] + self.config['VISION_RADIUS'], outline = "yellow", tags = "boidCircle")
+            position[1] + self.config['VISION_RADIUS'], outline = "yellow", tags = ("boidCircle" + str(boidID)))
 
 
     # Highlights or de-highlights a specific boid based on the given boidID
@@ -201,6 +204,13 @@ class BoidGPU:
         else:
             self.canvas.create_line([startPoints[0], startPoints[1], endPoints[0], endPoints[1]], 
                 fill = "red", tags = tag)
+
+
+    def drawCircle(self, centre, radius, tag):
+        self.canvas.delete(tag)
+        
+        self.canvas.create_oval(centre[0] - radius, centre[1] - radius, centre[0] + radius, 
+            centre[1] + radius, outline = "white", fill = "white", tags = tag)
 
 
     def drawBoidCPUGrid(self, boidCPUCoords, segmentWidth, segmentHieght):
