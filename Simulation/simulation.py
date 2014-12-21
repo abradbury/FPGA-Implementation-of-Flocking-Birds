@@ -64,14 +64,14 @@ class Simulation:
 
         self.config['width'] = 720              # Define window size
         self.config['height'] = 720
-        self.config['boidCount'] = 9
+        self.config['boidCount'] = 90
         self.config['updateInterval'] = 10      # The interval between successful update calls (ms) 
         self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
         
         # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
         self.config['trackBoid'] = True         # True to track the specified boid and neighbours
-        self.config['boidToTrack'] = 0
+        self.config['boidToTrack'] = 2
         
         # Load balancing parameters
         self.config['loadBalance'] = False       # True to enable load balancing
@@ -85,7 +85,7 @@ class Simulation:
 
         self.config['ALIGNMENT_WEIGHT'] = 1
         self.config['COHESION_WEIGHT'] = 1
-        self.config['REPULSION_WEIGHT'] = 1
+        self.config['REPULSION_WEIGHT'] = 1.1
 
         # Setup logging
         self.setupLogging()
