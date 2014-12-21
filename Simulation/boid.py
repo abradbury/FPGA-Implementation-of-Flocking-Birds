@@ -206,108 +206,37 @@ class Boid:
 
 
     def avoidObstacles(self):
-        ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
+        # ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
+        # self.boidGPU.drawLine(self.position, ahead, ("AheadLine" + str(self.boidID)))
 
-        self.boidGPU.drawLine(self.position, ahead, ("AheadLine" + str(self.boidID)))
-
-        # Look at the obstacles ahead, find the intersection edge, compute a force to push the boid
-        # to the edge of the obstacle
-        step = 5
-
-        # Top edge
-        if ahead[1] < 0:
-            print "BoidCPU " + str(self.boidID) + " ahead is beyond TOP edge"
-            # lineA = [0, 0, self.config['width'], 0]
-            # lineB = np.concatenate((self.position, ahead), axis = 1)
-            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
-            # self.velocity[1] = step
-            
-            # Find intersection(s) between vision radius circle and edge line
-            # Get the one that is nearest to either the ahead-edge intersection or the ahead point
-            # Work back from this new point to get the new velocity
-
-            # y = 0
-            [x, y] = self.circleLineIntercept(None, 0, ahead)
-            print [x, y]
-            self.boidGPU.drawCircle([x, y], 10, ("insersectionPoint" + str(self.boidID)))
-
-            # v = [0, 0]
-            # v[0] = (x / self.config['VISION_RADIUS']) #- self.position[0]
-            # v[1] = (y / self.config['VISION_RADIUS']) #- self.position[1]
-            # print v
-            # print self.velocity
-            # 
-            
-            # Alternatively do a simple mod of the velocity based on angle of approach and the 
-            # closer it gets the stronger the turn 
-            print self.position
-            print self.velocity
-
-            if x > self.position[0]:
-                print "Intersection x greater than position x"
-                self.velocity[0] += 1
-            else:
-                print "Intersection x less than position x"
-                self.velocity[0] -= 1
-
-            print self.velocity
-
-            # print "Ahead:    " + str(ahead)
-            # print "Velocity: " + str(self.velocity)
-            # scale = ahead / self.velocity
-            # print "Scale:    " + str(scale)
-
-            # print "XY:       " + str([x, y])
-            # v = [x, y] / scale
-            # print "New Vel:  " + str(v)
-            # # self.boidGPU.drawCircle(v, 10, ("insersectionPoint1" + str(self.boidID)))
-            # # self.velocity[0] = v[0]
-            # # self.velocity[1] = v[1]
-
-            # # Get the direction of the new vector, change the old velocity to use this direction
-
-            # aDash = [x - self.position[0] , y - self.position[1]]
-            # radians = np.arctan2(aDash[1], aDash[0])
-            # print "aDash:    " + str(aDash)
-            # print "radians:    " + str(radians)
-
-            # c = np.cross(self.velocity, aDash)
-            # print c
-            # c = self.normalise(c)
-            # f = np.cross(c, self.velocity)
-            # g = (np.cos(0.2) * self.velocity) + (np.sin(0.2) * f)
-            # print g
-
+        # The closer it is the stronger the repulsion 
+        # This works much better but when the boids approach head on, the change is quite sudden
+        # What about, the smaller the gap between the boid x and ahead x, the greater the x push?
+        repulsionFactor = 3000
+        if self.position[1] < 0 + self.config['VISION_RADIUS']:
+            d = self.distanceFromPointToLine([0, 0], [self.config['width'], 0], self.position)
+            repulsionForce = repulsionFactor / (d ** 2)
+            self.velocity[1] += repulsionForce
         # Bottom edge
-        elif ahead[1] > self.config['width']:
-            print "BoidCPU " + str(self.boidID) + " ahead is beyond BOTTOM edge"
-            # lineA = [0, self.config['width'], self.config['width'], self.config['width']]
-            # lineB = np.concatenate((self.position, ahead), axis = 1)
-            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
-            # self.velocity[1] = -step
+        elif self.position[1] > self.config['width'] - self.config['VISION_RADIUS']:
+            d = self.distanceFromPointToLine([0, self.config['width']], [self.config['width'], self.config['width']], self.position)
+            repulsionForce = repulsionFactor / (d ** 2)
+            self.velocity[1] -= repulsionForce
         # Left edge
-        elif ahead[0] < 0:
-            print "BoidCPU " + str(self.boidID) + " ahead is beyond LEFT edge"
-            # lineA = [0, 0, 0, self.config['width']]
-            # lineB = np.concatenate((self.position, ahead), axis = 1)
-            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
-            # self.velocity[0] = step
+        elif self.position[0] < 0 + self.config['VISION_RADIUS']:
+            d = self.distanceFromPointToLine([0, 0], [0, self.config['width']], self.position)
+            repulsionForce = repulsionFactor / (d ** 2)
+            self.velocity[0] += repulsionForce
         # Right edge
-        elif ahead[0] > self.config['width']:
-            print "BoidCPU " + str(self.boidID) + " ahead is beyond RIGHT edge"
-            # lineA = [0, self.config['width'], self.config['width'], self.config['width']]
-            # lineB = np.concatenate((self.position, ahead), axis = 1)
-            # obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-            # self.boidGPU.drawCircle(obstacleCenter, 10, ("insersectionPoint" + str(self.boidID)))
-            # self.velocity[0] = -step
+        elif self.position[0] > self.config['width'] - self.config['VISION_RADIUS']:
+            d = self.distanceFromPointToLine([self.config['width'], 0], [self.config['width'], self.config['width']], self.position)
+            repulsionForce = repulsionFactor / (d ** 2)
+            self.velocity[0] -= repulsionForce
 
 
     def circleLineIntercept(self, x, y, ahead):
-        print x
-        print y
+        # print x
+        # print y
 
         if (x >= 0) and not y:
             # y = b ± sqrt(r^2 - (x - a)^2)
@@ -646,17 +575,21 @@ class Boid:
         return [x, y]
 
 
-    # # Calculates the shortest distance from a boid to a boundary line
-    # # From http://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line 
-    # def distanceFromPointToLine(self, lineStart, lineEnd, point):
-    #     lineEnd[1] - lineStart[1]
+    # Calculates the shortest distance from a boid to a boundary line
+    # From http://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line 
+    def distanceFromPointToLine(self, lineStart, lineEnd, point):
+        # tmp = lineEnd[0]
+        # lineEnd[0] = lineEnd[1]
+        # lineEnd[1] = tmp
 
-    #     partOne = ((lineEnd[1] - lineStart[1]) * point[0]) - ((lineEnd[0] - lineStart[0]) * 
-    #         point[1]) + (lineEnd[0] * lineStart[1]) - (lineEnd[1] * lineStart[0])
+        lineEnd[1] - lineStart[1]
 
-    #     partTwo = ((lineEnd[1] - lineStart[1]) ** 2) + ((lineEnd[0] - lineStart[0]) ** 2)
+        partOne = ((lineEnd[1] - lineStart[1]) * point[0]) - ((lineEnd[0] - lineStart[0]) * 
+            point[1]) + (lineEnd[0] * lineStart[1]) - (lineEnd[1] * lineStart[0])
 
-    #     result = abs(partOne) / np.sqrt(partTwo)
+        partTwo = ((lineEnd[1] - lineStart[1]) ** 2) + ((lineEnd[0] - lineStart[0]) ** 2)
 
-    #     return result
+        result = abs(partOne) / np.sqrt(partTwo)
+
+        return result
 
