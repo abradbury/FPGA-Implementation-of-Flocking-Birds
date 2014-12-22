@@ -169,6 +169,8 @@ class BoidCPU:
 
     # Accept a boid transferred from another boidCPU and add it to this boidCPUs boid list
     def acceptBoid(self, boid, fromID):
+        boid.boidCPU = self
+
         self.boids.append(boid)
         self.boidCount += 1
 
