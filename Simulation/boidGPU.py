@@ -21,29 +21,59 @@ class BoidGPU:
         self.root.wm_title("Boid Simulation")
 
         frame = Frame(self.root)
-        frame.pack()
+        frame.grid(row = 1, rowspan = 20, column = 3)
         
         self.canvas = Canvas(frame, bg = "black", width = self.config['width'], 
             height = self.config['height'])
-        self.canvas.pack();
+        self.canvas.grid(row = 1, rowspan = 20, column = 3);
         
-        # Create the buttons
+        # Place the title
+        self.title = Label(frame, text = "Flocking Boid Simulator", font = "Helvetica 14 bold underline")
+        self.title.grid(row  = 1, column = 1, columnspan = 2)
+
+        # Create the simulation buttons
         self.timeButton = Button(frame, text = "Next Time Step", 
             command = self.simulation.nextStepButton)
-        self.timeButton.pack(side = LEFT)
+        self.timeButton.grid(row = 2, column = 1, columnspan = 2)
 
-        self.pauseButton = Button(frame, text = "Begin", command = self.simulation.pause)
-        self.pauseButton.pack(side = LEFT)
+        self.pauseButton = Button(frame, text = "Begin Simulation", command = self.simulation.pause)
+        self.pauseButton.grid(row = 3, column = 1, columnspan = 2)
 
         self.graphButton = Button(frame, text = "Update Graphs", 
             command = self.simulation.updateGraphs)
-        self.graphButton.pack(side = LEFT)
+        self.graphButton.grid(row = 4, column  = 1, columnspan = 2)
 
+        # Create the boid rule weighting sliders
+        minRuleValue = 0
+        maxRuleValue = 10
+
+        self.alignmentLabel = Label(frame, text = "Alignment: ")
+        self.alignmentLabel.grid(row = 5, column = 1, sticky = E)
+        self.alignmentScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, 
+            orient = HORIZONTAL, command = self.simulation.changeBoidAlignment())
+        self.alignmentScale.grid(row = 5, column = 2, sticky = W)
+
+        self.cohesionLabel = Label(frame, text = "Cohesion: ")
+        self.cohesionLabel.grid(row = 6, column = 1, sticky = E)
+        self.cohesionScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, 
+            orient = HORIZONTAL, command = self.simulation.changeBoidCohesion())
+        self.cohesionScale.grid(row = 6, column = 2, sticky = W)
+
+        self.separationLabel = Label(frame, text = "Separation: ")
+        self.separationLabel.grid(row = 7, column = 1, sticky = E)
+        self.separationScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, 
+            orient = HORIZONTAL, command = self.simulation.changeBoidSeparation())
+        self.separationScale.grid(row = 7, column = 2, sticky = W)
+
+        # Add the time step counter
+        self.counterLabel = Label(frame, text = "Time step: ")
+        self.counterLabel.grid(row = 8, column = 1, sticky = E)
+        self.counter = Label(frame, text = 0, width = 6)
+        self.counter.grid(row = 8, column = 2, sticky = W)
+
+        # And finally add the quit button
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
-        self.quitButton.pack(side = LEFT)
-
-        self.counterLabel = Label(frame, text = 0, width = 6)
-        self.counterLabel.pack(side = RIGHT)
+        self.quitButton.grid(row = 9, column = 1, columnspan = 2)
 
         # Needed so that the canvas sizes can be used later
         self.root.update()
@@ -54,14 +84,14 @@ class BoidGPU:
     ################################################################################################
 
     def updateTimeStepLabel(self, newTimeStep):
-        self.counterLabel.config(text = newTimeStep)
+        self.counter.config(text = newTimeStep)
 
 
     def togglePauseButton(self, resume):
         if resume:
-            self.pauseButton.config(text = "Pause")
+            self.pauseButton.config(text = "Pause Simulation")
         else:
-            self.pauseButton.config(text = "Resume")
+            self.pauseButton.config(text = "Resume Simulation")
 
 
     ################################################################################################

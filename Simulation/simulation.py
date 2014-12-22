@@ -71,7 +71,7 @@ class Simulation:
         # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
         self.config['trackBoid'] = True         # True to track the specified boid and neighbours
-        self.config['boidToTrack'] = 2
+        self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
         
         # Load balancing parameters
         self.config['loadBalance'] = False       # True to enable load balancing
@@ -248,6 +248,15 @@ class Simulation:
             self.pauseSimulation = False
             self.boidGPU.togglePauseButton(True)
             self.simulationStep()
+
+    def changeBoidAlignment(self):
+        print "Boid alignment changed"
+
+    def changeBoidCohesion(self):
+        print "Boid cohesion changed"
+
+    def changeBoidSeparation(self):
+        print "Boid separation changed"
 
 
     # Setup logging
