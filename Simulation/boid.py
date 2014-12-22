@@ -73,13 +73,13 @@ class Boid:
                 (self.config['REPULSION_WEIGHT'] * self.repulsionMod))
 
         # Avoid obstacles
-        self.avoidObstacles()
-
-        # Bound the velocity to the maximum allowed
-        self.limitVelocity()
+        # self.avoidObstacles()
 
         # Contain the boids in the simulation area
         self.containBoids()
+
+        # Bound the velocity to the maximum allowed
+        self.limitVelocity()
 
         # Update the position of the boid
         self.position += self.velocity
@@ -171,44 +171,6 @@ class Boid:
 
     # Contain the boids within the simulation area
     def containBoids(self):
-        # Left
-        if self.position[0] < 0:
-            self.velocity[0] = -self.velocity[0]
-            self.position += self.velocity
-
-        # Right
-        elif self.position[0] > self.config['width']:
-            self.velocity[0] = -self.velocity[0]
-            self.position += self.velocity
-
-        # Top
-        elif self.position[1] < 0:
-            self.velocity[1] = -self.velocity[1]
-            self.position += self.velocity
-
-        # Bottom
-        elif self.position[1] > self.config['width']:
-            self.velocity[1] = -self.velocity[1]
-            self.position += self.velocity
-
-        # Alternative method
-        # Doesn't strictly conatain then, but slightly changes velocity to move back
-        # step = 5
-        # if self.position[0] < 0:
-        #     self.velocity[0] = step
-        # elif self.position[0] > self.config['width']:
-        #     self.velocity[0] = -step
-
-        # if self.position[1] < 0:
-        #     self.velocity[1] = step
-        # elif self.position[1] > self.config['width']:
-        #     self.velocity[1] = -step
-
-
-    def avoidObstacles(self):
-        # ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
-        # self.boidGPU.drawLine(self.position, ahead, ("AheadLine" + str(self.boidID)))
-
         # The closer it is the stronger the repulsion 
         # This works much better but when the boids approach head on, the change is quite sudden
         # What about, the smaller the gap between the boid x and ahead x, the greater the x push?
@@ -232,6 +194,25 @@ class Boid:
             d = self.distanceFromPointToLine([self.config['width'], 0], [self.config['width'], self.config['width']], self.position)
             repulsionForce = repulsionFactor / (d ** 2)
             self.velocity[0] -= repulsionForce
+
+
+    def avoidObstacles(self):
+        ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
+        ahead2 = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS'] * 0.5
+
+        self.boidGPU.drawLine(self.position, ahead, ("AheadLine" + str(self.boidID)))
+
+        # if self.boidCPU.obstacles:
+        obstacle = self.boidCPU.obstacles[0]
+        dist = math.sqrt( (ahead[0] - obstacle[0])**2 + (ahead[1] - obstacle[1])**2 )
+        
+        # If the distance to the obstacle radius is less than the object radius - collision
+        if dist < obstacle[2]:
+            print "Boid " + str(self.boidID) + " detects obstacle ahead in location " + str(self.boidCPU.boidCPUID)  
+
+
+        # print self.boidCPU.obstacles
+        
 
 
     def circleLineIntercept(self, x, y, ahead):
@@ -336,51 +317,7 @@ class Boid:
         # TODO: Move the steer point if it outside the simulation area
 
         # Obstacle Avoidance -----------------------------------------------------------------------
-        # if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
-        #     # dynamicLength = abs(self.velocity) / self.config['MAX_VELOCITY']
-        #     ahead = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS']
-        #     ahead2 = self.position + self.normalise(self.velocity) * self.config['VISION_RADIUS'] * 0.5
-
-        #     print "Position: " + str(self.position)
-        #     print "Ahead:    " + str(ahead)
-        #     print "velocity: " + str(self.velocity)
-
-        #     self.boidGPU.drawLine(self.position, ahead, "AheadLine")
-
-        #     obstacle = True
-
-        #     # Top edge
-        #     if ahead[1] < 0:
-        #         lineA = [0, 0, self.config['width'], 0]
-        #         lineB = np.concatenate((self.position, ahead), axis = 1)
-        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-        #     # Bottom edge
-        #     elif ahead[1] > self.config['width']:
-        #         lineA = [0, self.config['width'], self.config['width'], self.config['width']]
-        #         lineB = np.concatenate((self.position, ahead), axis = 1)
-        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-        #     # Left edge
-        #     elif ahead[0] < 0:
-        #         lineA = [0, 0, 0, self.config['width']]
-        #         lineB = np.concatenate((self.position, ahead), axis = 1)
-        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-        #     # Right edge
-        #     elif ahead[0] > self.config['width']:
-        #         lineA = [0, self.config['width'], self.config['width'], self.config['width']]
-        #         lineB = np.concatenate((self.position, ahead), axis = 1)
-        #         obstacleCenter = self.intersectionBetweenTwoLines(lineA, lineB)
-        #     else:
-        #         obstacle = False
-
-        #     if obstacle:
-        #         MAX_AVOID_FORCE = 1
-        #         avoidanceForce = ahead - obstacleCenter
-        #         avoidanceForce = self.normalise(avoidanceForce) * MAX_AVOID_FORCE
-
-        #         print "Obstacle Center: " + str(obstacleCenter)
-        #         print "Aoidance Force:  " + str(avoidanceForce)
-
-        #         steering += avoidanceForce
+        # TODO
 
         # Update -----------------------------------------------------------------------------------
         # The steering force is truncated to ensure it does not exceed the maximum force on boid
