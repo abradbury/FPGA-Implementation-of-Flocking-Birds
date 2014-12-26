@@ -47,12 +47,20 @@ class BoidCPU:
         # Draw the boidCPU's boids
         for i in range (0, self.boidCount):
             # Randomly position the boid on initialisation
-            self.randomX = random.randint(self.boidCPUCoords[0], self.boidCPUCoords[2]);
-            self.randomY = random.randint(self.boidCPUCoords[1], self.boidCPUCoords[3]);
-            self.initialPosition = np.array([self.randomX, self.randomY], dtype = np.float_)
+            self.posX = random.randint(self.boidCPUCoords[0], self.boidCPUCoords[2]);
+            self.posY = random.randint(self.boidCPUCoords[1], self.boidCPUCoords[3]);
+            self.position = np.array([self.posX, self.posY], dtype = np.float_)
+
+            # Randomly generate the boid's initial velocity
+            self.velX = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
+            self.velY = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
+            self.velocity = np.array([self.velX, self.velY], dtype = np.float_)
+
+            # Specify the boid's ID
             self.boidID = ((self.boidCPUID - 1) * self.boidCount) + i + 1
 
-            boid = Boid(self.boidGPU, self, self.boidID, self.initialPosition, self.colour)
+            # Create the boid and add to boid list
+            boid = Boid(self.boidGPU, self, self.boidID, self.position, self.velocity, self.colour)
             self.boids.append(boid)
 
         self.logger.info("Created boidCPU " + str(self.boidCPUID) + " with " + 

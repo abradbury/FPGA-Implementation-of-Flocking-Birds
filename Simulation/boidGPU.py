@@ -135,14 +135,24 @@ class BoidGPU:
     ## Boid Update Functions ---------------------------------------------------------------------##
     ################################################################################################
 
-    def createBoid(self, position, velocity, colour, outlineColour, boidWidth, boidID):
+    def createBoid(self, position, velocity, _colour, boidID):
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
+        # Colour the boid based on their original boidCPU if debugging
+        if self.config['colourCode']:
+            colour = _colour
+            outlineColour = _colour
+            boidWidth = 2
+        else:
+            colour = "red"
+            outlineColour = "white"
+            boidWidth = 1
+
         # Draw the boid
         self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], points[5], 
-            points[6], points[7], fill = colour, outline = 
-            outlineColour, width = boidWidth, tags = ("B" + str(boidID)))
+            points[6], points[7], fill = colour, outline = outlineColour, width = boidWidth, 
+            tags = ("B" + str(boidID)))
 
 
     def nextSimulationStep(self, milliseconds):
@@ -167,10 +177,17 @@ class BoidGPU:
 
 
     # Move the boid on the screen based on the new velocity and position
-    def updateBoid(self, position, velocity, colour, boidID):
+    def updateBoid(self, position, velocity, _colour, boidID):
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
+        # Specify the boid fill colour based on the debug flag
+        if self.config['colourCode']:
+            colour = _colour
+        else:
+            colour = "red"
+
+        # Update boid
         self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], 
             points[5], points[6], points[7])
         self.canvas.itemconfig("B" + str(boidID), fill = colour) 

@@ -12,38 +12,23 @@ import math                         # Used to calculate the square root for norm
 # A class representing an individual boid
 class Boid:
 
-    def __init__(self, boidGPU, _boidCPU, _boidID, initPosition, _colour):
+    def __init__(self, _boidGPU, _boidCPU, _boidID, initPosition, initVelocity, _colour):
         self.boidCPU = _boidCPU
+        self.boidGPU = _boidGPU
+
         self.logger = self.boidCPU.logger
 
         # Make the system configuration list available
         self.config = self.boidCPU.config
 
-        # Colour the boids based on their original boidCPU if debugging
-        if self.config['colourCode']:
-            self.colour = _colour
-            self.outlineColour = _colour
-            self.boidWidth = 2
-        else:
-            self.colour = "red"
-            self.outlineColour = "white"
-            self.boidWidth = 1
-
-        # Create the boids
+        # Create the boid
         self.boidID = _boidID
-        # self.bearing = np.pi
-        # self.step = 10
-        self.boidGPU = boidGPU
         self.position = initPosition
-
+        self.velocity = initVelocity
         self.neighbouringBoids = []
 
-        self.randomVelX = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
-        self.randomVelY = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
-        self.velocity = np.array([self.randomVelX, self.randomVelY], dtype = np.float_)
-
         # Draw the boid
-        self.boidGPU.createBoid(self.position, self.velocity, self.colour, self.outlineColour, self.boidWidth, self.boidID)
+        self.boidGPU.createBoid(self.position, self.velocity, _colour, self.boidID)
 
         self.logger.debug("Created boid with ID " + str(self.boidID))
 
@@ -88,16 +73,9 @@ class Boid:
         self.containBoids()
 
 
-    # Move the boid to the calculate positon
+    # Move the boid to the calculated positon
     def draw(self, colour):
-
-        # Specify the boid fill colour based on the debug flag
-        if self.config['colourCode']:
-            self.fillColour = colour
-        else:
-            self.fillColour = "red"
-
-        self.boidGPU.updateBoid(self.position, self.velocity, self.fillColour, self.boidID)
+        self.boidGPU.updateBoid(self.position, self.velocity, colour, self.boidID)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
