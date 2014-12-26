@@ -19,6 +19,8 @@ import time                         # Used to time stuff
 #         direct neighbour of the current boidCPU which the boid resides in
 # FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup). Also happens 
 #         when the load balancing isn't done
+# FIXME: Boids sometimes escape the boundaries and then come back later (I think). Possible because 
+#         their own driving forces are stronger than the constraining ones?
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Enhance load balancing algorithm 1 so that BoidCPUs can be queried on proposed change
@@ -249,14 +251,23 @@ class Simulation:
             self.boidGPU.togglePauseButton(True)
             self.simulationStep()
 
-    def changeBoidAlignment(self):
-        print "Boid alignment changed"
 
-    def changeBoidCohesion(self):
-        print "Boid cohesion changed"
+    # Change the boid aligment weighting
+    def changeBoidAlignment(self, value):
+        self.config['ALIGNMENT_WEIGHT'] = float(value)
+        self.logger.debug("Boid alignment changed to " + str(value))
 
-    def changeBoidSeparation(self):
-        print "Boid separation changed"
+
+    # Change the boid cohesion weighting
+    def changeBoidCohesion(self, value):
+        self.config['COHESION_WEIGHT'] = float(value)
+        self.logger.debug("Boid cohesion changed to " + str(value))
+
+
+    # Change the boid separation weighting
+    def changeBoidSeparation(self, value):
+        self.config['REPULSION_WEIGHT'] = float(value)
+        self.logger.debug("Boid separation changed to " + str(value))
 
 
     # Setup logging

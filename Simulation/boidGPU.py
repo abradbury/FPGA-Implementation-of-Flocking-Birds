@@ -44,26 +44,30 @@ class BoidGPU:
         self.graphButton.grid(row = 4, column  = 1, columnspan = 2)
 
         # Create the boid rule weighting sliders
-        minRuleValue = 0
-        maxRuleValue = 10
+        minRuleValue = 1
+        maxRuleValue = 5
+        resolution = 0.1
 
         self.alignmentLabel = Label(frame, text = "Alignment: ")
         self.alignmentLabel.grid(row = 5, column = 1, sticky = E)
-        self.alignmentScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, 
-            orient = HORIZONTAL, command = self.simulation.changeBoidAlignment())
+        self.alignmentScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
+            HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidAlignment)
         self.alignmentScale.grid(row = 5, column = 2, sticky = W)
+        self.alignmentScale.set(self.config['ALIGNMENT_WEIGHT'])
 
         self.cohesionLabel = Label(frame, text = "Cohesion: ")
         self.cohesionLabel.grid(row = 6, column = 1, sticky = E)
-        self.cohesionScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, 
-            orient = HORIZONTAL, command = self.simulation.changeBoidCohesion())
+        self.cohesionScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
+            HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidCohesion)
         self.cohesionScale.grid(row = 6, column = 2, sticky = W)
+        self.cohesionScale.set(self.config['COHESION_WEIGHT'])
 
         self.separationLabel = Label(frame, text = "Separation: ")
         self.separationLabel.grid(row = 7, column = 1, sticky = E)
-        self.separationScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, 
-            orient = HORIZONTAL, command = self.simulation.changeBoidSeparation())
+        self.separationScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
+            HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidSeparation)
         self.separationScale.grid(row = 7, column = 2, sticky = W)
+        self.separationScale.set(self.config['REPULSION_WEIGHT'])
 
         # Add the time step counter
         self.counterLabel = Label(frame, text = "Time step: ")
