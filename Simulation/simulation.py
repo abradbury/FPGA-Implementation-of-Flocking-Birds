@@ -83,6 +83,7 @@ class Simulation:
 
         # Boid movement parameters
         self.config['MAX_VELOCITY'] = 10
+        self.config['MAX_FORCE'] = 0.1             # Determines how sharply a boid can turn
         self.config['VISION_RADIUS'] = 116      # Currently set to the width of a BoidGPU
 
         self.config['ALIGNMENT_WEIGHT'] = 1
@@ -268,6 +269,24 @@ class Simulation:
     def changeBoidSeparation(self, value):
         self.config['REPULSION_WEIGHT'] = float(value)
         self.logger.debug("Boid separation changed to " + str(value))
+
+
+    # Change the boid vision radius
+    def changeVisionRadius(self, value):
+        self.config['VISION_RADIUS'] = int(value)
+        self.logger.debug("Boid vision radius changed to " + str(value))
+
+
+    # Change the maximum boid velocity
+    def changeMaxVelocity(self, value):
+        self.config['MAX_VELOCITY'] = int(value)
+        self.logger.debug("Boid maximum velocity changed to " + str(value))
+
+
+    # Change the maximum boid force
+    def changeMaxForce(self, value):
+        self.config['MAX_FORCE'] = float(value)
+        self.logger.debug("Boid maximum force changed to " + str(value))
 
 
     # Setup logging

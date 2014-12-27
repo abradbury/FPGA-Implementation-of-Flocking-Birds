@@ -20,64 +20,115 @@ class BoidGPU:
         self.root = Tk()
         self.root.wm_title("Boid Simulation")
 
+        # Row counter
+        r = 1
+
         frame = Frame(self.root)
-        frame.grid(row = 1, rowspan = 20, column = 3)
+        frame.grid(row = r, rowspan = 20, column = 3)
         
         self.canvas = Canvas(frame, bg = "black", width = self.config['width'], 
             height = self.config['height'])
-        self.canvas.grid(row = 1, rowspan = 20, column = 3);
+        self.canvas.grid(row = r, rowspan = 20, column = 3);
         
         # Place the title
-        self.title = Label(frame, text = "Flocking Boid Simulator", font = "Helvetica 14 bold underline")
-        self.title.grid(row  = 1, column = 1, columnspan = 2)
+        self.title = Label(frame, text = "Flocking Boid Simulator", font = "Helvetica 16 bold underline")
+        self.title.grid(row = r, column = 1, columnspan = 2)
 
         # Create the simulation buttons
+        r += 1
         self.timeButton = Button(frame, text = "Next Time Step", 
             command = self.simulation.nextStepButton)
-        self.timeButton.grid(row = 2, column = 1, columnspan = 2)
+        self.timeButton.grid(row = r, column = 1, columnspan = 2)
 
+        r += 1
         self.pauseButton = Button(frame, text = "Begin Simulation", command = self.simulation.pause)
-        self.pauseButton.grid(row = 3, column = 1, columnspan = 2)
+        self.pauseButton.grid(row = r, column = 1, columnspan = 2)
 
+        r += 1
         self.graphButton = Button(frame, text = "Update Graphs", 
             command = self.simulation.updateGraphs)
-        self.graphButton.grid(row = 4, column  = 1, columnspan = 2)
+        self.graphButton.grid(row = r, column  = 1, columnspan = 2)
 
         # Create the boid rule weighting sliders
+        r += 1
+        self.heading1 = Label(frame, text = "Boid Rule Weightings", font = "Helvetica 14 bold underline")
+        self.heading1.grid(row = r, column = 1, columnspan = 2)
+
         minRuleValue = 1
         maxRuleValue = 5
         resolution = 0.1
 
+        r += 1
         self.alignmentLabel = Label(frame, text = "Alignment: ")
-        self.alignmentLabel.grid(row = 5, column = 1, sticky = E)
+        self.alignmentLabel.grid(row = r, column = 1, sticky = E)
         self.alignmentScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
             HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidAlignment)
-        self.alignmentScale.grid(row = 5, column = 2, sticky = W)
+        self.alignmentScale.grid(row = r, column = 2, sticky = W)
         self.alignmentScale.set(self.config['ALIGNMENT_WEIGHT'])
 
+        r += 1
         self.cohesionLabel = Label(frame, text = "Cohesion: ")
-        self.cohesionLabel.grid(row = 6, column = 1, sticky = E)
+        self.cohesionLabel.grid(row = r, column = 1, sticky = E)
         self.cohesionScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
             HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidCohesion)
-        self.cohesionScale.grid(row = 6, column = 2, sticky = W)
+        self.cohesionScale.grid(row = r, column = 2, sticky = W)
         self.cohesionScale.set(self.config['COHESION_WEIGHT'])
 
+        r += 1
         self.separationLabel = Label(frame, text = "Separation: ")
-        self.separationLabel.grid(row = 7, column = 1, sticky = E)
+        self.separationLabel.grid(row = r, column = 1, sticky = E)
         self.separationScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
             HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidSeparation)
-        self.separationScale.grid(row = 7, column = 2, sticky = W)
+        self.separationScale.grid(row = r, column = 2, sticky = W)
         self.separationScale.set(self.config['REPULSION_WEIGHT'])
 
+        # Other boid parameters
+        r += 1
+        self.heading1 = Label(frame, text = "Other Boid Parameters", font = "Helvetica 14 bold underline")
+        self.heading1.grid(row = r, column = 1, columnspan = 2)
+
+        r += 1
+        minVisionRadius = 10
+        maxVisionRadius = 200
+        self.visionRadiusLabel = Label(frame, text = "Vision Radius: ")
+        self.visionRadiusLabel.grid(row = r, column = 1, sticky = E)
+        self.visionRadius = Scale(frame, from_ = minVisionRadius, to = maxVisionRadius, orient = 
+            HORIZONTAL, command = self.simulation.changeVisionRadius)
+        self.visionRadius.grid(row = r, column = 2, sticky = W)
+        self.visionRadius.set(self.config['VISION_RADIUS'])
+
+        r += 1
+        minVelocity = 1
+        maxVelocity = 100
+        self.maxVelocityLabel = Label(frame, text = "Max Velocity: ")
+        self.maxVelocityLabel.grid(row = r, column = 1, sticky = E)
+        self.maxVelocityScale = Scale(frame, from_ = minVelocity, to = maxVelocity, orient = 
+            HORIZONTAL, command = self.simulation.changeMaxVelocity)
+        self.maxVelocityScale.grid(row = r, column = 2, sticky = W)
+        self.maxVelocityScale.set(self.config['MAX_VELOCITY'])
+
+        r += 1
+        minForce = 0
+        maxForce = 2
+        resolution = 0.01
+        self.maxForceLabel = Label(frame, text = "Max Force: ")
+        self.maxForceLabel.grid(row = r, column = 1, sticky = E)
+        self.maxForceScale = Scale(frame, from_ = minForce, to = maxForce, orient = 
+            HORIZONTAL, resolution = resolution, command = self.simulation.changeMaxForce)
+        self.maxForceScale.grid(row = r, column = 2, sticky = W)
+        self.maxForceScale.set(self.config['MAX_FORCE'])
+
         # Add the time step counter
+        r += 1
         self.counterLabel = Label(frame, text = "Time step: ")
-        self.counterLabel.grid(row = 8, column = 1, sticky = E)
+        self.counterLabel.grid(row = 19, column = 1, sticky = E)
         self.counter = Label(frame, text = 0, width = 6)
-        self.counter.grid(row = 8, column = 2, sticky = W)
+        self.counter.grid(row = 19, column = 2, sticky = W)
 
         # And finally add the quit button
+        r += 1
         self.quitButton = Button(frame, text = "Quit", command = frame.quit)
-        self.quitButton.grid(row = 9, column = 1, columnspan = 2)
+        self.quitButton.grid(row = 20, column = 1, columnspan = 2)
 
         # Needed so that the canvas sizes can be used later
         self.root.update()
