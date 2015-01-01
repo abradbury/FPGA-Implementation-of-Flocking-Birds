@@ -239,7 +239,7 @@ class BoidCPU:
                             counter += 1
 
         # Remove the BoidGPU grid
-        # self.boidGPU.removeBoidCPUGrid()
+        # self.boidGPU.removeObject("gridLines")
 
 
     # Analyses the distribution of boids for the current BoidCPU to determine which edges should be 

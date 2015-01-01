@@ -118,6 +118,16 @@ class BoidGPU:
         self.maxForceScale.grid(row = r, column = 2, sticky = W)
         self.maxForceScale.set(self.config['MAX_FORCE'])
 
+        r += 1
+        self.trackBoidLabel = Label(frame, text = "Track Boid: ")
+        self.trackBoidLabel.grid(row = r, column = 1, sticky = E)
+        self.trackBoidCheck = Checkbutton(frame, onvalue = True, offvalue = False, command = self.simulation.toggleTrackBoid)
+        self.trackBoidCheck.grid(row = r, column = 2, sticky = W)
+        if self.config['trackBoid']:
+            self.trackBoidCheck.select()
+        else:
+            self.trackBoidCheck.deselect()
+
         # Add the time step counter
         r += 1
         self.counterLabel = Label(frame, text = "Time step: ")
@@ -328,5 +338,8 @@ class BoidGPU:
 
     def removeBoidCPUGrid(self):
         self.canvas.delete("gridLines")
+
+    def removeObject(self, tag):
+        self.canvas.delete(tag)
 
 

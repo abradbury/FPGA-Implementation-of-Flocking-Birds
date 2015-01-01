@@ -83,12 +83,12 @@ class Simulation:
 
         # Boid movement parameters
         self.config['MAX_VELOCITY'] = 10
-        self.config['MAX_FORCE'] = 0.1             # Determines how sharply a boid can turn
-        self.config['VISION_RADIUS'] = 116      # Currently set to the width of a BoidGPU
+        self.config['MAX_FORCE'] = 1             # Determines how sharply a boid can turn
+        self.config['VISION_RADIUS'] = 100      # Currently set to the width of a BoidGPU
 
         self.config['ALIGNMENT_WEIGHT'] = 1
         self.config['COHESION_WEIGHT'] = 1
-        self.config['REPULSION_WEIGHT'] = 1.1
+        self.config['REPULSION_WEIGHT'] = 1
 
         # Setup logging
         self.setupLogging()
@@ -287,6 +287,12 @@ class Simulation:
     def changeMaxForce(self, value):
         self.config['MAX_FORCE'] = float(value)
         self.logger.debug("Boid maximum force changed to " + str(value))
+
+    # Toggle the track boid status
+    def toggleTrackBoid(self):
+        self.config['trackBoid'] = not self.config['trackBoid']
+        self.boidGPU.removeObject("boidCircle" + str(self.config['boidToTrack']))
+        print("Tracking boid changed to " + str(self.config['trackBoid']))
 
 
     # Setup logging
