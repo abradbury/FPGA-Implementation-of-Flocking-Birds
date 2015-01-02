@@ -14,7 +14,7 @@ import random                       # Used to randomly position the boids on ini
 # BoidCPU's space, they are transfered to a neighbouring BoidCPU.
 class BoidCPU:
 
-    def __init__(self, boidGPU, _simulation, _boidCPUID, _boidCPUCoords, _initialBoidCount, _colour, _gridPosition):
+    def __init__(self, boidGPU, _simulation, _boidCPUID, _boidCPUCoords, _initialBoidCount, _gridPosition):
         self.simulation = _simulation
         self.boidCPUID = _boidCPUID
         self.boidCPUCoords = np.copy(_boidCPUCoords)
@@ -35,9 +35,11 @@ class BoidCPU:
         self.yData = []
         self.y2Data = []
 
-        # If the boidCPU bounds are to be coloured differently, use the given colour 
+        # If the boidCPU bounds are to be coloured differently, generate a random colour
+        # From: http://stackoverflow.com/a/14019260 
         if self.config['colourCode']:
-            self.colour = _colour
+            r = lambda: random.randint(0,255)
+            self.colour = str('#%02X%02X%02X' % (r(),r(),r()))
         else:  
             self.colour = "yellow"
 

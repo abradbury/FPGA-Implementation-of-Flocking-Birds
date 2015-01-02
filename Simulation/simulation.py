@@ -14,13 +14,10 @@ import time                         # Used to time stuff
 
 ## MUST DOs ========================================================================================
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
-# FIXME: Obstacle avoidance does not seem to work well
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
 #         direct neighbour of the current boidCPU which the boid resides in
 # FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup). Also happens 
-#         when the load balancing isn't done
-# FIXME: Boids sometimes escape the boundaries and then come back later (I think). Possible because 
-#         their own driving forces are stronger than the constraining ones?
+#         when the load balancing isn't done. Happens on the bottom and right edges. 
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Enhance load balancing algorithm 1 so that BoidCPUs can be queried on proposed change
@@ -28,11 +25,9 @@ import time                         # Used to time stuff
 
 ## MAY DOs =========================================================================================
 # TODO: Add keybinding to capture return key and simulate button press
-# TODO: Add acceleration to smooth movement (especially around borders)
 # TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding
 
 # TODO: Only allow boids to see in front of them when looking at neighbours
-# TODO: Add something so the boids can't immediately change direction - they have to turn
 
 
 # Load Balancing Types ==============================================================================
@@ -71,7 +66,7 @@ class Simulation:
         self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
         
         # Debugging parameters
-        self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
+        self.config['colourCode'] = True       # True to colour boids based on their BoidCPU
         self.config['trackBoid'] = True         # True to track the specified boid and neighbours
         self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
         
@@ -107,9 +102,6 @@ class Simulation:
         self.calcTimings = []
         self.drawTimings = []
 
-        self.boidCPUColours = ["red", "blue", "green", "yellow", "white", "magenta", "dark grey", 
-            "cyan", "dark green"]
-
         self.boidCPUCoords = np.array([0, 0, 0, 0])
         for i in range(0, self.boidCPUCount):
             self.boidCPUCoords[0] = (i % 3) * self.boidCPUSize
@@ -121,7 +113,7 @@ class Simulation:
             self.boidCPUGridPos = [int(np.floor(i / 3)), (i % 3)]
 
             loc = BoidCPU(self.boidGPU, self, i + 1, self.boidCPUCoords, self.initialBoidCount, 
-                self.boidCPUColours[i], self.boidCPUGridPos)
+                self.boidCPUGridPos)
             self.boidCPUs.append(loc)
 
         # Setup variables to keep track of how many boidCPUs exceed the boid threshold
@@ -203,24 +195,44 @@ class Simulation:
     # hard-coded list of neighbours tailored to the asking boidCPU. Ideally, the neighbours would 
     # be calculated in a programmatic way.
     def getNeighbouringBoidCPUs(self, boidCPUID):
+        # if boidCPUID == 1:
+        #     self.neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
+        # elif boidCPUID == 2:
+        #     self.neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
+        # elif boidCPUID == 3:
+        #     self.neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
+        # elif boidCPUID == 4:
+        #     self.neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
+        # elif boidCPUID == 5:
+        #     self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
+        # elif boidCPUID == 6:
+        #     self.neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
+        # elif boidCPUID == 7:
+        #     self.neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
+        # elif boidCPUID == 8:
+        #     self.neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
+        # elif boidCPUID == 9:
+        #     self.neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
+
+        # Use these if the boundaries are wrap-around
         if boidCPUID == 1:
-            self.neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
+            self.neighbouringBoidCPUs = [9, 7, 8, 2, 5, 4, 6, 3]
         elif boidCPUID == 2:
-            self.neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
+            self.neighbouringBoidCPUs = [7, 8, 9, 3, 6, 5, 4, 1]
         elif boidCPUID == 3:
-            self.neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
+            self.neighbouringBoidCPUs = [8, 9, 7, 1, 4, 6, 5, 2]
         elif boidCPUID == 4:
-            self.neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
+            self.neighbouringBoidCPUs = [3, 1, 2, 5, 8, 7, 9, 6]
         elif boidCPUID == 5:
             self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
         elif boidCPUID == 6:
-            self.neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
+            self.neighbouringBoidCPUs = [2, 3, 1, 4, 7, 9, 8, 5]
         elif boidCPUID == 7:
-            self.neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
+            self.neighbouringBoidCPUs = [6, 4, 5, 8, 2, 1, 3, 9]
         elif boidCPUID == 8:
-            self.neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
+            self.neighbouringBoidCPUs = [4, 5, 6, 9, 3, 2, 1, 7]
         elif boidCPUID == 9:
-            self.neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
+            self.neighbouringBoidCPUs = [5, 6, 4, 7, 1, 3, 2, 8]
 
         return self.neighbouringBoidCPUs
 
@@ -292,7 +304,7 @@ class Simulation:
     def toggleTrackBoid(self):
         self.config['trackBoid'] = not self.config['trackBoid']
         self.boidGPU.removeObject("boidCircle" + str(self.config['boidToTrack']))
-        print("Tracking boid changed to " + str(self.config['trackBoid']))
+        self.logger.debug("Tracking boid changed to " + str(self.config['trackBoid']))
 
 
     # Setup logging
