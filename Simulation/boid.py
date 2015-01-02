@@ -39,7 +39,7 @@ class Boid:
 
         for boid in possibleNeighbours:
             if boid.boidID != self.boidID:
-                dist = np.linalg.norm(boid.position - self.position)
+                dist = self.distanceBetweenTwoPoints(self.position, boid.position)
                 if dist < self.config['VISION_RADIUS']:
                     self.neighbouringBoids.append(boid)
 
@@ -268,6 +268,14 @@ class Boid:
         if self.absolute(vector) > maximum:
             vector = self.normalise(vector) * maximum
         return vector
+
+
+    def distanceBetweenTwoPoints(self, u, v):
+        if len(u) == 2:
+            result = math.sqrt(((u[0] - v[0]) ** 2) + ((u[1] - v[1]) ** 2))
+        elif len(u) == 3:
+            result = math.sqrt(((u[0] - v[0]) ** 2) + ((u[1] - v[1]) ** 2) + ((u[2] - v[2]) ** 2))
+        return result
 
 
     # Calculates the shortest distance from a boid to a boundary line
