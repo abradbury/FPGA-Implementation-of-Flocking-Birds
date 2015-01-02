@@ -43,27 +43,37 @@ class BoidCPU:
         else:  
             self.colour = "yellow"
 
-        # # Draw the boidCPU bounds
+        # Draw the boidCPU bounds
         self.boidGPU.drawBoidCPU(self.boidCPUCoords, self.boidCPUID, self.colour)
 
-        # Draw the boidCPU's boids
-        for i in range (0, self.boidCount):
-            # Randomly position the boid on initialisation
-            self.posX = random.randint(self.boidCPUCoords[0], self.boidCPUCoords[2]);
-            self.posY = random.randint(self.boidCPUCoords[1], self.boidCPUCoords[3]);
-            self.position = np.array([self.posX, self.posY], dtype = np.float_)
+        # If testing, use a known boid setup, else use a random setup
+        if self.config['useTestingSetup']:
+            # Get the boid details from the test state
+            for boidInfo in self.config['testState'][self.boidCPUID - 1]:
+                position = np.array(boidInfo[1])
+                velocity = np.array(boidInfo[2])
 
-            # Randomly generate the boid's initial velocity
-            self.velX = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
-            self.velY = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
-            self.velocity = np.array([self.velX, self.velY], dtype = np.float_)
+                # Create the boid and add to list
+                boid = Boid(self.boidGPU, self, boidInfo[0], position, velocity, self.colour)
+                self.boids.append(boid)
+        else:
+            for i in range (0, self.boidCount):
+                # Randomly position the boid on initialisation
+                posX = random.randint(self.boidCPUCoords[0], self.boidCPUCoords[2]);
+                posY = random.randint(self.boidCPUCoords[1], self.boidCPUCoords[3]);
+                position = np.array([posX, posY], dtype = np.float_)
 
-            # Specify the boid's ID
-            self.boidID = ((self.boidCPUID - 1) * self.boidCount) + i + 1
+                # Randomly generate the boid's initial velocity
+                velX = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
+                velY = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
+                velocity = np.array([velX, velY], dtype = np.float_)
 
-            # Create the boid and add to boid list
-            boid = Boid(self.boidGPU, self, self.boidID, self.position, self.velocity, self.colour)
-            self.boids.append(boid)
+                # Specify the boid's ID
+                boidID = ((self.boidCPUID - 1) * self.boidCount) + i + 1
+
+                # Create the boid and add to boid list
+                boid = Boid(self.boidGPU, self, boidID, position, velocity, self.colour)
+                self.boids.append(boid)
 
         self.logger.info("Created boidCPU " + str(self.boidCPUID) + " with " + 
             str(self.boidCount) + " boids") 
@@ -121,6 +131,18 @@ class BoidCPU:
                 self.neighbouringBoids += self.simulation.getBoidCPUBoids(boidCPUIndex)
 
         return self.neighbouringBoids
+
+
+    # Used to return the state of the initial setup of the boids for testing purposes
+    def saveState(self):
+        self.savedState = []
+
+        for boid in self.boids:
+            boidState = [boid.boidID, boid.position.tolist(), boid.velocity.tolist()]
+            self.savedState.append(boidState)
+
+        # print self.savedState
+        return self.savedState
 
 
     ################################################################################################

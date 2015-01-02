@@ -16,8 +16,6 @@ import time                         # Used to time stuff
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
 #         direct neighbour of the current boidCPU which the boid resides in
-# FIXME: Boids sometimes jump over the boidCPUs boundaries (i.e. temporary speedup). Also happens 
-#         when the load balancing isn't done. Happens on the bottom and right edges. 
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Enhance load balancing algorithm 1 so that BoidCPUs can be queried on proposed change
@@ -85,6 +83,11 @@ class Simulation:
         self.config['COHESION_WEIGHT'] = 1
         self.config['REPULSION_WEIGHT'] = 1
 
+        # Define the testing state
+        self.config['useTestingSetup'] = False   # True to use a known initial setup
+        if self.config['useTestingSetup']:
+            self.configureKnownInitialSetup()   # Makes the known initial setup available
+
         # Setup logging
         self.setupLogging()
 
@@ -115,7 +118,7 @@ class Simulation:
 
             # Create the BoidCPU and add to list
             loc = BoidCPU(self.boidGPU, self, i + 1, self.boidCPUCoords, self.initialBoidCount, 
-                self.boidCPUGridPos)
+                    self.boidCPUGridPos)
             self.boidCPUs.append(loc)
 
         # Setup variables to keep track of how many boidCPUs exceed the boid threshold
@@ -571,6 +574,76 @@ class Simulation:
         self.summaryAxis.autoscale_view()
 
         self.summaryFigure.canvas.draw()
+
+
+    ################################################################################################
+    ## Testing Functions -------------------------------------------------------------------------##
+    ################################################################################################
+
+    # Used to print out a string to the commandline which can be used to recreate the starting 
+    # conditions of the simulation.
+    def saveState(self):
+        savedState = [0 for i in range(0, self.boidCPUCount)]
+        for boidCPU in self.boidCPUs:
+            savedState[boidCPU.boidCPUID - 1] = boidCPU.saveState()
+        print savedState
+
+
+    # Makes the known test state available in the configuration list
+    def configureKnownInitialSetup(self):
+        self.config['testState'] = ([[[1, [106.0, 5.0], [2.0, -5.0]], [2, [227.0, 76.0], [-6.0, 2.0]], 
+            [3, [106.0, 44.0], [-7.0, 0.0]], [4, [7.0, 152.0], [-4.0, 10.0]], 
+            [5, [168.0, 7.0], [1.0, 5.0]], [6, [158.0, 199.0], [10.0, -9.0]], 
+            [7, [136.0, 79.0], [-1.0, 5.0]], [8, [224.0, 127.0], [6.0, -2.0]], 
+            [9, [155.0, 70.0], [-4.0, -5.0]], [10, [129.0, 81.0], [0.0, 2.0]]],
+
+            [[11, [406.0, 193.0], [8.0, -3.0]], [12, [357.0, 111.0], [8.0, 4.0]], 
+            [13, [293.0, 46.0], [6.0, 7.0]], [14, [476.0, 99.0], [-7.0, 0.0]], 
+            [15, [294.0, 28.0], [10.0, 10.0]], [16, [271.0, 179.0], [9.0, 1.0]], 
+            [17, [403.0, 194.0], [7.0, 9.0]], [18, [412.0, 110.0], [9.0, -6.0]], 
+            [19, [391.0, 69.0], [-1.0, -1.0]], [20, [454.0, 115.0], [-8.0, 8.0]]], 
+
+            [[21, [495.0, 129.0], [3.0, -10.0]], [22, [699.0, 156.0], [4.0, -9.0]], 
+            [23, [651.0, 233.0], [7.0, 3.0]], [24, [657.0, 98.0], [-5.0, -7.0]], 
+            [25, [571.0, 29.0], [-3.0, -4.0]], [26, [718.0, 25.0], [-6.0, -10.0]], 
+            [27, [640.0, 173.0], [-4.0, 5.0]], [28, [634.0, 35.0], [3.0, -5.0]], 
+            [29, [594.0, 193.0], [2.0, -10.0]], [30, [657.0, 151.0], [6.0, -9.0]]],
+
+            [[31, [180.0, 273.0], [10.0, 3.0]], [32, [174.0, 397.0], [-9.0, 9.0]], 
+            [33, [165.0, 383.0], [-7.0, 3.0]], [34, [224.0, 329.0], [0.0, 6.0]], 
+            [35, [13.0, 267.0], [8.0, -10.0]], [36, [235.0, 361.0], [-9.0, 9.0]], 
+            [37, [192.0, 283.0], [1.0, -6.0]], [38, [176.0, 478.0], [7.0, -2.0]], 
+            [39, [53.0, 314.0], [1.0, -4.0]], [40, [123.0, 484.0], [-1.0, 1.0]]], 
+
+            [[41, [283.0, 390.0], [8.0, 8.0]], [42, [478.0, 382.0], [7.0, 7.0]], 
+            [43, [335.0, 267.0], [-3.0, 4.0]], [44, [338.0, 244.0], [-3.0, -2.0]], 
+            [45, [479.0, 313.0], [4.0, -1.0]], [46, [337.0, 288.0], [7.0, 1.0]], 
+            [47, [324.0, 455.0], [5.0, -2.0]], [48, [272.0, 389.0], [-9.0, 10.0]], 
+            [49, [356.0, 270.0], [-2.0, -5.0]], [50, [263.0, 362.0], [-6.0, 7.0]]],
+
+            [[51, [695.0, 252.0], [-5.0, -9.0]], [52, [594.0, 404.0], [-10.0, -1.0]], 
+            [53, [550.0, 350.0], [-10.0, -3.0]], [54, [661.0, 446.0], [-6.0, -4.0]], 
+            [55, [539.0, 283.0], [-8.0, -2.0]], [56, [551.0, 256.0], [-5.0, 7.0]], 
+            [57, [644.0, 342.0], [-1.0, -7.0]], [58, [592.0, 399.0], [-9.0, 6.0]], 
+            [59, [644.0, 252.0], [-5.0, -8.0]], [60, [687.0, 478.0], [-9.0, 9.0]]],
+
+            [[61, [23.0, 565.0], [10.0, -9.0]], [62, [85.0, 550.0], [9.0, -1.0]], 
+            [63, [115.0, 549.0], [7.0, 1.0]], [64, [2.0, 506.0], [-9.0, -10.0]], 
+            [65, [50.0, 499.0], [-1.0, 3.0]], [66, [1.0, 524.0], [6.0, -9.0]], 
+            [67, [66.0, 613.0], [-10.0, -4.0]], [68, [171.0, 520.0], [5.0, -8.0]], 
+            [69, [117.0, 516.0], [4.0, 0.0]], [70, [49.0, 637.0], [-6.0, 6.0]]], 
+
+            [[71, [387.0, 605.0], [5.0, -6.0]], [72, [322.0, 655.0], [4.0, 8.0]], 
+            [73, [342.0, 498.0], [-6.0, -1.0]], [74, [392.0, 577.0], [3.0, -2.0]], 
+            [75, [468.0, 534.0], [-4.0, 8.0]], [76, [331.0, 529.0], [5.0, -7.0]], 
+            [77, [348.0, 608.0], [-9.0, 6.0]], [78, [455.0, 705.0], [-1.0, -1.0]], 
+            [79, [404.0, 653.0], [10.0, -5.0]], [80, [246.0, 505.0], [-1.0, -3.0]]],
+
+            [[81, [501.0, 678.0], [5.0, 0.0]], [82, [711.0, 681.0], [-7.0, 5.0]], 
+            [83, [638.0, 622.0], [-4.0, -9.0]], [84, [649.0, 628.0], [9.0, -4.0]], 
+            [85, [710.0, 722.0], [-10.0, -9.0]], [86, [510.0, 603.0], [10.0, 7.0]], 
+            [87, [569.0, 695.0], [4.0, 10.0]], [88, [718.0, 520.0], [-4.0, 10.0]], 
+            [89, [726.0, 717.0], [4.0, 8.0]], [90, [713.0, 573.0], [-3.0, 5.0]]]])
 
 
 if __name__ == '__main__':

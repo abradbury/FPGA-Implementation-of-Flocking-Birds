@@ -23,7 +23,7 @@ class Boid:
 
         # Initial position and velocity supplied by BoidCPU
         self.position = initPosition
-        self.velocity = np.array([0, 0], dtype = np.float_)
+        self.velocity = initVelocity
         self.acceleration = np.array([0, 0], dtype = np.float_)
 
         # Create the boid
