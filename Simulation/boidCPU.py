@@ -70,38 +70,38 @@ class BoidCPU:
 
 
     # Calculate the next positions of every boid in the boidCPU. Then determine if any of the boids 
-    # need to be transferred to neighbouring boidCPUs based on their new positions. Finally, draw 
-    # the new positions of the boids.
-    def update(self, draw):
-        if draw == False:
-            self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
+    # need to be transferred to neighbouring boidCPUs based on their new positions. 
+    def update(self):
+        self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
 
-            # For each boid, calculate its new position
-            for i in range(0, self.boidCount):
-                self.boids[i].update(self.possibleNeighbouringBoids)
+        # For each boid, calculate its new position
+        for i in range(0, self.boidCount):
+            self.boids[i].update(self.possibleNeighbouringBoids)
 
-            # If the number of boids in the boidCPU are greater than a threshold, signal controller
-            if self.config['loadBalance']:
-                if self.boidCount >= self.config['BOID_THRESHOLD']:
+        # If the number of boids in the boidCPU are greater than a threshold, signal controller
+        if self.config['loadBalance']:
+            if self.boidCount >= self.config['BOID_THRESHOLD']:
 
-                    # Analyse the distribution of the boids in this BoidCPU to determine the step
-                    if (self.config['loadBalanceType'] == 2) or (self.config['loadBalanceType'] == 3): 
-                        self.createBoidDistribution()
-                        requestedChange = self.analyseBoidDistribution()
-                    elif self.config['loadBalanceType'] == 1: 
-                        requestedChange = None
+                # Analyse the distribution of the boids in this BoidCPU to determine the step
+                if (self.config['loadBalanceType'] == 2) or (self.config['loadBalanceType'] == 3): 
+                    self.createBoidDistribution()
+                    requestedChange = self.analyseBoidDistribution()
+                elif self.config['loadBalanceType'] == 1: 
+                    requestedChange = None
 
-                    self.simulation.boidCPUOverloaded(self.boidCPUID, requestedChange)
+                self.simulation.boidCPUOverloaded(self.boidCPUID, requestedChange)
 
-                    # self.simulation.boidCPUOverloaded(self.boidCPUID)
+                # self.simulation.boidCPUOverloaded(self.boidCPUID)
 
-            # Determine if the new positions of the boids lie outside the boidCPU's bounds
-            for boid in self.boids:
-                self.determineBoidTransfer(boid)
+        # Determine if the new positions of the boids lie outside the boidCPU's bounds
+        for boid in self.boids:
+            self.determineBoidTransfer(boid)
             
-        else:
-            for i in range(0, self.boidCount):
-                self.boids[i].draw(self.colour)
+
+    # Draw the new positions of the boids.
+    def draw(self):
+        for i in range(0, self.boidCount):
+            self.boids[i].draw(self.colour)
 
 
     # Return a list containing the boids currently controlled by this boidCPU
@@ -194,6 +194,8 @@ class BoidCPU:
             " to boidCPU " + str(toID) + " and now has " + str(self.boidCount - 1) + " boids")
 
         self.simulation.transferBoid(boid, toID, self.boidCPUID)
+
+        # Remove the transfered boid from the current BoidCPUs boid list
         self.boids[:] = [b for b in self.boids if b.boidID != boid.boidID]
         self.boidCount -= 1
 

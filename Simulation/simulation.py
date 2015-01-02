@@ -66,7 +66,7 @@ class Simulation:
         self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
         
         # Debugging parameters
-        self.config['colourCode'] = True       # True to colour boids based on their BoidCPU
+        self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
         self.config['trackBoid'] = True         # True to track the specified boid and neighbours
         self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
         
@@ -104,14 +104,16 @@ class Simulation:
 
         self.boidCPUCoords = np.array([0, 0, 0, 0])
         for i in range(0, self.boidCPUCount):
+            # Define the BoidCPU's pixel position
             self.boidCPUCoords[0] = (i % 3) * self.boidCPUSize
             self.boidCPUCoords[1] = int(np.floor(i / 3)) * self.boidCPUSize
             self.boidCPUCoords[2] = self.boidCPUCoords[0] + self.boidCPUSize
             self.boidCPUCoords[3] = self.boidCPUCoords[1] + self.boidCPUSize
 
-            # Define the boidCPU's position in the grid of boidCPUs [row, col]
+            # Define the BoidCPU's position in the grid of BoidCPUs [row, col]
             self.boidCPUGridPos = [int(np.floor(i / 3)), (i % 3)]
 
+            # Create the BoidCPU and add to list
             loc = BoidCPU(self.boidGPU, self, i + 1, self.boidCPUCoords, self.initialBoidCount, 
                 self.boidCPUGridPos)
             self.boidCPUs.append(loc)
@@ -154,7 +156,7 @@ class Simulation:
                         str(self.boidCPUs[i].boidCPUID) + "...")
         
                     # Update the canvas with the new boid positions
-                    self.boidCPUs[i].update(True)
+                    self.boidCPUs[i].draw()
 
                     # Store the number of boids for later plotting
                     self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
@@ -166,7 +168,7 @@ class Simulation:
 
                 # Calculate the next boid positions and time this                
                 self.startTime = time.clock()
-                self.boidCPUs[i].update(False)
+                self.boidCPUs[i].update()
                 self.endTime = time.clock()
 
                 # Store the timing information for later plotting

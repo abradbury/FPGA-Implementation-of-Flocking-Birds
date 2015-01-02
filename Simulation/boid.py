@@ -18,6 +18,9 @@ class Boid:
         self.config = self.boidCPU.config
         self.logger = self.boidCPU.logger
 
+        # True if the boid has had its next position calculated, false otherwise
+        self.processed = False
+
         # Initial position and velocity supplied by BoidCPU
         self.position = initPosition
         self.velocity = np.array([0, 0], dtype = np.float_)
@@ -53,22 +56,27 @@ class Boid:
     # would move based on its neighbours and when one of its neighbouts comes to move it will use 
     # the new position of the original boid, not its original position. 
     def update(self, possibleNeighbouringBoids):
-        self.calculateNeighbours(possibleNeighbouringBoids)
+        # If the boid has not already been processed, calculate its next position.
+        # A boid would already be processed if it was transferred to another BoidCPU
+        if not self.processed:
+            self.calculateNeighbours(possibleNeighbouringBoids)
 
-        # If tracking boid, highlight its neighbouring boids
-        if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
-            for boid in self.neighbouringBoids:
-                self.boidGPU.highlightBoid(True, boid.boidID)
+            # If tracking boid, highlight its neighbouring boids
+            if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
+                for boid in self.neighbouringBoids:
+                    self.boidGPU.highlightBoid(True, boid.boidID)
 
-        # If the boids has neighbours, calculate its next position 
-        if len(self.neighbouringBoids) > 0:
-            self.applyBehaviours()
+            # If the boids has neighbours, calculate its next position 
+            if len(self.neighbouringBoids) > 0:
+                self.applyBehaviours()
 
-        # Calculate the new position of the boid
-        self.calcNewPos()
+            # Calculate the new position of the boid
+            self.calcNewPos()
 
-        # Contain the boids in the simulation area
-        self.containBoids()
+            # Contain the boids in the simulation area
+            self.containBoids()
+
+            self.processed = True
 
 
     def calcNewPos(self):
@@ -104,6 +112,8 @@ class Boid:
     # Move the boid to the calculated positon
     def draw(self, colour):
         self.boidGPU.updateBoid(self.position, self.velocity, colour, self.boidID)
+
+        self.processed = False  # Reset the processed flag for the next simulation step
 
 
     ################################################################################################
