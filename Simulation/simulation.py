@@ -85,6 +85,7 @@ class Simulation:
 
         # Define the testing state
         self.config['useTestingSetup'] = False   # True to use a known initial setup
+        self.config['testingStopPoint'] = 1000  # The timestep to stop the simulation for tests
         if self.config['useTestingSetup']:
             self.configureKnownInitialSetup()   # Makes the known initial setup available
 
@@ -133,6 +134,11 @@ class Simulation:
                     "balancing amounts")
         else:
             self.logger.info("No load balancing will be performed")
+
+        if self.config['useTestingSetup']:
+            self.logger.info("Using testing setup for initialisation")
+        else:
+            self.logger.info("Using random setup for initialisation")
         
         self.logger.info("Press the 'Begin' button to start the simulation")
 
@@ -191,6 +197,13 @@ class Simulation:
 
             # Update the violation list
             self.violationList.append(self.violationCount)
+
+            # If testing, check to see if the simulation has reached the requested number of 
+            # timesteps and if it has pause the simulation and update the graphs
+            if self.config['useTestingSetup']:
+                if self.timeStepCounter == self.config['testingStopPoint']:
+                    self.pause()
+                    self.updateGraphs()
 
             # Call self after 20ms (50 Hz)
             self.boidGPU.nextSimulationStep(self.config['updateInterval'])
