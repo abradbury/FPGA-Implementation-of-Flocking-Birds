@@ -90,10 +90,11 @@ class BoidGPU:
         r += 1
         minVisionRadius = 10
         maxVisionRadius = 200
+        resolution = self.config['stepSize']
         self.visionRadiusLabel = Label(frame, text = "Vision Radius: ")
         self.visionRadiusLabel.grid(row = r, column = 1, sticky = E)
         self.visionRadius = Scale(frame, from_ = minVisionRadius, to = maxVisionRadius, orient = 
-            HORIZONTAL, command = self.simulation.changeVisionRadius)
+            HORIZONTAL, resolution = resolution, command = self.simulation.changeVisionRadius)
         self.visionRadius.grid(row = r, column = 2, sticky = W)
         self.visionRadius.set(self.config['VISION_RADIUS'])
 
@@ -215,6 +216,10 @@ class BoidGPU:
             points[6], points[7], fill = colour, outline = outlineColour, width = boidWidth, 
             tags = ("B" + str(boidID)))
 
+        # Show boid IDs
+        if self.config["showBoidIds"]:
+            self.canvas.create_text(position[0], position[1] - 15, fill = "white", text = str(boidID), tags = ("T" + str(boidID)))
+
 
     def nextSimulationStep(self, milliseconds):
         self.canvas.after(milliseconds, self.simulation.simulationStep)
@@ -252,6 +257,10 @@ class BoidGPU:
         self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], 
             points[5], points[6], points[7])
         self.canvas.itemconfig("B" + str(boidID), fill = colour) 
+
+        # Update the boid's ID
+        if self.config["showBoidIds"]:
+            self.canvas.coords("T" + str(boidID), position[0], position[1] - 15)
 
         # Debugging method - follow a specific boid
         if self.config['trackBoid'] and (boidID == self.config['boidToTrack']):  

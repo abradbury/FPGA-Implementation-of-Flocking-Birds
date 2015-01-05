@@ -13,9 +13,12 @@ import time                         # Used to time stuff
 
 
 ## MUST DOs ========================================================================================
+# FIXME: When load balancing of any form is enabled, the boids behaviour is slightly different. The 
+#         issue is changing a BoidCPUs bounds in changeBounds() - this somehow affects stuff.
+
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
-#         direct neighbour of the current boidCPU which the boid resides in
+#         direct neighbour of the current boidCPU which the boid resides in - affecting the result.
 
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Enhance load balancing algorithm 1 so that BoidCPUs can be queried on proposed change
@@ -26,6 +29,8 @@ import time                         # Used to time stuff
 # TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding
 
 # TODO: Only allow boids to see in front of them when looking at neighbours
+# TODO: Change simulation size to 1080p
+# TODO: Experiment with rectangular BoidCPUs
 
 
 # Load Balancing Types ==============================================================================
@@ -59,19 +64,20 @@ class Simulation:
 
         self.config['width'] = 720              # Define window size
         self.config['height'] = 720
-        self.config['boidCount'] = 90
+        self.config['boidCount'] = 9
         self.config['updateInterval'] = 10      # The interval between successful update calls (ms) 
         self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
-        
+        self.config['loggingLevel'] = logging.ERROR
+
         # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
-        self.config['trackBoid'] = True         # True to track the specified boid and neighbours
-        self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
+        self.config['trackBoid'] = False         # True to track the specified boid and neighbours
+        self.config['boidToTrack'] = 0          # The ID of the boid to track, 0 for all boids
         
         # Load balancing parameters
-        self.config['loadBalance'] = False       # True to enable load balancing
-        self.config['loadBalanceType'] = 3
-        self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
+        self.config['loadBalance'] = True       # True to enable load balancing
+        self.config['loadBalanceType'] = 1      # See notes at top of file
+        self.config['BOID_THRESHOLD'] = 3      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
 
         # Boid movement parameters
@@ -84,10 +90,11 @@ class Simulation:
         self.config['REPULSION_WEIGHT'] = 1
 
         # Define the testing state
-        self.config['useTestingSetup'] = False   # True to use a known initial setup
+        self.config['useTestingSetup'] = True   # True to use a known initial setup
         self.config['testingStopPoint'] = 1000  # The timestep to stop the simulation for tests
         if self.config['useTestingSetup']:
             self.configureKnownInitialSetup()   # Makes the known initial setup available
+        self.config["showBoidIds"] = True
 
         # Setup logging
         self.setupLogging()
@@ -146,6 +153,9 @@ class Simulation:
         self.setupGraphs()
         self.setupSummaryGraph()
 
+        # self.saveState()
+
+
         # Start everything going
         self.boidGPU.beginMainLoop()
 
@@ -154,49 +164,89 @@ class Simulation:
     # paused, it does nothing. 
     def simulationStep(self):
         if self.pauseSimulation == False:
+            
             self.violationCount = 0
 
-            # The draw method is called first to enable a the neighbours of a boid to be highlighted 
-            # when a boid is being followed (during debugging). As no new boid positions have been 
-            # calculated, the draw function isn't called on the first time step.
-            if self.timeStepCounter != 0:
-                for i in range(0, self.boidCPUCount):
-                    self.logger.debug("Moving boids to calculated positions for boidCPU " + 
-                        str(self.boidCPUs[i].boidCPUID) + "...")
-        
-                    # Update the canvas with the new boid positions
-                    self.boidCPUs[i].draw()
 
-                    # Store the number of boids for later plotting
-                    self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
+            # debugBoidList = [0 for i in range(0, self.config['boidCount'])]
+            # for boidCPU in self.boidCPUs:
+            #     self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
 
-            # Update the boid
-            for i in range(0, self.boidCPUCount):
-                self.logger.debug("Calculating next boid positions for boidCPU " + 
-                    str(self.boidCPUs[i].boidCPUID) + "...")
+            #     for boid in boidCPU.boids:
+            #         debugBoidList[boid.boidID - 1] = boid
+                    
+            # for b in debugBoidList:
+            #     self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
 
-                # Calculate the next boid positions and time this                
-                self.startTime = time.clock()
-                self.boidCPUs[i].update()
-                self.endTime = time.clock()
 
-                # Store the timing information for later plotting
-                self.boidCPUs[i].xData.append(self.timeStepCounter)
-                self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
+            # If no load balancing:
+            #   For each BoidCPU
+            #       Calculate new positions of boids
+            #       Transfer external boids to other BoidCPUs
+            #
+            # If load balancing:
+            #   For each BoidCPU:
+            #       Calculate new positions of boids
+            #   Then load balance
+            #   Then transfer boids
 
-                # If the boidCPU is exceeding the threshold, increment counter
-                if self.boidCPUs[i].boidCount > self.config['BOID_THRESHOLD']:
-                    self.violationCount += 1
 
-            self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
-                for loc in self.boidCPUs))
+            self.drawStep()
+            self.calcStep()
+
+
+            debugBoidList = [0 for i in range(0, self.config['boidCount'])]
+            for boidCPU in self.boidCPUs:
+                self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
+
+                for boid in boidCPU.boids:
+                    debugBoidList[boid.boidID - 1] = boid
+                    
+            for b in debugBoidList:
+                self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
+                # b.calculateNeighbours2(debugBoidList)
+
+
+            self.loadStep()
+
+
+            debugBoidList = [0 for i in range(0, self.config['boidCount'])]
+            for boidCPU in self.boidCPUs:
+                self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
+
+                for boid in boidCPU.boids:
+                    debugBoidList[boid.boidID - 1] = boid
+                    
+            for b in debugBoidList:
+                self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
+                # b.calculateNeighbours2(debugBoidList)
+
+
+
+
+            for boidCPU in self.boidCPUs:
+                for boid in boidCPU.boids:
+                    boidCPU.determineBoidTransfer(boid)
+
+
+
+
+
+            debugBoidList = [0 for i in range(0, self.config['boidCount'])]
+            for boidCPU in self.boidCPUs:
+                self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
+
+                for boid in boidCPU.boids:
+                    debugBoidList[boid.boidID - 1] = boid
+                    
+            for b in debugBoidList:
+                self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
+                # b.calculateNeighbours2(debugBoidList)
+
 
             # Update the counter label
             self.timeStepCounter += 1
             self.boidGPU.updateTimeStepLabel(self.timeStepCounter)
-
-            # Update the violation list
-            self.violationList.append(self.violationCount)
 
             # If testing, check to see if the simulation has reached the requested number of 
             # timesteps and if it has pause the simulation and update the graphs
@@ -207,6 +257,83 @@ class Simulation:
 
             # Call self after 20ms (50 Hz)
             self.boidGPU.nextSimulationStep(self.config['updateInterval'])
+
+
+    # The draw method is called first to enable a the neighbours of a boid to be highlighted 
+    # when a boid is being followed (during debugging). As no new boid positions have been 
+    # calculated, the draw function isn't called on the first time step.
+    def drawStep(self):
+        if self.timeStepCounter != 0:
+            self.logger.debug("-"*70)
+
+            for i in range(0, self.boidCPUCount):
+                self.logger.debug("Moving boids to calculated positions for boidCPU " + 
+                    str(self.boidCPUs[i].boidCPUID) + "...")
+    
+                # Update the canvas with the new boid positions
+                self.boidCPUs[i].draw()
+
+                # Store the number of boids for later plotting
+                self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
+
+            
+
+
+    def calcStep(self):
+        self.logger.debug("=" + str(self.timeStepCounter) + "="*65)
+
+        debugBoidList = [0 for i in range(0, self.config['boidCount'])]
+        for boidCPU in self.boidCPUs:
+            self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
+
+            for boid in boidCPU.boids:
+                debugBoidList[boid.boidID - 1] = boid
+                
+        for b in debugBoidList:
+            self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
+            # b.calculateNeighbours2(debugBoidList)
+
+
+
+        for boidCPU in self.boidCPUs:
+            self.logger.debug("Calculating neighbours for BoidCPU #" + str(boidCPU.boidCPUID))
+            boidCPU.getPossibleNeighbouringBoids()
+
+        for boidCPU in self.boidCPUs:
+            boidCPU.setOlds()
+
+
+
+        # Update the boid
+        for i in range(0, self.boidCPUCount):
+            self.logger.debug("Calculating next boid positions for boidCPU " + 
+                str(self.boidCPUs[i].boidCPUID) + "...")
+
+            # Calculate the next boid positions and time this                
+            self.startTime = time.clock()
+            self.boidCPUs[i].update()
+            self.endTime = time.clock()
+
+            # Store the timing information for later plotting
+            self.boidCPUs[i].xData.append(self.timeStepCounter)
+            self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
+
+            # If the boidCPU is exceeding the threshold, increment counter
+            if self.boidCPUs[i].boidCount > self.config['BOID_THRESHOLD']:
+                self.violationCount += 1
+
+        # Update the violation list
+        self.violationList.append(self.violationCount)
+
+        self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
+            for loc in self.boidCPUs))
+
+
+    # If the number of boids in the boidCPU are greater than a threshold, signal controller
+    def loadStep(self):
+        if self.config['loadBalance']:
+            for boidCPU in self.boidCPUs:
+                boidCPU.loadBalance()
 
 
     # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
@@ -328,10 +455,10 @@ class Simulation:
     # Setup logging
     def setupLogging(self):   
         self.logger = logging.getLogger('boidSimulation')
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(self.config['loggingLevel'])
 
         self.ch = logging.StreamHandler()
-        self.ch.setLevel(logging.INFO)
+        self.ch.setLevel(self.config['loggingLevel'])
 
         self.formatter = logging.Formatter("[%(levelname)8s] --- %(message)s")
         self.ch.setFormatter(self.formatter)
@@ -382,21 +509,33 @@ class Simulation:
                 self.boidCPUs[boidCPU[0] - 1].changeBounds(edgeIndex, boidCPU[1], [row, col])
 
 
+        # self.pause()
+
+
     # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
     # the boidCPU would need changing (sides on simulation edge cannot be changed)
     def identifyAffectedBoidCPUs(self, boidCPUID, row, col, requestedChange):
         
-        # If the BoidCPU doesn't specify a request for changing the edge, use 1 step for valid edges
+        # If the BoidCPU doesn't specify a request for changing the edge, use 1 step for all valid 
+        # edges and check that the new size is greater than the minimum needed
         if not requestedChange:
             requestedChange = [0, 0, 0, 0] 
-            if self.boidCPUs[boidCPUID - 1].validEdge(0):       # Top
-                requestedChange[0] = 1
-            if self.boidCPUs[boidCPUID - 1].validEdge(1):       # Right
-                requestedChange[1] = 1
-            if self.boidCPUs[boidCPUID - 1].validEdge(2):       # Bottom
-                requestedChange[2] = 1
-            if self.boidCPUs[boidCPUID - 1].validEdge(3):       # Left
-                requestedChange[3] = 1
+            if self.boidCPUs[boidCPUID - 1].validEdge(0):           # If the BoidCPU has a top edge
+                if self.boidCPUs[boidCPUID - 1].checkNewSize(0):    # If change within constraints
+                    requestedChange[0] = 1                          # Change the top edge
+
+            if self.boidCPUs[boidCPUID - 1].validEdge(1):           # If the BoidCPU has a right edge
+                if self.boidCPUs[boidCPUID - 1].checkNewSize(1):    # If change within constraints
+                    requestedChange[1] = 1                          # Change the right edge
+
+            if self.boidCPUs[boidCPUID - 1].validEdge(2):           # If the BoidCPU has a bottom edge
+                if self.boidCPUs[boidCPUID - 1].checkNewSize(2):    # If change within constraints
+                    requestedChange[2] = 1                          # Change the bottom edge
+
+            if self.boidCPUs[boidCPUID - 1].validEdge(3):           # If the BoidCPU has a left edge
+                if self.boidCPUs[boidCPUID - 1].checkNewSize(3):    # If change within constraints
+                    requestedChange[3] = 1                          # Change the left edge
+
 
         # Create a list that is true if a change is requested for that edge and false otherwise
         edgeChanges = [True if v else False for v in requestedChange]
@@ -604,59 +743,76 @@ class Simulation:
 
     # Makes the known test state available in the configuration list
     def configureKnownInitialSetup(self):
-        self.config['testState'] = ([[[1, [106.0, 5.0], [2.0, -5.0]], [2, [227.0, 76.0], [-6.0, 2.0]], 
-            [3, [106.0, 44.0], [-7.0, 0.0]], [4, [7.0, 152.0], [-4.0, 10.0]], 
-            [5, [168.0, 7.0], [1.0, 5.0]], [6, [158.0, 199.0], [10.0, -9.0]], 
-            [7, [136.0, 79.0], [-1.0, 5.0]], [8, [224.0, 127.0], [6.0, -2.0]], 
-            [9, [155.0, 70.0], [-4.0, -5.0]], [10, [129.0, 81.0], [0.0, 2.0]]],
 
-            [[11, [406.0, 193.0], [8.0, -3.0]], [12, [357.0, 111.0], [8.0, 4.0]], 
-            [13, [293.0, 46.0], [6.0, 7.0]], [14, [476.0, 99.0], [-7.0, 0.0]], 
-            [15, [294.0, 28.0], [10.0, 10.0]], [16, [271.0, 179.0], [9.0, 1.0]], 
-            [17, [403.0, 194.0], [7.0, 9.0]], [18, [412.0, 110.0], [9.0, -6.0]], 
-            [19, [391.0, 69.0], [-1.0, -1.0]], [20, [454.0, 115.0], [-8.0, 8.0]]], 
+        # self.config['testState'] = ([[[1, [106.0, 5.0], [2.0, -5.0]]], 
+        #     [[2, [406.0, 193.0], [8.0, -3.0]]], 
+        #     [[3, [495.0, 129.0], [3.0, -10.0]]], 
+        #     [[4, [180.0, 273.0], [10.0, 3.0]]], 
+        #     [[5, [283.0, 390.0], [8.0, 8.0]]], 
+        #     [[6, [695.0, 252.0], [-5.0, -9.0]]], 
+        #     [[7, [23.0, 565.0], [10.0, -9.0]]], 
+        #     [[8, [387.0, 605.0], [5.0, -6.0]]], 
+        #     [[9, [501.0, 678.0], [5.0, 0.0]]]])
 
-            [[21, [495.0, 129.0], [3.0, -10.0]], [22, [699.0, 156.0], [4.0, -9.0]], 
-            [23, [651.0, 233.0], [7.0, 3.0]], [24, [657.0, 98.0], [-5.0, -7.0]], 
-            [25, [571.0, 29.0], [-3.0, -4.0]], [26, [718.0, 25.0], [-6.0, -10.0]], 
-            [27, [640.0, 173.0], [-4.0, 5.0]], [28, [634.0, 35.0], [3.0, -5.0]], 
-            [29, [594.0, 193.0], [2.0, -10.0]], [30, [657.0, 151.0], [6.0, -9.0]]],
+        # self.config['testState'] = ([[[1, [174.0, 114.0], [9.0, 8.0]]], [[2, [288.0, 20.0], [2.0, 8.0]]], [[3, [507.0, 227.0], [9.0, -8.0]]], [[4, [44.0, 366.0], [-8.0, 0.0]]], [[5, [450.0, 347.0], [1.0, 4.0]]], [[6, [579.0, 467.0], [8.0, -3.0]]], [[7, [168.0, 490.0], [4.0, 9.0]]], [[8, [265.0, 593.0], [-2.0, -9.0]]], [[9, [690.0, 685.0], [-8.0, -7.0]]]])
 
-            [[31, [180.0, 273.0], [10.0, 3.0]], [32, [174.0, 397.0], [-9.0, 9.0]], 
-            [33, [165.0, 383.0], [-7.0, 3.0]], [34, [224.0, 329.0], [0.0, 6.0]], 
-            [35, [13.0, 267.0], [8.0, -10.0]], [36, [235.0, 361.0], [-9.0, 9.0]], 
-            [37, [192.0, 283.0], [1.0, -6.0]], [38, [176.0, 478.0], [7.0, -2.0]], 
-            [39, [53.0, 314.0], [1.0, -4.0]], [40, [123.0, 484.0], [-1.0, 1.0]]], 
+        # self.config['testState'] = ([[[1, [50.0, 113.0], [4.0, 0.0]]], [[2, [374.0, 184.0], [1.0, 0.0]]], [[3, [546.0, 99.0], [9.0, -8.0]]], [[4, [69.0, 326.0], [7.0, -9.0]]], [[5, [305.0, 246.0], [-6.0, 1.0]]], [[6, [697.0, 339.0], [2.0, -8.0]]], [[7, [109.0, 663.0], [2.0, -4.0]]], [[8, [402.0, 589.0], [2.0, 4.0]]], [[9, [539.0, 700.0], [3.0, 3.0]]]])
 
-            [[41, [283.0, 390.0], [8.0, 8.0]], [42, [478.0, 382.0], [7.0, 7.0]], 
-            [43, [335.0, 267.0], [-3.0, 4.0]], [44, [338.0, 244.0], [-3.0, -2.0]], 
-            [45, [479.0, 313.0], [4.0, -1.0]], [46, [337.0, 288.0], [7.0, 1.0]], 
-            [47, [324.0, 455.0], [5.0, -2.0]], [48, [272.0, 389.0], [-9.0, 10.0]], 
-            [49, [356.0, 270.0], [-2.0, -5.0]], [50, [263.0, 362.0], [-6.0, 7.0]]],
+        self.config['testState'] = ([[[1, [176.0, 108.0], [-2.0, 8.0]]], [[2, [467.0, 151.0], [-10.0, -2.0]]], [[3, [542.0, 164.0], [-2.0, -6.0]]], [[4, [186.0, 416.0], [9.0, -10.0]]], [[5, [435.0, 448.0], [0.0, 4.0]]], [[6, [668.0, 406.0], [-7.0, 3.0]]], [[7, [205.0, 552.0], [-6.0, -9.0]]], [[8, [348.0, 540.0], [-5.0, -9.0]]], [[9, [577.0, 534.0], [-9.0, -1.0]]]])
 
-            [[51, [695.0, 252.0], [-5.0, -9.0]], [52, [594.0, 404.0], [-10.0, -1.0]], 
-            [53, [550.0, 350.0], [-10.0, -3.0]], [54, [661.0, 446.0], [-6.0, -4.0]], 
-            [55, [539.0, 283.0], [-8.0, -2.0]], [56, [551.0, 256.0], [-5.0, 7.0]], 
-            [57, [644.0, 342.0], [-1.0, -7.0]], [58, [592.0, 399.0], [-9.0, 6.0]], 
-            [59, [644.0, 252.0], [-5.0, -8.0]], [60, [687.0, 478.0], [-9.0, 9.0]]],
+        # self.config['testState'] = ([[[1, [106.0, 5.0], [2.0, -5.0]], [2, [227.0, 76.0], [-6.0, 2.0]], 
+        #     [3, [106.0, 44.0], [-7.0, 0.0]], [4, [7.0, 152.0], [-4.0, 10.0]], 
+        #     [5, [168.0, 7.0], [1.0, 5.0]], [6, [158.0, 199.0], [10.0, -9.0]], 
+        #     [7, [136.0, 79.0], [-1.0, 5.0]], [8, [224.0, 127.0], [6.0, -2.0]], 
+        #     [9, [155.0, 70.0], [-4.0, -5.0]], [10, [129.0, 81.0], [0.0, 2.0]]],
 
-            [[61, [23.0, 565.0], [10.0, -9.0]], [62, [85.0, 550.0], [9.0, -1.0]], 
-            [63, [115.0, 549.0], [7.0, 1.0]], [64, [2.0, 506.0], [-9.0, -10.0]], 
-            [65, [50.0, 499.0], [-1.0, 3.0]], [66, [1.0, 524.0], [6.0, -9.0]], 
-            [67, [66.0, 613.0], [-10.0, -4.0]], [68, [171.0, 520.0], [5.0, -8.0]], 
-            [69, [117.0, 516.0], [4.0, 0.0]], [70, [49.0, 637.0], [-6.0, 6.0]]], 
+        #     [[11, [406.0, 193.0], [8.0, -3.0]], [12, [357.0, 111.0], [8.0, 4.0]], 
+        #     [13, [293.0, 46.0], [6.0, 7.0]], [14, [476.0, 99.0], [-7.0, 0.0]], 
+        #     [15, [294.0, 28.0], [10.0, 10.0]], [16, [271.0, 179.0], [9.0, 1.0]], 
+        #     [17, [403.0, 194.0], [7.0, 9.0]], [18, [412.0, 110.0], [9.0, -6.0]], 
+        #     [19, [391.0, 69.0], [-1.0, -1.0]], [20, [454.0, 115.0], [-8.0, 8.0]]], 
 
-            [[71, [387.0, 605.0], [5.0, -6.0]], [72, [322.0, 655.0], [4.0, 8.0]], 
-            [73, [342.0, 498.0], [-6.0, -1.0]], [74, [392.0, 577.0], [3.0, -2.0]], 
-            [75, [468.0, 534.0], [-4.0, 8.0]], [76, [331.0, 529.0], [5.0, -7.0]], 
-            [77, [348.0, 608.0], [-9.0, 6.0]], [78, [455.0, 705.0], [-1.0, -1.0]], 
-            [79, [404.0, 653.0], [10.0, -5.0]], [80, [246.0, 505.0], [-1.0, -3.0]]],
+        #     [[21, [495.0, 129.0], [3.0, -10.0]], [22, [699.0, 156.0], [4.0, -9.0]], 
+        #     [23, [651.0, 233.0], [7.0, 3.0]], [24, [657.0, 98.0], [-5.0, -7.0]], 
+        #     [25, [571.0, 29.0], [-3.0, -4.0]], [26, [718.0, 25.0], [-6.0, -10.0]], 
+        #     [27, [640.0, 173.0], [-4.0, 5.0]], [28, [634.0, 35.0], [3.0, -5.0]], 
+        #     [29, [594.0, 193.0], [2.0, -10.0]], [30, [657.0, 151.0], [6.0, -9.0]]],
 
-            [[81, [501.0, 678.0], [5.0, 0.0]], [82, [711.0, 681.0], [-7.0, 5.0]], 
-            [83, [638.0, 622.0], [-4.0, -9.0]], [84, [649.0, 628.0], [9.0, -4.0]], 
-            [85, [710.0, 722.0], [-10.0, -9.0]], [86, [510.0, 603.0], [10.0, 7.0]], 
-            [87, [569.0, 695.0], [4.0, 10.0]], [88, [718.0, 520.0], [-4.0, 10.0]], 
-            [89, [726.0, 717.0], [4.0, 8.0]], [90, [713.0, 573.0], [-3.0, 5.0]]]])
+        #     [[31, [180.0, 273.0], [10.0, 3.0]], [32, [174.0, 397.0], [-9.0, 9.0]], 
+        #     [33, [165.0, 383.0], [-7.0, 3.0]], [34, [224.0, 329.0], [0.0, 6.0]], 
+        #     [35, [13.0, 267.0], [8.0, -10.0]], [36, [235.0, 361.0], [-9.0, 9.0]], 
+        #     [37, [192.0, 283.0], [1.0, -6.0]], [38, [176.0, 478.0], [7.0, -2.0]], 
+        #     [39, [53.0, 314.0], [1.0, -4.0]], [40, [123.0, 484.0], [-1.0, 1.0]]], 
+
+        #     [[41, [283.0, 390.0], [8.0, 8.0]], [42, [478.0, 382.0], [7.0, 7.0]], 
+        #     [43, [335.0, 267.0], [-3.0, 4.0]], [44, [338.0, 244.0], [-3.0, -2.0]], 
+        #     [45, [479.0, 313.0], [4.0, -1.0]], [46, [337.0, 288.0], [7.0, 1.0]], 
+        #     [47, [324.0, 455.0], [5.0, -2.0]], [48, [272.0, 389.0], [-9.0, 10.0]], 
+        #     [49, [356.0, 270.0], [-2.0, -5.0]], [50, [263.0, 362.0], [-6.0, 7.0]]],
+
+        #     [[51, [695.0, 252.0], [-5.0, -9.0]], [52, [594.0, 404.0], [-10.0, -1.0]], 
+        #     [53, [550.0, 350.0], [-10.0, -3.0]], [54, [661.0, 446.0], [-6.0, -4.0]], 
+        #     [55, [539.0, 283.0], [-8.0, -2.0]], [56, [551.0, 256.0], [-5.0, 7.0]], 
+        #     [57, [644.0, 342.0], [-1.0, -7.0]], [58, [592.0, 399.0], [-9.0, 6.0]], 
+        #     [59, [644.0, 252.0], [-5.0, -8.0]], [60, [687.0, 478.0], [-9.0, 9.0]]],
+
+        #     [[61, [23.0, 565.0], [10.0, -9.0]], [62, [85.0, 550.0], [9.0, -1.0]], 
+        #     [63, [115.0, 549.0], [7.0, 1.0]], [64, [2.0, 506.0], [-9.0, -10.0]], 
+        #     [65, [50.0, 499.0], [-1.0, 3.0]], [66, [1.0, 524.0], [6.0, -9.0]], 
+        #     [67, [66.0, 613.0], [-10.0, -4.0]], [68, [171.0, 520.0], [5.0, -8.0]], 
+        #     [69, [117.0, 516.0], [4.0, 0.0]], [70, [49.0, 637.0], [-6.0, 6.0]]], 
+
+        #     [[71, [387.0, 605.0], [5.0, -6.0]], [72, [322.0, 655.0], [4.0, 8.0]], 
+        #     [73, [342.0, 498.0], [-6.0, -1.0]], [74, [392.0, 577.0], [3.0, -2.0]], 
+        #     [75, [468.0, 534.0], [-4.0, 8.0]], [76, [331.0, 529.0], [5.0, -7.0]], 
+        #     [77, [348.0, 608.0], [-9.0, 6.0]], [78, [455.0, 705.0], [-1.0, -1.0]], 
+        #     [79, [404.0, 653.0], [10.0, -5.0]], [80, [246.0, 505.0], [-1.0, -3.0]]],
+
+        #     [[81, [501.0, 678.0], [5.0, 0.0]], [82, [711.0, 681.0], [-7.0, 5.0]], 
+        #     [83, [638.0, 622.0], [-4.0, -9.0]], [84, [649.0, 628.0], [9.0, -4.0]], 
+        #     [85, [710.0, 722.0], [-10.0, -9.0]], [86, [510.0, 603.0], [10.0, 7.0]], 
+        #     [87, [569.0, 695.0], [4.0, 10.0]], [88, [718.0, 520.0], [-4.0, 10.0]], 
+        #     [89, [726.0, 717.0], [4.0, 8.0]], [90, [713.0, 573.0], [-3.0, 5.0]]]])
 
 
 if __name__ == '__main__':
