@@ -1,4 +1,8 @@
 #include "boidCPU.h"
+#include "boid.h"
+
+#define MAX_VELOCITY	10
+#define MAX_BOIDS		30
 
 // Function headers
 static void initialisation (void);
@@ -57,7 +61,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 void initialisation() {
 	std::cout << "-Initialising BoidCPU..." << std::endl;
 
-	int id = 6;
+	int boidCPUID = 6;
 	int fpgaID = 123;
 
 	state = IDEN;
@@ -73,6 +77,25 @@ void identify() {
 
 void simulationSetup() {
 	std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
+
+	int8 boidCPUID = 6;
+	int8 boidCPUCoords[4] = {0, 0, 240, 240};
+	int8 initialBoidCount = 10;
+	int8 boidCount = initialBoidCount;
+	Boid boids[MAX_BOIDS];
+
+	for(int8 i = 0; i < boidCount; i++) {
+		Vector position;
+		Vector velocity;
+
+		position.rand2D(boidCPUCoords[0], boidCPUCoords[1], boidCPUCoords[2], boidCPUCoords[3]);
+		velocity.rand2D(-MAX_VELOCITY, MAX_VELOCITY, -MAX_VELOCITY, MAX_VELOCITY);
+
+		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+
+		boid = new Boid(boidID, position, velocity);
+		boids[boidCount] = boid;
+	}
 
 	state = NBRS;
 }
