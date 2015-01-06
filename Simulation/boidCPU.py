@@ -312,7 +312,7 @@ class BoidCPU:
         # TODO: Add limit based on boid vision radius
 
 
-        while numberOfBoidsReleased <= 5:
+        while numberOfBoidsReleased <= self.config['boidsToRelease']:
             if self.validEdge(0) and recalculate[0]:    # Top edge
                 bound = requestedStepChanges[0]
                 boidsReleasedPerEdge[0] = np.sum(self.distribution[bound, :])
