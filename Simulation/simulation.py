@@ -67,7 +67,7 @@ class Simulation:
         self.config['boidCount'] = 9
         self.config['updateInterval'] = 10      # The interval between successful update calls (ms) 
         self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
-        self.config['loggingLevel'] = logging.ERROR
+        self.config['loggingLevel'] = logging.DEBUG
 
         # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
@@ -91,7 +91,7 @@ class Simulation:
 
         # Define the testing state
         self.config['useTestingSetup'] = True   # True to use a known initial setup
-        self.config['testingStopPoint'] = 1000  # The timestep to stop the simulation for tests
+        self.config['testingStopPoint'] = 200  # The timestep to stop the simulation for tests
         if self.config['useTestingSetup']:
             self.configureKnownInitialSetup()   # Makes the known initial setup available
         self.config["showBoidIds"] = True
@@ -103,7 +103,7 @@ class Simulation:
         self.boidGPU = BoidGPU(self)
         self.boidGPU.initialiseSimulation()
 
-        # Create the boidCPUs
+        # Create the BoidCPUs
         self.allowedBoidCPUCounts = np.array([1, 2, 4, 9, 16, 25, 36])
         self.boidCPUCount = self.allowedBoidCPUCounts[3]
         self.initialBoidCount = self.config['boidCount'] / self.boidCPUCount
@@ -112,8 +112,8 @@ class Simulation:
         self.boidCPUs = []
         self.calcTimings = []
         self.drawTimings = []
-
         self.boidCPUCoords = np.array([0, 0, 0, 0])
+
         for i in range(0, self.boidCPUCount):
             # Define the BoidCPU's pixel position
             self.boidCPUCoords[0] = (i % 3) * self.boidCPUSize
@@ -129,10 +129,11 @@ class Simulation:
                     self.boidCPUGridPos)
             self.boidCPUs.append(loc)
 
-        # Setup variables to keep track of how many boidCPUs exceed the boid threshold
+        # Setup variables to keep track of how many BoidCPUs exceed the boid threshold
         self.violationCount = 0
         self.violationList = []
 
+        # Print out setup info for the simulation
         if self.config['loadBalance']:
             if self.config['loadBalanceType'] == 1:
                 self.logger.info("BoidCPUs will signal when overloaded")
@@ -153,8 +154,8 @@ class Simulation:
         self.setupGraphs()
         self.setupSummaryGraph()
 
+        # Print out the state of the boids in the simulation
         # self.saveState()
-
 
         # Start everything going
         self.boidGPU.beginMainLoop()
@@ -167,82 +168,13 @@ class Simulation:
             
             self.violationCount = 0
 
-
-            # debugBoidList = [0 for i in range(0, self.config['boidCount'])]
-            # for boidCPU in self.boidCPUs:
-            #     self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
-
-            #     for boid in boidCPU.boids:
-            #         debugBoidList[boid.boidID - 1] = boid
-                    
-            # for b in debugBoidList:
-            #     self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
-
-
-            # If no load balancing:
-            #   For each BoidCPU
-            #       Calculate new positions of boids
-            #       Transfer external boids to other BoidCPUs
-            #
-            # If load balancing:
-            #   For each BoidCPU:
-            #       Calculate new positions of boids
-            #   Then load balance
-            #   Then transfer boids
-
-
             self.drawStep()
             self.calcStep()
-
-
-            debugBoidList = [0 for i in range(0, self.config['boidCount'])]
-            for boidCPU in self.boidCPUs:
-                self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
-
-                for boid in boidCPU.boids:
-                    debugBoidList[boid.boidID - 1] = boid
-                    
-            for b in debugBoidList:
-                self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
-                # b.calculateNeighbours2(debugBoidList)
-
-
             self.loadStep()
-
-
-            debugBoidList = [0 for i in range(0, self.config['boidCount'])]
-            for boidCPU in self.boidCPUs:
-                self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
-
-                for boid in boidCPU.boids:
-                    debugBoidList[boid.boidID - 1] = boid
-                    
-            for b in debugBoidList:
-                self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
-                # b.calculateNeighbours2(debugBoidList)
-
-
-
 
             for boidCPU in self.boidCPUs:
                 for boid in boidCPU.boids:
                     boidCPU.determineBoidTransfer(boid)
-
-
-
-
-
-            debugBoidList = [0 for i in range(0, self.config['boidCount'])]
-            for boidCPU in self.boidCPUs:
-                self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
-
-                for boid in boidCPU.boids:
-                    debugBoidList[boid.boidID - 1] = boid
-                    
-            for b in debugBoidList:
-                self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
-                # b.calculateNeighbours2(debugBoidList)
-
 
             # Update the counter label
             self.timeStepCounter += 1
@@ -266,67 +198,53 @@ class Simulation:
         if self.timeStepCounter != 0:
             self.logger.debug("-"*70)
 
-            for i in range(0, self.boidCPUCount):
-                self.logger.debug("Moving boids to calculated positions for boidCPU " + 
-                    str(self.boidCPUs[i].boidCPUID) + "...")
+            for boidCPU in self.boidCPUs:
+                self.logger.debug("Drawing boids at calculated positions for BoidCPU #" + 
+                    str(boidCPU.boidCPUID) + "...")
     
                 # Update the canvas with the new boid positions
-                self.boidCPUs[i].draw()
+                boidCPU.draw()
 
                 # Store the number of boids for later plotting
-                self.boidCPUs[i].y2Data.append(self.boidCPUs[i].boidCount)
-
-            
+                boidCPU.y2Data.append(boidCPU.boidCount)
 
 
     def calcStep(self):
         self.logger.debug("=" + str(self.timeStepCounter) + "="*65)
 
-        debugBoidList = [0 for i in range(0, self.config['boidCount'])]
-        for boidCPU in self.boidCPUs:
-            self.logger.debug("BoidCPU #" + str(boidCPU.boidCPUID) + ": coords = " + str(boidCPU.boidCPUCoords))
-
-            for boid in boidCPU.boids:
-                debugBoidList[boid.boidID - 1] = boid
-                
-        for b in debugBoidList:
-            self.logger.debug("Boid #" + str(b.boidID) + ": position = " + str(b.position) + ", velocity = " + str(b.velocity))
-            # b.calculateNeighbours2(debugBoidList)
-
-
-
+        # Calculate the neighbours for each boid
         for boidCPU in self.boidCPUs:
             self.logger.debug("Calculating neighbours for BoidCPU #" + str(boidCPU.boidCPUID))
-            boidCPU.getPossibleNeighbouringBoids()
+            boidCPU.calculateBoidNeighbours()
 
+        # Update the old velocity and positions for the boids
         for boidCPU in self.boidCPUs:
+            self.logger.debug("Updating old boid values")
             boidCPU.setOlds()
 
-
-
-        # Update the boid
-        for i in range(0, self.boidCPUCount):
+        # Update each boid
+        for boidCPU in self.boidCPUs:
             self.logger.debug("Calculating next boid positions for boidCPU " + 
-                str(self.boidCPUs[i].boidCPUID) + "...")
+                str(boidCPU.boidCPUID) + "...")
 
-            # Calculate the next boid positions and time this                
+            # Calculate the next boid positions
             self.startTime = time.clock()
-            self.boidCPUs[i].update()
+            boidCPU.update()
             self.endTime = time.clock()
 
             # Store the timing information for later plotting
-            self.boidCPUs[i].xData.append(self.timeStepCounter)
-            self.boidCPUs[i].yData.append((self.endTime - self.startTime) * 1000)
+            boidCPU.xData.append(self.timeStepCounter)
+            boidCPU.yData.append((self.endTime - self.startTime) * 1000)
 
             # If the boidCPU is exceeding the threshold, increment counter
-            if self.boidCPUs[i].boidCount > self.config['BOID_THRESHOLD']:
+            if boidCPU.boidCount > self.config['BOID_THRESHOLD']:
                 self.violationCount += 1
 
         # Update the violation list
         self.violationList.append(self.violationCount)
 
-        self.logger.debug("BoidCPU boid counts: " + " ".join(str(loc.boidCount) 
-            for loc in self.boidCPUs))
+        self.logger.debug("BoidCPU boid counts: " + " ".join(str(boidCPU.boidCount) 
+            for boidCPU in self.boidCPUs))
 
 
     # If the number of boids in the boidCPU are greater than a threshold, signal controller
@@ -479,7 +397,7 @@ class Simulation:
     #
     # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
     def boidCPUOverloaded(self, boidCPUID, requestedChange):
-        self.logger.debug("BoidCPU " + str(boidCPUID) + " overloaded")
+        self.logger.debug("BoidCPU #" + str(boidCPUID) + " is overloaded")
 
         # Determine the row and column of the boidCPU that is requesting load balancing
         [row, col] = self.boidCPUs[boidCPUID - 1].gridPosition
@@ -507,7 +425,6 @@ class Simulation:
         for edgeIndex, edgeBoidCPUs in enumerate(boidCPUsToChange):
             for boidCPU in edgeBoidCPUs:
                 self.boidCPUs[boidCPU[0] - 1].changeBounds(edgeIndex, boidCPU[1], [row, col])
-
 
         # self.pause()
 
@@ -565,7 +482,6 @@ class Simulation:
                 boidCPUsToChange[1].append([b.boidCPUID, requestedChange[3]])
                 boidCPUsToChangeB[b.boidCPUID - 1].append([1, requestedChange[3]])
 
-
             if edgeChanges[0] and (b.gridPosition[0] == row):
                 boidCPUsToChange[0].append([b.boidCPUID, requestedChange[0]])
                 boidCPUsToChangeB[b.boidCPUID - 1].append([0, requestedChange[0]])
@@ -607,9 +523,10 @@ class Simulation:
         for i in range(0, self.boidCPUCount):
             # Create the subplots and sync the axes
             if i != 0:
-                axis = self.graphFigure.add_subplot(3, 3, i+1, sharex = self.axes[0], sharey = self.axes[0])
+                axis = self.graphFigure.add_subplot(3, 3, i + 1, sharex = self.axes[0], 
+                    sharey = self.axes[0])
             else:
-                axis = self.graphFigure.add_subplot(3, 3, i+1)
+                axis = self.graphFigure.add_subplot(3, 3, i + 1)
 
             axis.set_title("BoidCPU %d" % (i + 1))
             axis.grid(True)

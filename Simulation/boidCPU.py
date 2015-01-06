@@ -75,7 +75,7 @@ class BoidCPU:
                 boid = Boid(self.boidGPU, self, boidID, position, velocity, self.colour)
                 self.boids.append(boid)
 
-        self.logger.info("Created boidCPU " + str(self.boidCPUID) + " with " + 
+        self.logger.info("Created BoidCPU #" + str(self.boidCPUID) + " with " + 
             str(self.boidCount) + " boids") 
 
 
@@ -84,24 +84,13 @@ class BoidCPU:
             boid.setOld()
 
 
-    # Calculate the next positions of every boid in the boidCPU. Then determine if any of the boids 
+    # Calculate the next positions of every boid in the BoidCPU. Then determine if any of the boids 
     # need to be transferred to neighbouring boidCPUs based on their new positions. 
     def update(self):
-        # self.possibleNeighbouringBoids = self.getPossibleNeighbouringBoids()
-
-        self.logger.debug("BoidCPU #" + str(self.boidCPUID) + " has " + str(len(self.boids)) + " boids: " + str([b.boidID for b in self.boids]))
-
-        # For each boid, calculate its new position
-        for i in range(0, self.boidCount):
-            self.logger.debug("Boid #" + str(self.boids[i].boidID) + ":  OLD position = " + str(self.boids[i].position) + ", OLD velocity = " + str(self.boids[i].velocity))
-
-            self.boids[i].update(self.possibleNeighbouringBoids)
-
-            self.logger.debug("Boid #" + str(self.boids[i].boidID) + ":  NEW position = " + str(self.boids[i].position) + ", NEW velocity = " + str(self.boids[i].velocity))
-            # self.boids[i].calculateNeighbours2(self.possibleNeighbouringBoids)
-
-            self.logger.debug("Boid #" + str(self.boids[i].boidID) + " neighbours: " + str([b.position for b in self.boids[i].neighbouringBoids]))
-
+        for boid in self.boids:
+            # self.logger.debug("Boid #" + str(self.boids[i].boidID) + ":  OLD position = " + str(self.boids[i].position) + ", OLD velocity = " + str(self.boids[i].velocity))
+            boid.update(self.possibleNeighbouringBoids)
+            # self.logger.debug("Boid #" + str(self.boids[i].boidID) + ":  NEW position = " + str(self.boids[i].position) + ", NEW velocity = " + str(self.boids[i].velocity))
   
         # # If the number of boids in the boidCPU are greater than a threshold, signal controller
         # if self.config['loadBalance']:
@@ -121,30 +110,28 @@ class BoidCPU:
             self.boids[i].draw(self.colour)
 
 
-    # Return a list containing the boids currently controlled by this boidCPU
+    # Return a list containing the boids currently controlled by this BoidCPU
     def getBoids(self):
         return self.boids[:]
 
 
-    # Return a list containing the boids from each neighbouring boidCPU
-    def getPossibleNeighbouringBoids(self):
+    # Calculate the neighbouring boids for each boid
+    def calculateBoidNeighbours(self):
+        # Get the list of neighbouring BoidCPUs
         self.neighbouringBoidCPUs = self.simulation.getNeighbouringBoidCPUs(self.boidCPUID)
 
-        # Need the slice operation or else updating 
-        self.neighbouringBoids = self.boids[:]
+        # Initialise with the boids from the current BoidCPU
+        # Need the slice operation due to passing by reference
+        self.possibleNeighbouringBoids = self.boids[:]
 
+        # Get the boids from the neighbouring BoidCPUs
         for boidCPUIndex in self.neighbouringBoidCPUs:
             if boidCPUIndex != 0:
-                self.neighbouringBoids += self.simulation.getBoidCPUBoids(boidCPUIndex)[:]
+                self.possibleNeighbouringBoids += self.simulation.getBoidCPUBoids(boidCPUIndex)[:]
 
-        self.possibleNeighbouringBoids = self.neighbouringBoids[:]
-
-
+        # Calculate the neighbouring boids for each boid
         for boid in self.boids:
             boid.calculateNeighbours(self.possibleNeighbouringBoids)
-
-
-        # return self.neighbouringBoids
 
 
     # Used to return the state of the initial setup of the boids for testing purposes
@@ -220,8 +207,8 @@ class BoidCPU:
         self.boids.append(boid)
         self.boidCount += 1
 
-        self.logger.debug("\tBoidCPU " + str(self.boidCPUID) + " accepted boid " + str(boid.boidID) + 
-            " from boidCPU " + str(fromID) + " and now has " + str(self.boidCount) + " boids")
+        self.logger.debug("\tBoidCPU " + str(self.boidCPUID) + " accepted boid " + str(boid.boidID) 
+            + " from boidCPU " + str(fromID) + " and now has " + str(self.boidCount) + " boids")
 
 
     # Transfer a boid from this boidCPU to another boidCPU
@@ -250,8 +237,6 @@ class BoidCPU:
                 requestedChange = None
 
             self.simulation.boidCPUOverloaded(self.boidCPUID, requestedChange)
-
-            # self.simulation.boidCPUOverloaded(self.boidCPUID)
 
 
     # Creates a distribution based on the position of the boids in the current BoidCPU. The 

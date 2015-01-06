@@ -6,7 +6,7 @@ from Tkinter import *               # Used to draw shapes for the simulation
 import numpy as np                  # Used in various mathematical operations
 
 
-# 
+# Handles all the simulation's graphic components and output
 class BoidGPU:
 
     def __init__(self, _simulation):
@@ -345,8 +345,6 @@ class BoidGPU:
             self.canvas.create_line([boidCPUCoords[0], y, boidCPUCoords[2], y], fill = "green", 
                 tags = "gridLines")
 
-    def removeBoidCPUGrid(self):
-        self.canvas.delete("gridLines")
 
     def removeObject(self, tag):
         self.canvas.delete(tag)
