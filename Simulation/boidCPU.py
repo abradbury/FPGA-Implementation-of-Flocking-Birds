@@ -80,17 +80,12 @@ class BoidCPU:
             str(self.boidCount) + " boids") 
 
 
-    # def setOlds(self):
-    #     for boid in self.boids:
-    #         boid.setOld()
-
-
     # Calculate the next positions of every boid in the BoidCPU. Then determine if any of the boids 
     # need to be transferred to neighbouring boidCPUs based on their new positions. 
     def update(self):
         for boid in self.boids:
             # self.logger.debug("Boid #" + str(self.boids[i].BOID_ID) + ":  OLD position = " + str(self.boids[i].position) + ", OLD velocity = " + str(self.boids[i].velocity))
-            boid.update(self.possibleNeighbouringBoids)
+            boid.update()
             # self.logger.debug("Boid #" + str(self.boids[i].BOID_ID) + ":  NEW position = " + str(self.boids[i].position) + ", NEW velocity = " + str(self.boids[i].velocity))
   
         # # If the number of boids in the boidCPU are greater than a threshold, signal controller

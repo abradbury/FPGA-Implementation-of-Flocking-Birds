@@ -57,12 +57,10 @@ class Boid:
     # commit the changes when all the boids have calculated their next move. Otherwise, a boid 
     # would move based on its neighbours and when one of its neighbouts comes to move it will use 
     # the new position of the original boid, not its original position. 
-    def update(self, possibleNeighbouringBoids):
+    def update(self):
         # If the boid has not already been processed, calculate its next position.
         # A boid would already be processed if it was transferred to another BoidCPU
         if not self.processed:
-            # self.calculateNeighbours(possibleNeighbouringBoids)
-
             # If tracking a boid, highlight its neighbouring boids
             if self.config['trackBoid'] and (self.BOID_ID == self.config['boidToTrack']): 
                 for boid in self.neighbouringBoids:
