@@ -7,6 +7,7 @@ from boid import Boid               # Import the Boid class
 import numpy as np                  # Used in various mathematical operations
 import logging                      # Used to handle the textual output
 import random                       # Used to randomly position the boids on initialisation
+import copy                         # Used to copy lists to avoid passing by reference
 
 
 # A class representing a BoidCPU. A BoidCPU is an entity that controls all the 
@@ -54,7 +55,7 @@ class BoidCPU:
                 velocity = np.array(boidInfo[2])
 
                 # Create the boid and add to list
-                boid = Boid(self.boidGPU, self, boidInfo[0], position, velocity, self.colour)
+                boid = Boid(self.boidGPU, self, boidInfo[0], position, velocity, self.colour, False)
                 self.boids.append(boid)
         else:
             for i in range (0, self.boidCount):
@@ -72,16 +73,16 @@ class BoidCPU:
                 boidID = ((self.boidCPUID - 1) * self.boidCount) + i + 1
 
                 # Create the boid and add to boid list
-                boid = Boid(self.boidGPU, self, boidID, position, velocity, self.colour)
+                boid = Boid(self.boidGPU, self, boidID, position, velocity, self.colour, False)
                 self.boids.append(boid)
 
         self.logger.info("Created BoidCPU #" + str(self.boidCPUID) + " with " + 
             str(self.boidCount) + " boids") 
 
 
-    def setOlds(self):
-        for boid in self.boids:
-            boid.setOld()
+    # def setOlds(self):
+    #     for boid in self.boids:
+    #         boid.setOld()
 
 
     # Calculate the next positions of every boid in the BoidCPU. Then determine if any of the boids 
@@ -112,7 +113,11 @@ class BoidCPU:
 
     # Return a list containing the boids currently controlled by this BoidCPU
     def getBoids(self):
-        return self.boids[:]
+        copyOfBoids = []
+        for boid in self.boids:
+            copyOfBoids.append(boid.copy())
+
+        return copyOfBoids
 
 
     # Calculate the neighbouring boids for each boid
@@ -121,13 +126,12 @@ class BoidCPU:
         self.neighbouringBoidCPUs = self.simulation.getNeighbouringBoidCPUs(self.boidCPUID)
 
         # Initialise with the boids from the current BoidCPU
-        # Need the slice operation due to passing by reference
-        self.possibleNeighbouringBoids = self.boids[:]
+        self.possibleNeighbouringBoids = self.getBoids()
 
         # Get the boids from the neighbouring BoidCPUs
         for boidCPUIndex in self.neighbouringBoidCPUs:
             if boidCPUIndex != 0:
-                self.possibleNeighbouringBoids += self.simulation.getBoidCPUBoids(boidCPUIndex)[:]
+                self.possibleNeighbouringBoids += self.simulation.getBoidCPUBoids(boidCPUIndex)
 
         # Calculate the neighbouring boids for each boid
         for boid in self.boids:

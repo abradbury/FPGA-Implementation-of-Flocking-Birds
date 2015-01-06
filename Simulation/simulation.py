@@ -217,11 +217,6 @@ class Simulation:
             self.logger.debug("Calculating neighbours for BoidCPU #" + str(boidCPU.boidCPUID))
             boidCPU.calculateBoidNeighbours()
 
-        # Update the old velocity and positions for the boids
-        for boidCPU in self.boidCPUs:
-            self.logger.debug("Updating old boid values")
-            boidCPU.setOlds()
-
         # Update each boid
         for boidCPU in self.boidCPUs:
             self.logger.debug("Calculating next boid positions for boidCPU " + 
@@ -259,45 +254,45 @@ class Simulation:
     # be calculated in a programmatic way.
     def getNeighbouringBoidCPUs(self, boidCPUID):
         # if boidCPUID == 1:
-        #     self.neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
+        #     neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
         # elif boidCPUID == 2:
-        #     self.neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
+        #     neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
         # elif boidCPUID == 3:
-        #     self.neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
+        #     neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
         # elif boidCPUID == 4:
-        #     self.neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
+        #     neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
         # elif boidCPUID == 5:
-        #     self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
+        #     neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
         # elif boidCPUID == 6:
-        #     self.neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
+        #     neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
         # elif boidCPUID == 7:
-        #     self.neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
+        #     neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
         # elif boidCPUID == 8:
-        #     self.neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
+        #     neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
         # elif boidCPUID == 9:
-        #     self.neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
+        #     neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
 
         # Use these if the boundaries are wrap-around
         if boidCPUID == 1:
-            self.neighbouringBoidCPUs = [9, 7, 8, 2, 5, 4, 6, 3]
+            neighbouringBoidCPUs = [9, 7, 8, 2, 5, 4, 6, 3]
         elif boidCPUID == 2:
-            self.neighbouringBoidCPUs = [7, 8, 9, 3, 6, 5, 4, 1]
+            neighbouringBoidCPUs = [7, 8, 9, 3, 6, 5, 4, 1]
         elif boidCPUID == 3:
-            self.neighbouringBoidCPUs = [8, 9, 7, 1, 4, 6, 5, 2]
+            neighbouringBoidCPUs = [8, 9, 7, 1, 4, 6, 5, 2]
         elif boidCPUID == 4:
-            self.neighbouringBoidCPUs = [3, 1, 2, 5, 8, 7, 9, 6]
+            neighbouringBoidCPUs = [3, 1, 2, 5, 8, 7, 9, 6]
         elif boidCPUID == 5:
-            self.neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
+            neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
         elif boidCPUID == 6:
-            self.neighbouringBoidCPUs = [2, 3, 1, 4, 7, 9, 8, 5]
+            neighbouringBoidCPUs = [2, 3, 1, 4, 7, 9, 8, 5]
         elif boidCPUID == 7:
-            self.neighbouringBoidCPUs = [6, 4, 5, 8, 2, 1, 3, 9]
+            neighbouringBoidCPUs = [6, 4, 5, 8, 2, 1, 3, 9]
         elif boidCPUID == 8:
-            self.neighbouringBoidCPUs = [4, 5, 6, 9, 3, 2, 1, 7]
+            neighbouringBoidCPUs = [4, 5, 6, 9, 3, 2, 1, 7]
         elif boidCPUID == 9:
-            self.neighbouringBoidCPUs = [5, 6, 4, 7, 1, 3, 2, 8]
+            neighbouringBoidCPUs = [5, 6, 4, 7, 1, 3, 2, 8]
 
-        return self.neighbouringBoidCPUs
+        return neighbouringBoidCPUs
 
 
     # Return a list of the boids for a specified boidCPU

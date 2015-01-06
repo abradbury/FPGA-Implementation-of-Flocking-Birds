@@ -5,14 +5,14 @@
 import numpy as np                  # Used in various mathematical operations
 import logging                      # Used to handle the textual output
 import math                         # Used to calculate the square root for normalisation
-import copy
+import copy                         # Used to copy lists to avoid passing by reference
 
 
 # A class representing an individual boid. Based on the model presented by Craig Reynolds in 1986 
 # (http://www.red3d.com/cwr/boids/) and 'The Nature of Code' by Daniel Shiffman.
 class Boid:
 
-    def __init__(self, _boidGPU, _boidCPU, _boidID, initPosition, initVelocity, _colour):
+    def __init__(self, _boidGPU, _boidCPU, _boidID, initPosition, initVelocity, _colour, copy):
         self.boidCPU = _boidCPU
         self.boidGPU = _boidGPU
 
@@ -22,10 +22,7 @@ class Boid:
         # True if the boid has had its next position calculated, false otherwise
         self.processed = False
 
-        # Initial position and velocity supplied by BoidCPU
-        self.oldPosition = initPosition[:]
-        self.oldVelocity = initVelocity[:]
-
+        # Define the initial movement parameters
         self.position = initPosition[:]
         self.velocity = initVelocity[:]
         self.acceleration = np.array([0, 0], dtype = np.float_)
@@ -33,10 +30,13 @@ class Boid:
         # Create the boid
         self.boidID = _boidID        
         self.neighbouringBoids = []
-        self.logger.debug("Created boid with ID " + str(self.boidID))
 
-        # Draw the boid
-        self.boidGPU.createBoid(self.position, self.velocity, _colour, self.boidID)
+        # If the instance is a new boid and not a copy
+        if not copy:
+            self.logger.debug("Created boid with ID " + str(self.boidID))
+
+            # Draw the boid
+            self.boidGPU.createBoid(self.position, self.velocity, _colour, self.boidID)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
@@ -44,7 +44,7 @@ class Boid:
     def calculateNeighbours(self, possibleNeighbours):
         for boid in possibleNeighbours:
             if boid.boidID != self.boidID:
-                dist = self.distanceBetweenTwoPoints(self.oldPosition, boid.oldPosition)
+                dist = self.distanceBetweenTwoPoints(self.position, boid.position)
                 if dist < self.config['VISION_RADIUS']:
                     self.neighbouringBoids.append(boid)
 
@@ -70,7 +70,7 @@ class Boid:
 
             # self.logger.debug("Updating boid #" + str(self.boidID) + " (from BoidCPU #" + str(self.boidCPU.boidCPUID) + ")")
             # for boid in self.neighbouringBoids:
-            #     self.logger.debug("  - Boid #" + str(self.boidID) + " neighbour (Boid #" + str(boid.boidID) + ") has position: " + str(boid.oldPosition))
+            #     self.logger.debug("  - Boid #" + str(self.boidID) + " neighbour (Boid #" + str(boid.boidID) + ") has position: " + str(boid.position))
 
             # If the boids has neighbours, calculate its next position 
             if len(self.neighbouringBoids) > 0:
@@ -85,12 +85,6 @@ class Boid:
             self.processed = True
 
 
-    def setOld(self):
-        # Deep copy is needed here, slicing (shallow copy) is not sufficient
-        self.oldVelocity = copy.deepcopy(self.velocity)
-        self.oldPosition = copy.deepcopy(self.position)
-
-
     def calcNewPos(self):
         # Update and limit the velocity
         self.velocity += self.acceleration
@@ -101,6 +95,15 @@ class Boid:
 
         # Clear acceleration
         self.acceleration *= 0
+
+
+    def copy(self):
+        copyOfPosition = np.copy(self.position)
+        copyOfVelocity = np.copy(self.velocity)
+
+        copyOfBoid = Boid(self.boidGPU, self.boidCPU, self.boidID, copyOfPosition, copyOfVelocity, None, True)
+        
+        return copyOfBoid
 
 
     # Mass could optionally be added here to get different behaviours
@@ -138,7 +141,7 @@ class Boid:
         total = np.array([0, 0], dtype = np.float_)
 
         for boid in self.neighbouringBoids:
-            total += boid.oldVelocity
+            total += boid.velocity
 
         total /= len(self.neighbouringBoids)
         total = self.setMag(total, self.config['MAX_VELOCITY'])
@@ -156,7 +159,7 @@ class Boid:
         total = np.array([0, 0], dtype = np.float_)
 
         for boid in self.neighbouringBoids:
-            diff = self.oldPosition - boid.oldPosition        #  TODO: Check subtraction is right
+            diff = self.position - boid.position        #  TODO: Check subtraction is right
             diff = self.normalise(diff)
             total += diff
 
@@ -173,7 +176,7 @@ class Boid:
         total = 0
 
         for boid in self.neighbouringBoids:
-            total += boid.oldPosition
+            total += boid.position
 
         total /= len(self.neighbouringBoids)
         steer = self.seek(total)
