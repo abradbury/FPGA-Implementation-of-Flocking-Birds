@@ -12,7 +12,7 @@ import copy                         # Used to copy lists to avoid passing by ref
 # (http://www.red3d.com/cwr/boids/) and 'The Nature of Code' by Daniel Shiffman.
 class Boid:
 
-    def __init__(self, _boidGPU, _boidCPU, _boidID, initPosition, initVelocity, _colour, copy):
+    def __init__(self, _boidGPU, _boidCPU, _BOID_ID, initPosition, initVelocity, _colour, copy):
         self.boidCPU = _boidCPU
         self.boidGPU = _boidGPU
 
@@ -28,22 +28,22 @@ class Boid:
         self.acceleration = np.array([0, 0], dtype = np.float_)
 
         # Create the boid
-        self.boidID = _boidID        
+        self.BOID_ID = _BOID_ID        
         self.neighbouringBoids = []
 
         # If the instance is a new boid and not a copy
         if not copy:
-            self.logger.debug("Created boid with ID " + str(self.boidID))
+            self.logger.debug("Created boid with ID " + str(self.BOID_ID))
 
             # Draw the boid
-            self.boidGPU.createBoid(self.position, self.velocity, _colour, self.boidID)
+            self.boidGPU.createBoid(self.position, self.velocity, _colour, self.BOID_ID)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
     # the possible neighbour. Possible neighbouring boids include boids from neighbouring boidCPUs.
     def calculateNeighbours(self, possibleNeighbours):
         for boid in possibleNeighbours:
-            if boid.boidID != self.boidID:
+            if boid.BOID_ID != self.BOID_ID:
                 dist = self.distanceBetweenTwoPoints(self.position, boid.position)
                 if dist < self.config['VISION_RADIUS']:
                     self.neighbouringBoids.append(boid)
@@ -64,13 +64,13 @@ class Boid:
             # self.calculateNeighbours(possibleNeighbouringBoids)
 
             # If tracking a boid, highlight its neighbouring boids
-            if self.config['trackBoid'] and (self.boidID == self.config['boidToTrack']): 
+            if self.config['trackBoid'] and (self.BOID_ID == self.config['boidToTrack']): 
                 for boid in self.neighbouringBoids:
-                    self.boidGPU.highlightBoid(True, boid.boidID)
+                    self.boidGPU.highlightBoid(True, boid.BOID_ID)
 
-            # self.logger.debug("Updating boid #" + str(self.boidID) + " (from BoidCPU #" + str(self.boidCPU.boidCPUID) + ")")
+            # self.logger.debug("Updating boid #" + str(self.BOID_ID) + " (from BoidCPU #" + str(self.boidCPU.BOIDCPU_ID) + ")")
             # for boid in self.neighbouringBoids:
-            #     self.logger.debug("  - Boid #" + str(self.boidID) + " neighbour (Boid #" + str(boid.boidID) + ") has position: " + str(boid.position))
+            #     self.logger.debug("  - Boid #" + str(self.BOID_ID) + " neighbour (Boid #" + str(boid.BOID_ID) + ") has position: " + str(boid.position))
 
             # If the boids has neighbours, calculate its next position 
             if len(self.neighbouringBoids) > 0:
@@ -97,11 +97,13 @@ class Boid:
         self.acceleration *= 0
 
 
+    # Used to create a copy of the current boid. This is needed to get around Python's 
+    # pass-by-reference nature and because deepcopy is unable to copy the boids.
     def copy(self):
         copyOfPosition = np.copy(self.position)
         copyOfVelocity = np.copy(self.velocity)
 
-        copyOfBoid = Boid(self.boidGPU, self.boidCPU, self.boidID, copyOfPosition, copyOfVelocity, None, True)
+        copyOfBoid = Boid(self.boidGPU, self.boidCPU, self.BOID_ID, copyOfPosition, copyOfVelocity, None, True)
         
         return copyOfBoid
 
@@ -127,7 +129,7 @@ class Boid:
 
     # Move the boid to the calculated positon
     def draw(self, colour):
-        self.boidGPU.updateBoid(self.position, self.velocity, colour, self.boidID)
+        self.boidGPU.updateBoid(self.position, self.velocity, colour, self.BOID_ID)
 
         self.processed = False  # Reset the processed flag for the next simulation step
 

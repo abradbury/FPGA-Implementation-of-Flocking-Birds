@@ -197,7 +197,7 @@ class BoidGPU:
     ## Boid Update Functions ---------------------------------------------------------------------##
     ################################################################################################
 
-    def createBoid(self, position, velocity, _colour, boidID):
+    def createBoid(self, position, velocity, _colour, BOID_ID):
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
@@ -214,11 +214,11 @@ class BoidGPU:
         # Draw the boid
         self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], points[5], 
             points[6], points[7], fill = colour, outline = outlineColour, width = boidWidth, 
-            tags = ("B" + str(boidID)))
+            tags = ("B" + str(BOID_ID)))
 
         # Show boid IDs
         if self.config["showBoidIds"]:
-            self.canvas.create_text(position[0], position[1] - 15, fill = "white", text = str(boidID), tags = ("T" + str(boidID)))
+            self.canvas.create_text(position[0], position[1] - 15, fill = "white", text = str(BOID_ID), tags = ("T" + str(BOID_ID)))
 
 
     def nextSimulationStep(self, milliseconds):
@@ -243,7 +243,7 @@ class BoidGPU:
 
 
     # Move the boid on the screen based on the new velocity and position
-    def updateBoid(self, position, velocity, _colour, boidID):
+    def updateBoid(self, position, velocity, _colour, BOID_ID):
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
@@ -254,20 +254,20 @@ class BoidGPU:
             colour = "red"
 
         # Update boid
-        self.canvas.coords("B" + str(boidID), points[0], points[1], points[2], points[3], points[4], 
+        self.canvas.coords("B" + str(BOID_ID), points[0], points[1], points[2], points[3], points[4], 
             points[5], points[6], points[7])
-        self.canvas.itemconfig("B" + str(boidID), fill = colour) 
+        self.canvas.itemconfig("B" + str(BOID_ID), fill = colour) 
 
         # Update the boid's ID
         if self.config["showBoidIds"]:
-            self.canvas.coords("T" + str(boidID), position[0], position[1] - 15)
+            self.canvas.coords("T" + str(BOID_ID), position[0], position[1] - 15)
 
         # Debugging method - follow a specific boid
-        if self.config['trackBoid'] and (boidID == self.config['boidToTrack']):  
-            self.followBoid(position, boidID)
+        if self.config['trackBoid'] and (BOID_ID == self.config['boidToTrack']):  
+            self.followBoid(position, BOID_ID)
         # If boidToTrack is 0, track all boids
         elif self.config['trackBoid'] and not self.config['boidToTrack']:
-            self.followBoid(position, boidID)
+            self.followBoid(position, BOID_ID)
 
 
     # Rotate the specified boid based on its velocity / orientation
@@ -299,21 +299,21 @@ class BoidGPU:
 
     # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
     # coloured blue. Any neighbouring boid is coloured green. 
-    def followBoid(self, position, boidID):
-        self.canvas.delete(("boidCircle" + str(boidID)))
-        self.canvas.itemconfig("B" + str(boidID), fill = "blue")
+    def followBoid(self, position, BOID_ID):
+        self.canvas.delete(("boidCircle" + str(BOID_ID)))
+        self.canvas.itemconfig("B" + str(BOID_ID), fill = "blue")
 
         self.canvas.create_oval(position[0] - self.config['VISION_RADIUS'], 
             position[1] - self.config['VISION_RADIUS'], position[0] + self.config['VISION_RADIUS'], 
-            position[1] + self.config['VISION_RADIUS'], outline = "yellow", tags = ("boidCircle" + str(boidID)))
+            position[1] + self.config['VISION_RADIUS'], outline = "yellow", tags = ("boidCircle" + str(BOID_ID)))
 
 
-    # Highlights or de-highlights a specific boid based on the given boidID
-    def highlightBoid(self, on, boidID):
+    # Highlights or de-highlights a specific boid based on the given BOID_ID
+    def highlightBoid(self, on, BOID_ID):
         if on:
-            self.canvas.itemconfig("B" + str(boidID), fill = "green")
+            self.canvas.itemconfig("B" + str(BOID_ID), fill = "green")
         else:
-            self.canvas.itemconfig("B" + str(boidID), fill = "red")
+            self.canvas.itemconfig("B" + str(BOID_ID), fill = "red")
 
 
     # Draws or updates a line on the screen, depending on if the tag can be found

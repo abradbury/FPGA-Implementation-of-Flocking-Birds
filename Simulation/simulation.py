@@ -76,7 +76,7 @@ class Simulation:
         
         # Load balancing parameters
         self.config['loadBalance'] = True       # True to enable load balancing
-        self.config['loadBalanceType'] = 1      # See notes at top of file
+        self.config['loadBalanceType'] = 2      # See notes at top of file
         self.config['BOID_THRESHOLD'] = 3      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
 
@@ -200,7 +200,7 @@ class Simulation:
 
             for boidCPU in self.boidCPUs:
                 self.logger.debug("Drawing boids at calculated positions for BoidCPU #" + 
-                    str(boidCPU.boidCPUID) + "...")
+                    str(boidCPU.BOIDCPU_ID) + "...")
     
                 # Update the canvas with the new boid positions
                 boidCPU.draw()
@@ -214,13 +214,13 @@ class Simulation:
 
         # Calculate the neighbours for each boid
         for boidCPU in self.boidCPUs:
-            self.logger.debug("Calculating neighbours for BoidCPU #" + str(boidCPU.boidCPUID))
+            self.logger.debug("Calculating neighbours for BoidCPU #" + str(boidCPU.BOIDCPU_ID))
             boidCPU.calculateBoidNeighbours()
 
         # Update each boid
         for boidCPU in self.boidCPUs:
             self.logger.debug("Calculating next boid positions for boidCPU " + 
-                str(boidCPU.boidCPUID) + "...")
+                str(boidCPU.BOIDCPU_ID) + "...")
 
             # Calculate the next boid positions
             self.startTime = time.clock()
@@ -252,52 +252,52 @@ class Simulation:
     # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
     # hard-coded list of neighbours tailored to the asking boidCPU. Ideally, the neighbours would 
     # be calculated in a programmatic way.
-    def getNeighbouringBoidCPUs(self, boidCPUID):
-        # if boidCPUID == 1:
+    def getNeighbouringBoidCPUs(self, BOIDCPU_ID):
+        # if BOIDCPU_ID == 1:
         #     neighbouringBoidCPUs = [0, 0, 0, 2, 5, 4, 0, 0]
-        # elif boidCPUID == 2:
+        # elif BOIDCPU_ID == 2:
         #     neighbouringBoidCPUs = [0, 0, 0, 3, 6, 5, 4, 1]
-        # elif boidCPUID == 3:
+        # elif BOIDCPU_ID == 3:
         #     neighbouringBoidCPUs = [0, 0, 0, 0, 0, 6, 5, 2]
-        # elif boidCPUID == 4:
+        # elif BOIDCPU_ID == 4:
         #     neighbouringBoidCPUs = [0, 1, 2, 5, 8, 7, 0, 0]
-        # elif boidCPUID == 5:
+        # elif BOIDCPU_ID == 5:
         #     neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
-        # elif boidCPUID == 6:
+        # elif BOIDCPU_ID == 6:
         #     neighbouringBoidCPUs = [2, 3, 0, 0, 0, 9, 8, 5]
-        # elif boidCPUID == 7:
+        # elif BOIDCPU_ID == 7:
         #     neighbouringBoidCPUs = [0, 4, 5, 8, 0, 0, 0, 0]
-        # elif boidCPUID == 8:
+        # elif BOIDCPU_ID == 8:
         #     neighbouringBoidCPUs = [4, 5, 6, 9, 0, 0, 0, 7]
-        # elif boidCPUID == 9:
+        # elif BOIDCPU_ID == 9:
         #     neighbouringBoidCPUs = [5, 6, 0, 0, 0, 0, 0, 8]
 
         # Use these if the boundaries are wrap-around
-        if boidCPUID == 1:
+        if BOIDCPU_ID == 1:
             neighbouringBoidCPUs = [9, 7, 8, 2, 5, 4, 6, 3]
-        elif boidCPUID == 2:
+        elif BOIDCPU_ID == 2:
             neighbouringBoidCPUs = [7, 8, 9, 3, 6, 5, 4, 1]
-        elif boidCPUID == 3:
+        elif BOIDCPU_ID == 3:
             neighbouringBoidCPUs = [8, 9, 7, 1, 4, 6, 5, 2]
-        elif boidCPUID == 4:
+        elif BOIDCPU_ID == 4:
             neighbouringBoidCPUs = [3, 1, 2, 5, 8, 7, 9, 6]
-        elif boidCPUID == 5:
+        elif BOIDCPU_ID == 5:
             neighbouringBoidCPUs = [1, 2, 3, 6, 9, 8, 7, 4]
-        elif boidCPUID == 6:
+        elif BOIDCPU_ID == 6:
             neighbouringBoidCPUs = [2, 3, 1, 4, 7, 9, 8, 5]
-        elif boidCPUID == 7:
+        elif BOIDCPU_ID == 7:
             neighbouringBoidCPUs = [6, 4, 5, 8, 2, 1, 3, 9]
-        elif boidCPUID == 8:
+        elif BOIDCPU_ID == 8:
             neighbouringBoidCPUs = [4, 5, 6, 9, 3, 2, 1, 7]
-        elif boidCPUID == 9:
+        elif BOIDCPU_ID == 9:
             neighbouringBoidCPUs = [5, 6, 4, 7, 1, 3, 2, 8]
 
         return neighbouringBoidCPUs
 
 
     # Return a list of the boids for a specified boidCPU
-    def getBoidCPUBoids(self, boidCPUID):
-        return self.boidCPUs[boidCPUID - 1].getBoids()
+    def getBoidCPUBoids(self, BOIDCPU_ID):
+        return self.boidCPUs[BOIDCPU_ID - 1].getBoids()
 
 
     # Transfer a boid from one boidCPU to another
@@ -391,14 +391,14 @@ class Simulation:
     # all the affected BoidCPUs are adjusted in the requested manner.
     #
     # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
-    def boidCPUOverloaded(self, boidCPUID, requestedChange):
-        self.logger.debug("BoidCPU #" + str(boidCPUID) + " is overloaded")
+    def boidCPUOverloaded(self, BOIDCPU_ID, requestedChange):
+        self.logger.debug("BoidCPU #" + str(BOIDCPU_ID) + " is overloaded")
 
         # Determine the row and column of the boidCPU that is requesting load balancing
-        [row, col] = self.boidCPUs[boidCPUID - 1].gridPosition
+        [row, col] = self.boidCPUs[BOIDCPU_ID - 1].gridPosition
 
         # Determine which other BoidCPUs would be affected by this change
-        [boidCPUsToChange, alt] = self.identifyAffectedBoidCPUs(boidCPUID, row, col, requestedChange)
+        [boidCPUsToChange, alt] = self.identifyAffectedBoidCPUs(BOIDCPU_ID, row, col, requestedChange)
 
         # Query the affected BoidCPUs to determine what the effect of the change would be
         if self.config['loadBalanceType'] == 3:
@@ -426,26 +426,26 @@ class Simulation:
 
     # Based on the position of the boidCPU in the simulation grid, determine which of the sides of 
     # the boidCPU would need changing (sides on simulation edge cannot be changed)
-    def identifyAffectedBoidCPUs(self, boidCPUID, row, col, requestedChange):
+    def identifyAffectedBoidCPUs(self, BOIDCPU_ID, row, col, requestedChange):
         
         # If the BoidCPU doesn't specify a request for changing the edge, use 1 step for all valid 
         # edges and check that the new size is greater than the minimum needed
         if not requestedChange:
             requestedChange = [0, 0, 0, 0] 
-            if self.boidCPUs[boidCPUID - 1].validEdge(0):           # If the BoidCPU has a top edge
-                if self.boidCPUs[boidCPUID - 1].checkNewSize(0):    # If change within constraints
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(0):           # If the BoidCPU has a top edge
+                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(0):    # If change within constraints
                     requestedChange[0] = 1                          # Change the top edge
 
-            if self.boidCPUs[boidCPUID - 1].validEdge(1):           # If the BoidCPU has a right edge
-                if self.boidCPUs[boidCPUID - 1].checkNewSize(1):    # If change within constraints
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(1):           # If the BoidCPU has a right edge
+                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(1):    # If change within constraints
                     requestedChange[1] = 1                          # Change the right edge
 
-            if self.boidCPUs[boidCPUID - 1].validEdge(2):           # If the BoidCPU has a bottom edge
-                if self.boidCPUs[boidCPUID - 1].checkNewSize(2):    # If change within constraints
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(2):           # If the BoidCPU has a bottom edge
+                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(2):    # If change within constraints
                     requestedChange[2] = 1                          # Change the bottom edge
 
-            if self.boidCPUs[boidCPUID - 1].validEdge(3):           # If the BoidCPU has a left edge
-                if self.boidCPUs[boidCPUID - 1].checkNewSize(3):    # If change within constraints
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(3):           # If the BoidCPU has a left edge
+                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(3):    # If change within constraints
                     requestedChange[3] = 1                          # Change the left edge
 
 
@@ -453,7 +453,7 @@ class Simulation:
         edgeChanges = [True if v else False for v in requestedChange]
 
         # A structure to hold the BoidCPU edges to change. Used as follows:
-        #  boidCPUsToChange[edgeIndex][boidCPUs][index 0 = boidCPUID, index 1 = stepChange]
+        #  boidCPUsToChange[edgeIndex][boidCPUs][index 0 = BOIDCPU_ID, index 1 = stepChange]
         boidCPUsToChange = [[], [], [], []]
 
         boidCPUsToChangeB = [[] for b in range(self.boidCPUCount)]
@@ -462,36 +462,36 @@ class Simulation:
         # by the requested change and which edges of the boidCPUs would need changing
         for b in self.boidCPUs:
             if edgeChanges[0] and (b.gridPosition[0] == row - 1):
-                boidCPUsToChange[2].append([b.boidCPUID, requestedChange[0]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([2, requestedChange[0]])
+                boidCPUsToChange[2].append([b.BOIDCPU_ID, requestedChange[0]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([2, requestedChange[0]])
 
             if edgeChanges[1] and (b.gridPosition[1] == col + 1):
-                boidCPUsToChange[3].append([b.boidCPUID, requestedChange[1]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([3, requestedChange[1]])
+                boidCPUsToChange[3].append([b.BOIDCPU_ID, requestedChange[1]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([3, requestedChange[1]])
 
             if edgeChanges[2] and (b.gridPosition[0] == row + 1):
-                boidCPUsToChange[0].append([b.boidCPUID, requestedChange[2]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([0, requestedChange[2]])
+                boidCPUsToChange[0].append([b.BOIDCPU_ID, requestedChange[2]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([0, requestedChange[2]])
 
             if edgeChanges[3] and (b.gridPosition[1] == col - 1):
-                boidCPUsToChange[1].append([b.boidCPUID, requestedChange[3]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([1, requestedChange[3]])
+                boidCPUsToChange[1].append([b.BOIDCPU_ID, requestedChange[3]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([1, requestedChange[3]])
 
             if edgeChanges[0] and (b.gridPosition[0] == row):
-                boidCPUsToChange[0].append([b.boidCPUID, requestedChange[0]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([0, requestedChange[0]])
+                boidCPUsToChange[0].append([b.BOIDCPU_ID, requestedChange[0]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([0, requestedChange[0]])
 
             if edgeChanges[1] and (b.gridPosition[1] == col):
-                boidCPUsToChange[1].append([b.boidCPUID, requestedChange[1]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([1, requestedChange[1]])
+                boidCPUsToChange[1].append([b.BOIDCPU_ID, requestedChange[1]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([1, requestedChange[1]])
 
             if edgeChanges[2] and (b.gridPosition[0] == row):
-                boidCPUsToChange[2].append([b.boidCPUID, requestedChange[2]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([2, requestedChange[2]])
+                boidCPUsToChange[2].append([b.BOIDCPU_ID, requestedChange[2]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([2, requestedChange[2]])
 
             if edgeChanges[3] and (b.gridPosition[1] == col):
-                boidCPUsToChange[3].append([b.boidCPUID, requestedChange[3]])
-                boidCPUsToChangeB[b.boidCPUID - 1].append([3, requestedChange[3]])
+                boidCPUsToChange[3].append([b.BOIDCPU_ID, requestedChange[3]])
+                boidCPUsToChangeB[b.BOIDCPU_ID - 1].append([3, requestedChange[3]])
 
         return [boidCPUsToChange, boidCPUsToChangeB]
 
@@ -649,7 +649,7 @@ class Simulation:
     def saveState(self):
         savedState = [0 for i in range(0, self.boidCPUCount)]
         for boidCPU in self.boidCPUs:
-            savedState[boidCPU.boidCPUID - 1] = boidCPU.saveState()
+            savedState[boidCPU.BOIDCPU_ID - 1] = boidCPU.saveState()
         print savedState
 
 

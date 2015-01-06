@@ -15,9 +15,9 @@ import copy                         # Used to copy lists to avoid passing by ref
 # BoidCPU's space, they are transfered to a neighbouring BoidCPU.
 class BoidCPU:
 
-    def __init__(self, boidGPU, _simulation, _boidCPUID, _boidCPUCoords, _initialBoidCount, _gridPosition):
+    def __init__(self, boidGPU, _simulation, _BOIDCPU_ID, _boidCPUCoords, _initialBoidCount, _gridPosition):
         self.simulation = _simulation
-        self.boidCPUID = _boidCPUID
+        self.BOIDCPU_ID = _BOIDCPU_ID
         self.boidCPUCoords = np.copy(_boidCPUCoords)
         self.logger = self.simulation.logger
         self.gridPosition = _gridPosition
@@ -45,12 +45,12 @@ class BoidCPU:
             self.colour = "yellow"
 
         # Draw the boidCPU bounds
-        self.boidGPU.drawBoidCPU(self.boidCPUCoords, self.boidCPUID, self.colour)
+        self.boidGPU.drawBoidCPU(self.boidCPUCoords, self.BOIDCPU_ID, self.colour)
 
         # If testing, use a known boid setup, else use a random setup
         if self.config['useTestingSetup']:
             # Get the boid details from the test state
-            for boidInfo in self.config['testState'][self.boidCPUID - 1]:
+            for boidInfo in self.config['testState'][self.BOIDCPU_ID - 1]:
                 position = np.array(boidInfo[1])
                 velocity = np.array(boidInfo[2])
 
@@ -70,13 +70,13 @@ class BoidCPU:
                 velocity = np.array([velX, velY], dtype = np.float_)
 
                 # Specify the boid's ID
-                boidID = ((self.boidCPUID - 1) * self.boidCount) + i + 1
+                BOID_ID = ((self.BOIDCPU_ID - 1) * self.boidCount) + i + 1
 
                 # Create the boid and add to boid list
-                boid = Boid(self.boidGPU, self, boidID, position, velocity, self.colour, False)
+                boid = Boid(self.boidGPU, self, BOID_ID, position, velocity, self.colour, False)
                 self.boids.append(boid)
 
-        self.logger.info("Created BoidCPU #" + str(self.boidCPUID) + " with " + 
+        self.logger.info("Created BoidCPU #" + str(self.BOIDCPU_ID) + " with " + 
             str(self.boidCount) + " boids") 
 
 
@@ -89,9 +89,9 @@ class BoidCPU:
     # need to be transferred to neighbouring boidCPUs based on their new positions. 
     def update(self):
         for boid in self.boids:
-            # self.logger.debug("Boid #" + str(self.boids[i].boidID) + ":  OLD position = " + str(self.boids[i].position) + ", OLD velocity = " + str(self.boids[i].velocity))
+            # self.logger.debug("Boid #" + str(self.boids[i].BOID_ID) + ":  OLD position = " + str(self.boids[i].position) + ", OLD velocity = " + str(self.boids[i].velocity))
             boid.update(self.possibleNeighbouringBoids)
-            # self.logger.debug("Boid #" + str(self.boids[i].boidID) + ":  NEW position = " + str(self.boids[i].position) + ", NEW velocity = " + str(self.boids[i].velocity))
+            # self.logger.debug("Boid #" + str(self.boids[i].BOID_ID) + ":  NEW position = " + str(self.boids[i].position) + ", NEW velocity = " + str(self.boids[i].velocity))
   
         # # If the number of boids in the boidCPU are greater than a threshold, signal controller
         # if self.config['loadBalance']:
@@ -123,7 +123,7 @@ class BoidCPU:
     # Calculate the neighbouring boids for each boid
     def calculateBoidNeighbours(self):
         # Get the list of neighbouring BoidCPUs
-        self.neighbouringBoidCPUs = self.simulation.getNeighbouringBoidCPUs(self.boidCPUID)
+        self.neighbouringBoidCPUs = self.simulation.getNeighbouringBoidCPUs(self.BOIDCPU_ID)
 
         # Initialise with the boids from the current BoidCPU
         self.possibleNeighbouringBoids = self.getBoids()
@@ -143,7 +143,7 @@ class BoidCPU:
         self.savedState = []
 
         for boid in self.boids:
-            boidState = [boid.boidID, boid.position.tolist(), boid.velocity.tolist()]
+            boidState = [boid.BOID_ID, boid.position.tolist(), boid.velocity.tolist()]
             self.savedState.append(boidState)
 
         # print self.savedState
@@ -157,50 +157,50 @@ class BoidCPU:
     def determineBoidTransfer(self, boid):
         # If the boidCPU has a neighbour to the NORTHWEST and the boid is beyond its northern AND western boundaries
         if (self.neighbouringBoidCPUs[0] != 0) and (boid.position[1] < self.boidCPUCoords[1]) and (boid.position[0] < self.boidCPUCoords[0]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the NORTH and WESTERN boundaries of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the NORTH and WESTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[0])
 
         # If the boidCPU has a neighbour to the NORTHEAST and the boid is beyond its northern AND eastern boundaries
         elif (self.neighbouringBoidCPUs[2] != 0) and (boid.position[1] < self.boidCPUCoords[1]) and (boid.position[0] > self.boidCPUCoords[2]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the NORTH and EASTERN boundaries of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the NORTH and EASTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[2])
 
         # If the boidCPU has a neighbour to the SOUTHEAST and the boid is beyond its southern AND eastern boundaries
         elif (self.neighbouringBoidCPUs[4] != 0) and (boid.position[1] > self.boidCPUCoords[3]) and (boid.position[0] > self.boidCPUCoords[2]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the SOUTHERN and EASTERN boundaries of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the SOUTHERN and EASTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[4])
 
         # If the boidCPU has a neighbour to the SOUTHWEST and the boid is beyond its southern AND western boundaries
         elif (self.neighbouringBoidCPUs[6] != 0) and (boid.position[1] > self.boidCPUCoords[3]) and (boid.position[0] < self.boidCPUCoords[0]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the SOUTHERN and WESTERN boundaries of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the SOUTHERN and WESTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[6])
 
         # If the boidCPU has a neighbour to the NORTH and the boid is beyond its northern boundary
         elif (self.neighbouringBoidCPUs[1] != 0) and (boid.position[1] < self.boidCPUCoords[1]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the NORTH boundary of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the NORTH boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[1])
 
         # If the boidCPU has a neighbour to the EAST and the boid is beyond its eastern boundary
         elif (self.neighbouringBoidCPUs[3] != 0) and (boid.position[0] > self.boidCPUCoords[2]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the EAST boundary of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the EAST boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[3])  
             
         # If the boidCPU has a neighbour to the SOUTH and the boid is beyond its southern boundary
         elif (self.neighbouringBoidCPUs[5] != 0) and (boid.position[1] > self.boidCPUCoords[3]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the SOUTH boundary of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the SOUTH boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[5])
 
         # If the boidCPU has a neighbour to the WEST and the boid is beyond its western boundary
         elif (self.neighbouringBoidCPUs[7] != 0) and (boid.position[0] < self.boidCPUCoords[0]):
-            self.logger.debug("\tBoid " + str(boid.boidID) + 
-                " is beyond the WEST boundary of boidCPU " + str(self.boidCPUID))
+            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+                " is beyond the WEST boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[7])
 
 
@@ -211,19 +211,19 @@ class BoidCPU:
         self.boids.append(boid)
         self.boidCount += 1
 
-        self.logger.debug("\tBoidCPU " + str(self.boidCPUID) + " accepted boid " + str(boid.boidID) 
+        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " accepted boid " + str(boid.BOID_ID) 
             + " from boidCPU " + str(fromID) + " and now has " + str(self.boidCount) + " boids")
 
 
     # Transfer a boid from this boidCPU to another boidCPU
     def transferBoid(self, boid, toID):
-        self.logger.debug("\tBoidCPU " + str(self.boidCPUID) + " sent boid " + str(boid.boidID) + 
+        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " sent boid " + str(boid.BOID_ID) + 
             " to boidCPU " + str(toID) + " and now has " + str(self.boidCount - 1) + " boids")
 
-        self.simulation.transferBoid(boid, toID, self.boidCPUID)
+        self.simulation.transferBoid(boid, toID, self.BOIDCPU_ID)
 
         # Remove the transfered boid from the current BoidCPUs boid list
-        self.boids[:] = [b for b in self.boids if b.boidID != boid.boidID]
+        self.boids[:] = [b for b in self.boids if b.BOID_ID != boid.BOID_ID]
         self.boidCount -= 1
 
 
@@ -240,7 +240,7 @@ class BoidCPU:
             elif self.config['loadBalanceType'] == 1: 
                 requestedChange = None
 
-            self.simulation.boidCPUOverloaded(self.boidCPUID, requestedChange)
+            self.simulation.boidCPUOverloaded(self.BOIDCPU_ID, requestedChange)
 
 
     # Creates a distribution based on the position of the boids in the current BoidCPU. The 
@@ -374,17 +374,17 @@ class BoidCPU:
         # # If the edge to change is the top or the bottom edge, check the proposed BoidCPU height
         # if (edgeID == 0) or (edgeID == 2):
         #     size = (self.boidCPUCoords[3] - self.boidCPUCoords[1]) - self.config['stepSize']
-        #     # print "New height for BoidCPU #" + str(self.boidCPUID) + ": " + str(size)
+        #     # print "New height for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size)
 
         # # If the edge to change is the right or the left edge, check the propsed BoidCPU width
         # elif (edgeID == 1) or (edgeID == 3):
         #     size = (self.boidCPUCoords[2] - self.boidCPUCoords[0]) - self.config['stepSize']
-        #     # print "New width for BoidCPU #" + str(self.boidCPUID) + ": " + str(size)
+        #     # print "New width for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size)
 
         # # Check if the new width/height is less than the constraint
         # if size < 210:
         #     result = False      # The new size is too small
-        #     print "Requested change for BoidCPU #" + str(self.boidCPUID) + " is too small"
+        #     print "Requested change for BoidCPU #" + str(self.BOIDCPU_ID) + " is too small"
         # else:
         #     result = True       # The new size is ok
 
@@ -460,7 +460,7 @@ class BoidCPU:
             if i[0] == 3:
                 t = "left"
 
-            self.logger.debug("\tRequest to change " + t + " of BoidCPU " + str(self.boidCPUID) + 
+            self.logger.debug("\tRequest to change " + t + " of BoidCPU " + str(self.BOIDCPU_ID) + 
                 " by " + str(i[1]) + " step")
 
         # Make a list of the edges that are requested to change
@@ -531,7 +531,7 @@ class BoidCPU:
                     # Increment counter
                     counter += 1
 
-        self.logger.debug("\tBoidCPU " + str(self.boidCPUID) + " would have " + str(counter) + 
+        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " would have " + str(counter) + 
             " boids (" + str(self.boidCount) + " before)")
 
         return [len(self.boids), counter]
@@ -549,45 +549,45 @@ class BoidCPU:
         if row == self.gridPosition[0]:
             if edgeType == 0:         # Top
                 self.boidCPUCoords[1] += stepChange
-                self.logger.debug("\tIncreased the top edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tIncreased the top edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
             elif edgeType == 2:       # Bottom
                 self.boidCPUCoords[3] -= stepChange
-                self.logger.debug("\tDecreased the bottom edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tDecreased the bottom edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
         else:
             if edgeType == 0:         # Top
                 self.boidCPUCoords[1] -= stepChange
-                self.logger.debug("\tDecreased the top edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tDecreased the top edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
             elif edgeType == 2:       # Bottom
                 self.boidCPUCoords[3] += stepChange
-                self.logger.debug("\tIncreased the bottom edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tIncreased the bottom edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
         if col == self.gridPosition[1]:
             if edgeType == 1:         # Right
                 self.boidCPUCoords[2] -= stepChange
-                self.logger.debug("\tDecreased the right edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tDecreased the right edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
             elif edgeType == 3:       # Left
                 self.boidCPUCoords[0] += stepChange
-                self.logger.debug("\tIncreased the left edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tIncreased the left edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
         else:
             if edgeType == 1:         # Right
                 self.boidCPUCoords[2] += stepChange
-                self.logger.debug("\tIncreased the right edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tIncreased the right edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
             elif edgeType == 3:       # Left
                 self.boidCPUCoords[0] -= stepChange
-                self.logger.debug("\tDecreased the left edge of BoidCPU " + str(self.boidCPUID) + 
+                self.logger.debug("\tDecreased the left edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
-        self.boidGPU.updateBoidCPU(self.boidCPUID, self.boidCPUCoords)
+        self.boidGPU.updateBoidCPU(self.BOIDCPU_ID, self.boidCPUCoords)
 
