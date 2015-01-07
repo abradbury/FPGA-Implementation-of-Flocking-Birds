@@ -13,9 +13,6 @@ import time                         # Used to time stuff
 
 
 ## MUST DOs ========================================================================================
-# FIXME: When load balancing of any form is enabled, the boids behaviour is slightly different. The 
-#         issue is changing a BoidCPUs bounds in changeBounds() - this somehow affects stuff.
-
 # FIXME: Boids don't seem to be repelling each other that much, they are on top of one another
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a 
 #         direct neighbour of the current boidCPU which the boid resides in - affecting the result.
@@ -83,6 +80,7 @@ class Simulation:
         self.config['percentageToRemove'] = 0.15
         self.config['boidsToRelease'] = self.config['BOID_THRESHOLD'] - (np.floor(self.config['BOID_THRESHOLD'] * (1 - self.config["percentageToRemove"])))
 
+
         # Boid movement parameters
         self.config['MAX_VELOCITY'] = 10
         self.config['MAX_FORCE'] = 1             # Determines how sharply a boid can turn
@@ -92,12 +90,15 @@ class Simulation:
         self.config['COHESION_WEIGHT'] = 1
         self.config['REPULSION_WEIGHT'] = 1
 
+        self.config['minBoidCPUSize'] = self.config['VISION_RADIUS']
+
+
         # Define the testing state
         self.config['useTestingSetup'] = True   # True to use a known initial setup
         self.config['testingStopPoint'] = 200  # The timestep to stop the simulation for tests
         if self.config['useTestingSetup']:
             self.configureKnownInitialSetup()   # Makes the known initial setup available
-        self.config["showBoidIds"] = True
+        self.config["showBoidIds"] = True       # To show the boid and BoidCPU IDs
 
         # Setup logging
         self.setupLogging()
@@ -143,6 +144,8 @@ class Simulation:
             elif self.config['loadBalanceType'] == 2:
                 self.logger.info("BoidCPUs will analyse boid distribution to request load " +  
                     "balancing amounts")
+            elif self.config['loadBalanceType'] == 3:
+                self.logger.info("BoidCPUs will evaluate requested changes")
         else:
             self.logger.info("No load balancing will be performed")
 
@@ -396,7 +399,6 @@ class Simulation:
     # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
     def boidCPUOverloaded(self, BOIDCPU_ID, requestedChange):
         self.logger.debug("BoidCPU #" + str(BOIDCPU_ID) + " is overloaded")
-        self.printRequestedBoundChange(BOIDCPU_ID, requestedChange)
 
         # Determine the row and column of the boidCPU that is requesting load balancing
         [row, col] = self.boidCPUs[BOIDCPU_ID - 1].gridPosition
@@ -447,22 +449,25 @@ class Simulation:
         # edges and check that the new size is greater than the minimum needed
         if not requestedChange:
             requestedChange = [0, 0, 0, 0] 
-            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(0):          # If the BoidCPU has a top edge
-                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(0):   # If change within constraints
-                    requestedChange[0] = 1                          # Change the top edge
+            change = 1
 
-            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(1):          # If the BoidCPU has a right edge
-                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(1):   # If change within constraints
-                    requestedChange[1] = 1                          # Change the right edge
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(0):           # If the BoidCPU has a top edge
+                if self.boidCPUs[BOIDCPU_ID - 1].minSizeEnforced(0, change): # If change within constraints
+                    requestedChange[0] = change                           # Change the top edge
 
-            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(2):          # If the BoidCPU has a bottom edge
-                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(2):   # If change within constraints
-                    requestedChange[2] = 1                          # Change the bottom edge
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(1):           # If the BoidCPU has a right edge
+                if self.boidCPUs[BOIDCPU_ID - 1].minSizeEnforced(1, change): # If change within constraints
+                    requestedChange[1] = change                           # Change the right edge
 
-            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(3):          # If the BoidCPU has a left edge
-                if self.boidCPUs[BOIDCPU_ID - 1].checkNewSize(3):   # If change within constraints
-                    requestedChange[3] = 1                          # Change the left edge
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(2):           # If the BoidCPU has a bottom edge
+                if self.boidCPUs[BOIDCPU_ID - 1].minSizeEnforced(2, change): # If change within constraints
+                    requestedChange[2] = change                           # Change the bottom edge
 
+            if self.boidCPUs[BOIDCPU_ID - 1].validEdge(3):           # If the BoidCPU has a left edge
+                if self.boidCPUs[BOIDCPU_ID - 1].minSizeEnforced(3, change): # If change within constraints
+                    requestedChange[3] = change                           # Change the left edge
+
+        self.printRequestedBoundChange(BOIDCPU_ID, requestedChange)
 
         # Create a list that is true if a change is requested for that edge and false otherwise
         edgeChanges = [True if v else False for v in requestedChange]

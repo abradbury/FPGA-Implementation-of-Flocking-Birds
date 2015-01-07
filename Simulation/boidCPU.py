@@ -251,6 +251,9 @@ class BoidCPU:
         widthSegments = boidCPUWidth / self.config['stepSize']
         heightSegments = boidCPUHeight / self.config['stepSize']
 
+        self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " width = " + str(boidCPUWidth) + ", height = " + str(boidCPUHeight))
+        self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " coords: " + str(self.boidCPUCoords))
+
         # Draw a grid on for the BoidCPU
         # self.boidGPU.drawBoidCPUGrid(self.boidCPUCoords, widthSegments, heightSegments)
 
@@ -292,10 +295,11 @@ class BoidCPU:
     # TODO: If there is no single maximum, choose the edge that has had the least step changes
     # TODO: Put a limit on the number of step sizes to ensure the BoidCPU doesn't collapse
     def analyseBoidDistribution(self):
-        requestedStepChanges = [0, 0, 0, 0]     # The number of step changes per border
+        proposedChanges = [0, 0, 0, 0]          # The number of step changes per border
         boidsReleasedPerEdge = [0, 0, 0, 0]     # The number of boids released per edge
         recalculate = [True, True, True, True]  # Used to save recalculation if not needed
-        
+        # minSizeReached = [False, False, False, False]                  # True when the BoidCPU is at its minimum
+
         edgeNames = ["TOP", "RIGHT", "BOTTOM", "LEFT"]
 
         distHeight = self.distribution.shape[0]
@@ -303,25 +307,30 @@ class BoidCPU:
 
         numberOfBoidsReleased = 0
 
+        # Each ege is checked to see if it needs recalculating, it is valid for the current BoidCPU 
+        # and that the change does not make the BoidCPU less than the minimum BoidCPU size.
+        while (numberOfBoidsReleased <= self.config['boidsToRelease']):
+            # If step change has not been analysed, the top edge is valid and 
 
-        # TODO: Add limit based on boid vision radius
+            # minEnforcedPerEdge = [self.minSizeEnforced(i, proposedChanges[i] + 1) for i in range(0, 4)]
 
-
-        while numberOfBoidsReleased <= self.config['boidsToRelease']:
-            if self.validEdge(0) and recalculate[0]:    # Top edge
-                bound = requestedStepChanges[0]
+            if recalculate[0] and self.validEdge(0):
+                bound = proposedChanges[0]          # Determine boids released for this change
                 boidsReleasedPerEdge[0] = np.sum(self.distribution[bound, :])
             
-            if self.validEdge(1) and recalculate[1]:    # Right edge
-                bound = requestedStepChanges[1]
+            # If the right edge is valid
+            if recalculate[1] and self.validEdge(1):
+                bound = proposedChanges[1]          # Determine boids released for this change
                 boidsReleasedPerEdge[1] = np.sum(self.distribution[:, distWidth - 1 - bound])
             
-            if self.validEdge(2) and recalculate[2]:    # Bottom edge
-                bound = requestedStepChanges[2]
+            # If the bottom edge is valid
+            if recalculate[2] and self.validEdge(2):
+                bound = proposedChanges[2]          # Determine boids released for this change
                 boidsReleasedPerEdge[2] = np.sum(self.distribution[distHeight - 1 - bound, :])
             
-            if self.validEdge(3) and recalculate[3]:    # Left edge
-                bound = requestedStepChanges[3]
+            # If the left edge is valid
+            if recalculate[3] and self.validEdge(3):
+                bound = proposedChanges[3]          # Determine boids released for this change
                 boidsReleasedPerEdge[3] = np.sum(self.distribution[:, bound])
 
             # Check for all zero values
@@ -330,61 +339,63 @@ class BoidCPU:
                 maxIndex = boidsReleasedPerEdge.index(max(boidsReleasedPerEdge))
 
                 # Increment the step change counter for that edge
-                requestedStepChanges[maxIndex] += 1
+                proposedChanges[maxIndex] += 1
 
-                # Increment the total number of boids release
+                # Update the total number of boids released
                 numberOfBoidsReleased += boidsReleasedPerEdge[maxIndex]
 
-                # Do not recalculate the non-max values
+                # Only recalculate the edge that has just been selected
                 for i, v in enumerate(recalculate):
                     if i != maxIndex:
                         recalculate[i] = False 
                     else:
                         recalculate[i] = True
 
-            # If boidsReleasedPerEdge is all zero, forcably increment the step count of all of the 
-            # valid zero edges by 1 and raise the recalculation barrier
+            # If boidsReleasedPerEdge contains all zeros, forcably increment the step count of all 
+            # of the valid zero edges by 1 and raise the recalculation barrier
             else:
                 if self.validEdge(0):                   # Top
-                    requestedStepChanges[0] += 1
+                    proposedChanges[0] += 1
                     recalculate[0] = True
                 if self.validEdge(1):                   # Right
-                    requestedStepChanges[1] += 1
-                    recalculate[0] = True
+                    proposedChanges[1] += 1
+                    recalculate[1] = True
                 if self.validEdge(2):                   # Bottom
-                    requestedStepChanges[2] += 1
-                    recalculate[0] = True
+                    proposedChanges[2] += 1
+                    recalculate[2] = True
                 if self.validEdge(3):                   # Left
-                    requestedStepChanges[3] += 1
-                    recalculate[0] = True
+                    proposedChanges[3] += 1
+                    recalculate[3] = True
 
-        return requestedStepChanges
+        return proposedChanges
 
 
     # Used to check that the proposed change doesn't violate the minimum size of the BoidCPU. The 
     # minimum BoidCPU size is defined as the boid vision radius. This ensures that a boid's 
     # neighbours would always be in an adjacent BoidCPU and not one that is further away.
-    def checkNewSize(self, edgeID):
+    def minSizeEnforced(self, edgeID, stepChange):
+        change = (self.config['stepSize'] * stepChange)
 
-        # # If the edge to change is the top or the bottom edge, check the proposed BoidCPU height
-        # if (edgeID == 0) or (edgeID == 2):
-        #     size = (self.boidCPUCoords[3] - self.boidCPUCoords[1]) - self.config['stepSize']
-        #     # print "New height for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size)
+        # If the edge to change is the top or the bottom edge, check the proposed BoidCPU height
+        if (edgeID == 0) or (edgeID == 2):
+            size = (self.boidCPUCoords[3] - self.boidCPUCoords[1]) - change
+            self.logger.debug("New height for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size))
 
-        # # If the edge to change is the right or the left edge, check the propsed BoidCPU width
-        # elif (edgeID == 1) or (edgeID == 3):
-        #     size = (self.boidCPUCoords[2] - self.boidCPUCoords[0]) - self.config['stepSize']
-        #     # print "New width for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size)
+        # If the edge to change is the right or the left edge, check the propsed BoidCPU width
+        elif (edgeID == 1) or (edgeID == 3):
+            size = (self.boidCPUCoords[2] - self.boidCPUCoords[0]) - change
+            self.logger.debug("New width for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size))
 
-        # # Check if the new width/height is less than the constraint
-        # if size < 210:
-        #     result = False      # The new size is too small
-        #     print "Requested change for BoidCPU #" + str(self.BOIDCPU_ID) + " is too small"
-        # else:
-        #     result = True       # The new size is ok
+        # Check if the new width/height is less than the constraint
+        if size < self.config['minBoidCPUSize']:
+            result = False      # The new size is too small
+            self.logger.debug("Requested change of " + str(stepChange) + " for edge " + 
+                str(edgeID) + " for BoidCPU #" + str(self.BOIDCPU_ID) + " rejected")
+        else:
+            result = True       # The new size is ok
 
-        # return result
-        return True
+        return result
+        # return True
 
 
     # Determines if the edge represented by the given edgeID is valid for the current BoidCPU. For 
