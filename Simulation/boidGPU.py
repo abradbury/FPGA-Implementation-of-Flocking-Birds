@@ -174,19 +174,28 @@ class BoidGPU:
         self.canvas.create_rectangle(coords[0], coords[1], coords[2], coords[3], outline = colour, 
             tags = "L" + str(locID))
 
+        # Show BoidCPU IDs
+        if self.config["showBoidIds"]:
+            xPos = coords[0] + ((coords[2] - coords[0]) / 2)
+            yPos = coords[1] + ((coords[3] - coords[1]) / 2)
+            self.canvas.create_text(xPos, yPos, fill = "white", text = str(locID), 
+                tags = ("TL" + str(locID)))
+
+
     # Redraws the bounds of the boidCPU
     def updateBoidCPU(self, locID, coords):
         self.canvas.coords("L" + str(locID), coords[0], coords[1], coords[2], coords[3])
 
-
+        # Update the BoidCPU's ID
+        if self.config["showBoidIds"]:
+            xPos = coords[0] + ((coords[2] - coords[0]) / 2)
+            yPos = coords[1] + ((coords[3] - coords[1]) / 2)
+            self.canvas.coords("TL" + str(locID), xPos, yPos)
 
 
     def getWindowSize(self):
         return [self.canvas.winfo_width(), self.canvas.winfo_height()]
 
-    # Temporary method
-    def getCanvas(self):
-        return self.canvas
 
     def beginMainLoop(self):
         # Start everything going
