@@ -23,6 +23,8 @@ class BoidCPU:
         self.gridPosition = _gridPosition
         self.boidGPU = boidGPU
 
+        self.boidCPUAtMinimalSize = False
+
         # Make the system configuration list available
         self.config = self.simulation.config
 
@@ -230,8 +232,11 @@ class BoidCPU:
         if self.boidCount >= self.config['BOID_THRESHOLD']:
             # Analyse the distribution of the boids in this BoidCPU to determine the step
             if (self.config['loadBalanceType'] == 2) or (self.config['loadBalanceType'] == 3): 
-                self.createBoidDistribution()
-                requestedChange = self.analyseBoidDistribution()
+                if not self.boidCPUAtMinimalSize:
+                    self.createBoidDistribution()
+                    requestedChange = self.analyseBoidDistribution()
+                else:
+                    self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " at minimal size")
             elif self.config['loadBalanceType'] == 1: 
                 requestedChange = None
 
@@ -255,7 +260,7 @@ class BoidCPU:
         self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " coords: " + str(self.boidCPUCoords))
 
         # Draw a grid on for the BoidCPU
-        # self.boidGPU.drawBoidCPUGrid(self.boidCPUCoords, widthSegments, heightSegments)
+        self.boidGPU.drawBoidCPUGrid(self.boidCPUCoords, widthSegments, heightSegments)
 
         # Create a multidimensional array of the based on the number of segments
         self.distribution = np.zeros((heightSegments, widthSegments))
@@ -279,123 +284,114 @@ class BoidCPU:
                             boidNotPlaced = False
                             counter += 1
 
-        # Remove the BoidGPU grid
-        # self.boidGPU.removeObject("gridLines")
+
+    # Returns the coordinate index that would be affected by a change in the given edge
+    def edgeToCoord(self, edgeID):
+        if edgeID > 3: self.logger.warning("Edge ID is greater than 3")
+
+        return (edgeID + 1) % 4
+
+
+    # Returns the appropriate row or col of the distribution depending on the edge specified
+    def getDistributionRowCol(self, edgeID, bound):
+        distHeight = self.distribution.shape[0]
+        distWidth = self.distribution.shape[1]
+
+        if edgeID == 0:
+            return np.sum(self.distribution[bound, :])
+        elif edgeID == 1:
+            return np.sum(self.distribution[:, distWidth - 1 - bound])
+        elif edgeID == 2:
+            return np.sum(self.distribution[distHeight - 1 - bound, :])
+        elif edgeID == 3:
+            return np.sum(self.distribution[:, bound])
 
 
     # Analyses the distribution of boids for the current BoidCPU to determine which edges should be 
     # modified, and by how much, to reduce the number of boids in the overloaded BoidCPU.
     #
-    # While the number of boids released is less than a certain amount, the effect of moving each 
-    # of the edges by one step size is analysed. The edge that releases the most boids is selected 
-    # and the process repeats. On the repeat, the edges that were no chosen are not recalculated 
-    # and the edge that was is analysed for its second step. Again, the edge that releases the most 
-    # boids is chosen.
+    # Whilst there are still boids that need to be released and the BoidCPU is not at its minimal 
+    # size, for each edge, if the edge is valid for this BoidCPU and if boids still need to be 
+    # released check that an additional step change for the edge doesn't make the BoidCPU 
+    # smaller than its minimum. If not, get the number of boids released for this step 
+    # change and update the temporary coordinates and other structures. 
+    # 
+    # FIXME: The issue with this new algorithm is that it can result in a toing and froing motion. 
+    #   So BoidCPU #2 is overloaded and decreases its bottom edge to compensate. BoidCPU #4 is 
+    #   overloaded soon after. Decreasing its top edge released no boids, decreasing its right edge 
+    #   releases enough boids to no longer be overloaded. So the change it makes is to decrease the 
+    #   top and right edges. Decreasing the top edge now causes BoidCPU #2 to to overloaded again - 
+    #   the top edge needn't have been decreased. Therefore, don't move zero edges.
     # 
-    # TODO: If there is no single maximum, choose the edge that has had the least step changes
-    # TODO: Put a limit on the number of step sizes to ensure the BoidCPU doesn't collapse
+    # TODO: Do not recalculate rows/columns that have not changed since the last loop. Take into 
+    #   account that if the top edge is decreased, the left and right edges will need recalculating.
     def analyseBoidDistribution(self):
-        proposedChanges = [0, 0, 0, 0]          # The number of step changes per border
-        boidsReleasedPerEdge = [0, 0, 0, 0]     # The number of boids released per edge
-        recalculate = [True, True, True, True]  # Used to save recalculation if not needed
-        # minSizeReached = [False, False, False, False]                  # True when the BoidCPU is at its minimum
+        currentChanges = [0, 0, 0, 0]                   # The number of step changes per border
+        boidsReleasedPerEdge = [0, 0, 0, 0]             # The number of boids released per edge
+        recalculate = [True, True, True, True]          # Used to save recalculation if not needed
+        tmpCoords = copy.deepcopy(self.boidCPUCoords)   # Make a copy of the BoidCPU coordinates
+        numberOfBoidsReleased = 0                       # The number of boids currently released
+        
+        # Initialise to be True for edges that cannot be changed e.g. top edge of BoidCPU #1
+        edgeAtMinimum = [True if not self.validEdge(edge) else False for edge in range(0, 4) ]
 
-        edgeNames = ["TOP", "RIGHT", "BOTTOM", "LEFT"]
+        while (numberOfBoidsReleased < self.config['boidsToRelease']) and not self.boidCPUAtMinimalSize:
+            for edge in range(0, 4):
+                if self.validEdge(edge) and (numberOfBoidsReleased < self.config['boidsToRelease']):
+                    proposedChange = currentChanges[edge] + 1
 
-        distHeight = self.distribution.shape[0]
-        distWidth = self.distribution.shape[1]
+                    if self.minSizeEnforced(edge, proposedChange, tmpCoords):
+                        boidsReleasedPerEdge[edge] = self.getDistributionRowCol(edge, proposedChange - 1)
 
-        numberOfBoidsReleased = 0
+                        coordIdx = self.edgeToCoord(edge)
+                        tmpCoords = self.moveEdge(edge, True, proposedChange, tmpCoords)
 
-        # Each ege is checked to see if it needs recalculating, it is valid for the current BoidCPU 
-        # and that the change does not make the BoidCPU less than the minimum BoidCPU size.
-        while (numberOfBoidsReleased <= self.config['boidsToRelease']):
-            # If step change has not been analysed, the top edge is valid and 
-
-            # minEnforcedPerEdge = [self.minSizeEnforced(i, proposedChanges[i] + 1) for i in range(0, 4)]
-
-            if recalculate[0] and self.validEdge(0):
-                bound = proposedChanges[0]          # Determine boids released for this change
-                boidsReleasedPerEdge[0] = np.sum(self.distribution[bound, :])
-            
-            # If the right edge is valid
-            if recalculate[1] and self.validEdge(1):
-                bound = proposedChanges[1]          # Determine boids released for this change
-                boidsReleasedPerEdge[1] = np.sum(self.distribution[:, distWidth - 1 - bound])
-            
-            # If the bottom edge is valid
-            if recalculate[2] and self.validEdge(2):
-                bound = proposedChanges[2]          # Determine boids released for this change
-                boidsReleasedPerEdge[2] = np.sum(self.distribution[distHeight - 1 - bound, :])
-            
-            # If the left edge is valid
-            if recalculate[3] and self.validEdge(3):
-                bound = proposedChanges[3]          # Determine boids released for this change
-                boidsReleasedPerEdge[3] = np.sum(self.distribution[:, bound])
-
-            # Check for all zero values
-            if np.count_nonzero(boidsReleasedPerEdge):
-                # Get the index of the edge that releases the most boids
-                maxIndex = boidsReleasedPerEdge.index(max(boidsReleasedPerEdge))
-
-                # Increment the step change counter for that edge
-                proposedChanges[maxIndex] += 1
-
-                # Update the total number of boids released
-                numberOfBoidsReleased += boidsReleasedPerEdge[maxIndex]
-
-                # Only recalculate the edge that has just been selected
-                for i, v in enumerate(recalculate):
-                    if i != maxIndex:
-                        recalculate[i] = False 
+                        currentChanges[edge] += 1   # FIXME: Seems to work without this, strange...
+                        numberOfBoidsReleased += boidsReleasedPerEdge[edge]
                     else:
-                        recalculate[i] = True
+                        edgeAtMinimum[edge] = True
 
-            # If boidsReleasedPerEdge contains all zeros, forcably increment the step count of all 
-            # of the valid zero edges by 1 and raise the recalculation barrier
-            else:
-                if self.validEdge(0):                   # Top
-                    proposedChanges[0] += 1
-                    recalculate[0] = True
-                if self.validEdge(1):                   # Right
-                    proposedChanges[1] += 1
-                    recalculate[1] = True
-                if self.validEdge(2):                   # Bottom
-                    proposedChanges[2] += 1
-                    recalculate[2] = True
-                if self.validEdge(3):                   # Left
-                    proposedChanges[3] += 1
-                    recalculate[3] = True
+            # If all the edges for the BoidCPU are at their minimum, raise a flag and exit.
+            if all(edgeAtMinimum):
+                self.boidCPUAtMinimalSize = True 
+                self.logger.debug("Minimum size reached for BoidCPU #" + str(self.BOIDCPU_ID))
 
-        return proposedChanges
+        # Remove the BoidGPU grid lines
+        self.boidGPU.removeObject("gridLines")
+
+        return currentChanges
 
 
     # Used to check that the proposed change doesn't violate the minimum size of the BoidCPU. The 
     # minimum BoidCPU size is defined as the boid vision radius. This ensures that a boid's 
     # neighbours would always be in an adjacent BoidCPU and not one that is further away.
-    def minSizeEnforced(self, edgeID, stepChange):
-        change = (self.config['stepSize'] * stepChange)
+    def minSizeEnforced(self, edgeID, proposedChange, tmpCoords):
+        change = (self.config['stepSize'] * proposedChange)
+        result = False
 
         # If the edge to change is the top or the bottom edge, check the proposed BoidCPU height
         if (edgeID == 0) or (edgeID == 2):
-            size = (self.boidCPUCoords[3] - self.boidCPUCoords[1]) - change
-            self.logger.debug("New height for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size))
+            size = (tmpCoords[3] - tmpCoords[1]) - change
+            changeType = "height"
 
         # If the edge to change is the right or the left edge, check the propsed BoidCPU width
         elif (edgeID == 1) or (edgeID == 3):
-            size = (self.boidCPUCoords[2] - self.boidCPUCoords[0]) - change
-            self.logger.debug("New width for BoidCPU #" + str(self.BOIDCPU_ID) + ": " + str(size))
+            size = (tmpCoords[2] - tmpCoords[0]) - change
+            changeType = "width"
+
+        # Log the change 
+        self.logger.debug("(Edge " + str(edgeID) + ") Change of " + str(change) + " gives new " + 
+            changeType + " of BoidCPU #" + str(self.BOIDCPU_ID) + " as " + str(size))
 
         # Check if the new width/height is less than the constraint
         if size < self.config['minBoidCPUSize']:
             result = False      # The new size is too small
-            self.logger.debug("Requested change of " + str(stepChange) + " for edge " + 
+            self.logger.debug("Requested change of " + str(proposedChange) + " for edge " + 
                 str(edgeID) + " for BoidCPU #" + str(self.BOIDCPU_ID) + " rejected")
         else:
             result = True       # The new size is ok
 
         return result
-        # return True
 
 
     # Determines if the edge represented by the given edgeID is valid for the current BoidCPU. For 
@@ -501,7 +497,7 @@ class BoidCPU:
             boidsToCheck = np.concatenate((boidsToCheck, extraBoids))
             
         # Determine the new bounds, but not by changing the actual bounds
-        tempBounds = self.boidCPUCoords
+        tempBounds = copy.deepcopy(self.boidCPUCoords)
         for edge in changeRequests:
             stepChange = edge[1] * self.config['stepSize']
             if row == self.gridPosition[0]:     # If this is on the same row as the overloaded one
@@ -541,6 +537,37 @@ class BoidCPU:
             " boids (" + str(self.boidCount) + " before)")
 
         return [len(self.boids), counter]
+
+
+    def moveEdge(self, edgeID, decrease, steps, coords):
+        change = self.config['stepSize'] * steps
+        coordsIdx = self.edgeToCoord(edgeID)
+
+        if edgeID == 0:     # Top edge
+            if decrease:
+                coords[coordsIdx] += change
+            else:
+                coords[coordsIdx] -= change
+
+        elif edgeID == 1:   # Right edge
+            if decrease:
+                coords[coordsIdx] -= change
+            else:
+                coords[coordsIdx] += change
+
+        elif edgeID == 2:   # Bottom edge
+            if decrease:
+                coords[coordsIdx] -= change
+            else:
+                coords[coordsIdx] += change
+
+        elif edgeID == 3:   # Left edge
+            if decrease:
+                coords[coordsIdx] += change
+            else:
+                coords[coordsIdx] -= change
+
+        return coords
 
 
     # Changes the bounds of the BoidCPU by the specifed step size. Used during load balancing.
@@ -595,5 +622,16 @@ class BoidCPU:
                 self.logger.debug("\tDecreased the left edge of BoidCPU " + str(self.BOIDCPU_ID) + 
                     " by " + str(stepChange))
 
+
+        # Assume that the boid is no longer at its minimal size when its bounds are changed
+        self.boidCPUAtMinimalSize = False
+
         self.boidGPU.updateBoidCPU(self.BOIDCPU_ID, self.boidCPUCoords)
+
+
+        # boidCPUWidth = self.boidCPUCoords[2] - self.boidCPUCoords[0]
+        # boidCPUHeight = self.boidCPUCoords[3] - self.boidCPUCoords[1]
+
+        # self.logger.debug("New BoidCPU #" + str(self.BOIDCPU_ID) + " width = " + str(boidCPUWidth) + ", height = " + str(boidCPUHeight))
+        # self.logger.debug("New BoidCPU #" + str(self.BOIDCPU_ID) + " coords: " + str(self.boidCPUCoords))
 
