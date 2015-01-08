@@ -16,21 +16,21 @@ class Boid {
 	Vector acceleration;
 
 	Boid neighbouringBoids[MAX_NEIGHBOURS];
-	int neighbouringBoidsCount;
+	uint8 neighbouringBoidsCount;
 
-	Boid::Boid(int _boidID, int initPosition, int initVelocity) {
+	Boid(int _boidID, Vector initPosition, Vector initVelocity) {
 
 		int boidID = _boidID;
 
 		position = initPosition;
 		velocity = initVelocity;
 
-		neighbouringBoids = {0};
-		neighbouringBoidsCount = 0;
+		this->neighbouringBoids = {0};
+		this->neighbouringBoidsCount = 0;
 	}
 
-	void Boid::Update(void) {
-		if(neighbouringBoidsCount > 0) {
+	void Update(void) {
+		if(this->neighbouringBoidsCount > 0) {
 			acceleration.add(Separate());
 			acceleration.add(Align());
 			acceleration.add(Cohesion());
@@ -44,14 +44,14 @@ class Boid {
 		Contain();
 	}
 
-	Vector Boid::Align(void) {
+	Vector Align(void) {
 		Vector total;
 
-		for (Boid b : neighbouringBoids) {
+		for (Boid b : this->neighbouringBoids) {
 			total += b.getVelocity();
 		}
 
-		total /= neighbouringBoidsCount;
+		total.div(this->neighbouringBoidsCount);
 		total.setMag(MAX_VELOCITY);
 
 		Vector steer = Vector.sub(total, velocity);
@@ -60,17 +60,17 @@ class Boid {
 		return steer;
 	}
 
-	Vector Boid::Separate(void) {
+	Vector Separate(void) {
 		Vector total;
 		Vector diff;
 
-		for (Boid b : neighbouringBoids) {
+		for (Boid b : this->neighbouringBoids) {
 			diff = Vector.sub(position, b.getPosition());
 			diff.normalise();
 			total.add(diff);
 		}
 
-		total /= neighbouringBoidsCount;
+		total.div(this->neighbouringBoidsCount);
 		total.setMag(MAX_VELOCITY);
 
 		Vector steer = Vector.sub(total, velocity);
@@ -79,18 +79,19 @@ class Boid {
 		return steer;
 	}
 
-	Vector Boid::Cohesion(void) {
+	Vector Cohesion(void) {
 		Vector total;
 
-		for(Boid b : neighbouringBoids) {
+		for(Boid b : this->neighbouringBoids) {
 			total.add(b.getPosition());
 		}
 
-		total /= neighbouringBoidsCount;
+		total.div(this->neighbouringBoidsCount);
 		Vector steer = Seek(total);
+		return steer;
 	}
 
-	Vector Boid::Seek(Vector target) {
+	Vector Seek(Vector target) {
 		Vector desired = Vector.sub(target, position);
 		desired.setMag(MAX_VELOCITY);
 
@@ -100,7 +101,7 @@ class Boid {
 		return steer;
 	}
 
-	void Boid::Contain() {
+	void Contain() {
 		if(position.x > AREA_WIDTH) {
 			position.x = 0;
 		} else if(position.x < 0) {
@@ -114,11 +115,11 @@ class Boid {
 		}
 	}
 
-	int Boid::getVelocity(void) {
+	Vector getVelocity(void) {
 		return velocity;
 	}
 
-	int Boid::getPosition(void) {
+	Vector getPosition(void) {
 		return position;
 	}
 };

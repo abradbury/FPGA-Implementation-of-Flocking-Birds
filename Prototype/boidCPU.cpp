@@ -1,8 +1,14 @@
 #include "boidCPU.h"
-#include "boid.h"
 
-#define MAX_VELOCITY	10
+#include <stdlib.h>     /* srand, rand */
+#include <time.h>       /* time */
+
 #define MAX_BOIDS		30
+#define MAX_VELOCITY	10
+#define MAX_FORCE		1
+
+#define AREA_WIDTH		720
+#define AREA_HEIGHT		720
 
 // Function headers
 static void initialisation (void);
@@ -93,7 +99,7 @@ void simulationSetup() {
 
 		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 
-		boid = new Boid(boidID, position, velocity);
+		Boid boid = Boid(boidID, position, velocity);
 		boids[boidCount] = boid;
 	}
 
@@ -134,4 +140,229 @@ void transmit(int to, int data) {
 
 void receive() {
 //	input.read();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Classes /////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Constructors ////////////////////////////////////////////////////////////////
+Vector::Vector() {
+	x = 0;
+	y = 0;
+	z = 0;
+}
+
+Vector::Vector(int8 x_, int8 y_, int8 z_) {
+	x = x_;
+	y = y_;
+	z = z_;
+}
+
+// Basic Operations ////////////////////////////////////////////////////////////
+void Vector::add(Vector v) {
+	x = x + v.x;
+	y = y + v.y;
+	z = z + v.z;
+}
+
+void Vector::sub(Vector v) {
+	x = x - v.x;
+	y = y - v.y;
+	z = z - v.z;
+}
+
+void Vector::mul(uint8 n) {
+	x = x * n;
+	y = y * n;
+	z = z * n;
+}
+
+void Vector::div(uint8 n) {
+	if (n != 0) {
+		x = x / n;
+		y = y / n;
+		z = z / n;
+	}
+}
+
+// Static Operations /////////////////////////////////////////////////////////
+static Vector Vector::add(Vector v1, Vector v2) {
+	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y);
+	return v3;
+}
+
+static Vector Vector::sub(Vector v1, Vector v2) {
+	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
+	return v3;
+}
+
+// Advanced Operations /////////////////////////////////////////////////////////
+
+uint8 Vector::mag() {
+	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
+}
+
+void Vector::setMag(uint8 mag) {
+	normalise();
+	mul(mag);
+}
+
+void Vector::normalise() {
+	uint8 m = mag();
+	div(m);
+}
+
+void Vector::limit(uint8 max) {
+	if(1 > max) {
+		//TODO
+		normalise();
+		mul(max);
+	}
+}
+
+void Vector::bound(uint8 n) {
+	// TODO: The is technically not binding the speed, which is the magnitude
+	if(x > n) x = n;
+	if(y > n) y = n;
+	if(z > n) z = n;
+}
+
+void Vector::rand(uint8 min, uint8 max) {
+	// TODO
+}
+
+// http://stackoverflow.com/a/5009006
+void Vector::rand2D(uint8 xMin, uint8 xMax, uint8 yMin, uint8 yMax) {
+//		x = xMin + (rand(1) % (int)(xMax - xMin + 1));
+//		y = yMin + (rand(1) % (int)(yMax - yMin + 1));
+	x = 10;
+	y = 10;
+}
+
+bool Vector::empty() {
+	bool result = true;
+
+	if(x) result = false;
+	else if(y) result = false;
+	else if(z) result = false;
+
+	return result;
+}
+
+// Other ///////////////////////////////////////////////////////////////////////
+std::ostream& operator <<(std::ostream& os, const Vector& v) {
+	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
+	return os;
+}
+
+Vector::Vector(int8 x_, int8 y_, int8 z_) {
+	x = x_;
+	y = y_;
+	z = z_;
+}
+
+Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
+
+	boidID = _boidID;
+
+	position = initPosition;
+	velocity = initVelocity;
+
+	neighbouringBoids = {0};
+	neighbouringBoidsCount = 0;
+}
+
+void Boid::Update(void) {
+	if(neighbouringBoidsCount > 0) {
+		acceleration.add(Separate());
+		acceleration.add(Align());
+		acceleration.add(Cohesion());
+	}
+
+	velocity.add(acceleration);
+	velocity.limit(MAX_VELOCITY);
+	position.add(velocity);
+	acceleration.mul(0);
+
+	Contain();
+}
+
+Vector Boid::Align(void) {
+	Vector total;
+
+	for (Boid b : neighbouringBoids) {
+		total += b.getVelocity();
+	}
+
+	total.div(neighbouringBoidsCount);
+	total.setMag(MAX_VELOCITY);
+
+	Vector steer = Vector::sub(total, velocity);
+	steer.limit(MAX_FORCE);
+
+	return steer;
+}
+
+Vector Boid::Separate(void) {
+	Vector total;
+	Vector diff;
+
+	for (Boid b : neighbouringBoids) {
+		diff = Vector::sub(position, b.getPosition());
+		diff.normalise();
+		total.add(diff);
+	}
+
+	total.div(neighbouringBoidsCount);
+	total.setMag(MAX_VELOCITY);
+
+	Vector steer = Vector::sub(total, velocity);
+	steer.limit(MAX_FORCE);
+
+	return steer;
+}
+
+Vector Boid::Cohesion(void) {
+	Vector total;
+
+	for(Boid b : neighbouringBoids) {
+		total.add(b.getPosition());
+	}
+
+	total.div(neighbouringBoidsCount);
+	Vector steer = Seek(total);
+	return steer;
+}
+
+Vector Boid::Seek(Vector target) {
+	Vector desired = Vector::sub(target, position);
+	desired.setMag(MAX_VELOCITY);
+
+	Vector steer = Vector::sub(desired, velocity);
+	steer.limit(MAX_FORCE);
+
+	return steer;
+}
+
+void Boid::Contain() {
+	if(position.x > AREA_WIDTH) {
+		position.x = 0;
+	} else if(position.x < 0) {
+		position.x = AREA_WIDTH;
+	}
+
+	if(position.y > AREA_HEIGHT) {
+		position.y = 0;
+	} else if(position.y < 0) {
+		position.y = AREA_HEIGHT;
+	}
+}
+
+Vector Boid::getVelocity(void) {
+	return velocity;
+}
+
+Vector Boid::getPosition(void) {
+	return position;
 }
