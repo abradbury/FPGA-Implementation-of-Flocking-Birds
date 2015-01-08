@@ -68,8 +68,8 @@ class Simulation:
 
         # Debugging parameters
         self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
-        self.config['trackBoid'] = False         # True to track the specified boid and neighbours
-        self.config['boidToTrack'] = 0          # The ID of the boid to track, 0 for all boids
+        self.config['trackBoid'] = True         # True to track the specified boid and neighbours
+        self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
         
         # Load balancing parameters
         self.config['loadBalance'] = True       # True to enable load balancing
@@ -79,7 +79,6 @@ class Simulation:
 
         self.config['percentageToRemove'] = 0.15
         self.config['boidsToRelease'] = self.config['BOID_THRESHOLD'] - (np.floor(self.config['BOID_THRESHOLD'] * (1 - self.config["percentageToRemove"])))
-
 
         # Boid movement parameters
         self.config['MAX_VELOCITY'] = 10
@@ -91,7 +90,6 @@ class Simulation:
         self.config['REPULSION_WEIGHT'] = 1
 
         self.config['minBoidCPUSize'] = self.config['VISION_RADIUS']
-
 
         # Define the testing state
         self.config['useTestingSetup'] = True   # True to use a known initial setup
@@ -111,7 +109,7 @@ class Simulation:
         self.allowedBoidCPUCounts = np.array([1, 2, 4, 9, 16, 25, 36])
         self.boidCPUCount = self.allowedBoidCPUCounts[3]
         self.initialBoidCount = self.config['boidCount'] / self.boidCPUCount
-        self.boidCPUSize = round(self.boidGPU.getWindowSize()[0] / np.sqrt(self.boidCPUCount))
+        self.boidCPUSize = round(self.config['width'] / np.sqrt(self.boidCPUCount))
 
         self.boidCPUs = []
         self.calcTimings = []
@@ -421,11 +419,19 @@ class Simulation:
                 str(sum(newBoidCounts)))
 
             # TODO: Use the predicted boid levels to evaluate change request
+            #   Give overloaded info before analysis of distribution to limit options
 
         # Update the edges of the affected BoidCPUs by the specified step size
         for edgeIndex, edgeBoidCPUs in enumerate(boidCPUsToChange):
             for boidCPU in edgeBoidCPUs:
                 self.boidCPUs[boidCPU[0] - 1].changeBounds(edgeIndex, boidCPU[1], [row, col])
+
+
+        for boidCPU in self.boidCPUs:
+            boidCPUWidth = boidCPU.boidCPUCoords[2] - boidCPU.boidCPUCoords[0]
+            boidCPUHeight = boidCPU.boidCPUCoords[3] - boidCPU.boidCPUCoords[1]
+
+            self.logger.debug("New BoidCPU #" + str(boidCPU.BOIDCPU_ID) + " width = " + str(boidCPUWidth) + ", height = " + str(boidCPUHeight))
 
         # self.pause()
 
