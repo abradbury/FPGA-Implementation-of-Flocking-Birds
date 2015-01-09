@@ -5,14 +5,16 @@
 #include <iostream>		/* cout */
 #include <math.h>       /* sqrt */
 
-#define MAX_BOIDS		30
-#define MAX_VELOCITY	10
-#define MAX_FORCE		1
+#define MAX_BOIDS				30
+#define MAX_VELOCITY			10
+#define MAX_FORCE				1
 
-#define AREA_WIDTH		720
-#define AREA_HEIGHT		720
+#define AREA_WIDTH				720
+#define AREA_HEIGHT				720
 
-#define VISION_RADIUS	100
+#define VISION_RADIUS			100
+#define MAX_BOIDCPU_NEIGHBOURS	9
+#define MAX_NEIGHBOURING_BOIDS	90		// TODO: Decide on appropriate value?
 
 // Function headers
 static void initialisation (void);
@@ -47,6 +49,12 @@ Transition trans[MAX_STATES] = {
 };
 #define TRANS_COUNT (sizeof(trans)/sizeof(*trans))
 
+// Define variables
+// FIXME: Should these really be global?
+int8 boidCPUID;
+int8 boidCount;
+Boid boids[MAX_BOIDS];
+
 void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port=input
 #pragma HLS INTERFACE ap_fifo port=output
@@ -56,7 +64,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 	state = INIT;
 	// Can a while(1) be used in h/w is there one implicitly elsewhere?
-	while (1) {
+	while (state != DRAW) {
 //		for(int i = 0; i < TRANS_COUNT; i++) {
 //			if (state == trans[i].state) {
 //				(trans[i].function)();
@@ -88,23 +96,25 @@ void identify() {
 void simulationSetup() {
 	std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
 
-	int8 boidCPUID = 6;
-	int8 boidCPUCoords[4] = {0, 0, 240, 240};
-	int8 initialBoidCount = 10;
-	int8 boidCount = initialBoidCount;
-	Boid boids[MAX_BOIDS];
+	// These should be supplied by the controller over the communications link
+	boidCPUID = 6;
+	int12 boidCPUCoords[4] = {0, 0, 240, 240};
+	int12 initialBoidCount = 10;
+	// TODO: Supply the neighbouring BoidCPUs
+
+	boidCount = initialBoidCount;
 
 	for(int8 i = 0; i < boidCount; i++) {
 		Vector position;
 		Vector velocity;
 
-		position.rand2D(boidCPUCoords[0], boidCPUCoords[1], boidCPUCoords[2], boidCPUCoords[3]);
-		velocity.rand2D(-MAX_VELOCITY, MAX_VELOCITY, -MAX_VELOCITY, MAX_VELOCITY);
+		position.rand(boidCPUCoords[0], boidCPUCoords[1], boidCPUCoords[2], boidCPUCoords[3]);
+		velocity.rand(-MAX_VELOCITY, -MAX_VELOCITY, MAX_VELOCITY, MAX_VELOCITY);
 
 		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 
 		Boid boid = Boid(boidID, position, velocity);
-		boids[boidCount] = boid;
+		boids[i] = boid;
 	}
 
 	state = NBRS;
@@ -113,11 +123,40 @@ void simulationSetup() {
 void findNeighbours() {
 	std::cout << "Finding neighbouring boids..." << std::endl;
 
+	// The neighbouring BoidCPUs would be supplied by the controller on intialisation
+	uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS] = {2, 3, 1, 4, 7, 9, 8, 5};
+
+	// Generate a list of possible neighbouring boids
+	Boid possibleNeighbouringBoids[MAX_NEIGHBOURING_BOIDS];
+	uint8 possibleNeighbourCount = 0;
+
+	for (int i = 0; i < boidCount; i++) {
+		possibleNeighbouringBoids[i] = boids[i];
+		possibleNeighbourCount++;
+	}
+
+	for (int i = boidCount; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		if (neighbouringBoidCPUs[i] != 0) {
+			// TODO: Get boids from neighbouring BoidCPUs
+			// possibleNeighbouringBoids[] =
+			possibleNeighbourCount++;
+		}
+	}
+
+	// Calculate a the neighbours for each boid
+	for (int i = 0; i < boidCount; i++) {
+		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
+	}
+
 	state = BOID;
 }
 
 void calcNextBoidPositions() {
 	std::cout << "Calculating next boid positions..." << std::endl;
+
+	for (int i = 0; i < boidCount; i++) {
+		boids[i].update();
+	}
 
 	state = LOAD;
 }
@@ -134,7 +173,7 @@ void moveBoids() {
 
 void updateDisplay() {
 	std::cout << "Updating display" << std::endl;
-	state = NBRS;
+	//state = NBRS;
 }
 
 // Generic methods
@@ -161,7 +200,7 @@ Vector::Vector() {
 	z = 0;
 }
 
-Vector::Vector(int8 x_, int8 y_, int8 z_) {
+Vector::Vector(int12 x_, int12 y_, int12 z_) {
 	x = x_;
 	y = y_;
 	z = z_;
@@ -227,8 +266,7 @@ void Vector::normalise() {
 }
 
 void Vector::limit(uint8 max) {
-	if(1 > max) {
-		//TODO
+	if(mag() > max) {
 		normalise();
 		mul(max);
 	}
@@ -241,16 +279,10 @@ void Vector::bound(uint8 n) {
 	if(z > n) z = n;
 }
 
-void Vector::rand(uint8 min, uint8 max) {
-	// TODO
-}
-
 // http://stackoverflow.com/a/5009006
-void Vector::rand2D(uint8 xMin, uint8 xMax, uint8 yMin, uint8 yMax) {
-//		x = xMin + (rand(1) % (int)(xMax - xMin + 1));
-//		y = yMin + (rand(1) % (int)(yMax - yMin + 1));
-	x = 10;
-	y = 10;
+void Vector::rand(int12 xMin, int12 yMin, int12 xMax, int12 yMax) {
+	x = xMin + (std::rand() % (int)(xMax - xMin + 1));
+	y = yMin + (std::rand() % (int)(yMax - yMin + 1));
 	z = 0;
 }
 
@@ -275,30 +307,31 @@ std::ostream& operator <<(std::ostream& os, const Vector& v) {
 //==============================================================================
 
 Boid::Boid() {
-	boidID = 0;
+	id = 0;
 
 	position = Vector(0, 0, 0);
 	velocity = Vector(0, 0, 0);
-	acceleration = Vector(0, 0, 0);
 
 	neighbouringBoidsCount = 0;
 }
 
 Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
-	boidID = _boidID;
+	id = _boidID;
 
 	position = initPosition;
 	velocity = initVelocity;
-	acceleration = Vector(0, 0, 0);
 
 	neighbouringBoidsCount = 0;
+
+	std::cout << "Created boid #" << id << std::endl;
+	printBoidInfo();
 }
 
 // TODO: Will need to make a copy of the neighbours rather than a reference so
 //	that as the neighbours are updated, the neighbour list doesn't change
-void Boid::CalculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount) {
+void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount) {
 	for (int i = 0; i < possibleNeighbourCount; i++) {
-		if (possibleNeighbours[i].getID() != boidID) {
+		if (possibleNeighbours[i].getID() != id) {
 			double distance = Vector::distanceBetween(position, possibleNeighbours[i].getPosition());
 			if (distance < VISION_RADIUS) {
 				neighbouringBoids[neighbouringBoidsCount] = &possibleNeighbours[i];
@@ -313,11 +346,13 @@ Vector Boid::getDummyVector() {
 	return Vector(1, 2, 0);
 }
 
-void Boid::Update(void) {
+void Boid::update(void) {
+	std::cout << "Updating boid #" << id << std::endl;
+
 	if(neighbouringBoidsCount > 0) {
-		acceleration.add(Separate());
-		acceleration.add(Align());
-		acceleration.add(Cohesion());
+		acceleration.add(separate());
+		acceleration.add(align());
+		acceleration.add(cohesion());
 	}
 
 	velocity.add(acceleration);
@@ -325,10 +360,10 @@ void Boid::Update(void) {
 	position.add(velocity);
 	acceleration.mul(0);
 
-	Contain();
+	contain();
 }
 
-Vector Boid::Align(void) {
+Vector Boid::align(void) {
 	Vector total;
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
@@ -346,7 +381,7 @@ Vector Boid::Align(void) {
 	return steer;
 }
 
-Vector Boid::Separate(void) {
+Vector Boid::separate(void) {
 	Vector total;
 	Vector diff;
 
@@ -367,7 +402,7 @@ Vector Boid::Separate(void) {
 	return steer;
 }
 
-Vector Boid::Cohesion(void) {
+Vector Boid::cohesion(void) {
 	Vector total;
 	Vector steer;
 
@@ -378,11 +413,11 @@ Vector Boid::Cohesion(void) {
 	}
 
 	total.div(neighbouringBoidsCount);
-	steer = Seek(total);
+	steer = seek(total);
 	return steer;
 }
 
-Vector Boid::Seek(Vector target) {
+Vector Boid::seek(Vector target) {
 	Vector desired = Vector::sub(target, position);
 	desired.setMag(MAX_VELOCITY);
 
@@ -392,7 +427,7 @@ Vector Boid::Seek(Vector target) {
 	return steer;
 }
 
-void Boid::Contain() {
+void Boid::contain() {
 	if(position.x > AREA_WIDTH) {
 		position.x = 0;
 	} else if(position.x < 0) {
@@ -414,6 +449,13 @@ Vector Boid::getPosition(void) {
 	return position;
 }
 
-int Boid::getID(void) {
-	return boidID;
+uint8 Boid::getID(void) {
+	return id;
+}
+
+void Boid::printBoidInfo() {
+	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
+	std::cout << "Boid Velocity: " << velocity << std::endl;
+	std::cout << "Boid Position: " << position << std::endl;
+	std::cout << "===================================" << std::endl;
 }

@@ -1,29 +1,29 @@
 #include "location.h"
 
-#define SIZEOF_ARRAY( a ) (sizeof( a ) / sizeof( a[ 0 ] ))
-
-#define CMD_HEADER_LEN	5	//
-#define MAX_CMD_BODY_LEN 20	//
-#define MAX_CMD_LEN		CMD_HEADER_LEN + MAX_CMD_BODY_LEN
-
-#define MAX_NEIGHBOURS 	8	// The maximum number of neighbouring locations
-#define MAX_LOCATIONS 	100	// The maximum number of location allowed
-
-#define CMD_PING		1	// Controller asking how many locations their are
-#define CMD_KILL		2	// Controller stopping the simulation
-#define CMD_PING_REPLY	3	// Location response to controller ping
-#define CMD_INIT		4	// Controller initiation command
-#define CMD_BEGIN 		5	// Begin the simulation
-#define CMD_LOAD_INFO	6	// Each location reports its current load
-#define CMD_LOAD_ACT	7	// The decision of the controller based on the load
-#define CMD_LOC_UPDATE	8	// The new parameters for location if load balanced
-#define CMD_BOID		9	// Used to transfer boids between locations
-
-#define BROADCAST		0	// Used by the controller to address all locations
-
-#define VISIONRADIUS 3
-#define MAXSPEED 5
-#define MAXBOIDS 10
+//#define SIZEOF_ARRAY( a ) (sizeof( a ) / sizeof( a[ 0 ] ))
+//
+//#define CMD_HEADER_LEN	5	//
+//#define MAX_CMD_BODY_LEN 20	//
+//#define MAX_CMD_LEN		CMD_HEADER_LEN + MAX_CMD_BODY_LEN
+//
+//#define MAX_NEIGHBOURS 	8	// The maximum number of neighbouring locations
+//#define MAX_LOCATIONS 	100	// The maximum number of location allowed
+//
+//#define CMD_PING		1	// Controller asking how many locations their are
+//#define CMD_KILL		2	// Controller stopping the simulation
+//#define CMD_PING_REPLY	3	// Location response to controller ping
+//#define CMD_INIT		4	// Controller initiation command
+//#define CMD_BEGIN 		5	// Begin the simulation
+//#define CMD_LOAD_INFO	6	// Each location reports its current load
+//#define CMD_LOAD_ACT	7	// The decision of the controller based on the load
+//#define CMD_LOC_UPDATE	8	// The new parameters for location if load balanced
+//#define CMD_BOID		9	// Used to transfer boids between locations
+//
+//#define BROADCAST		0	// Used by the controller to address all locations
+//
+//#define VISIONRADIUS 3
+//#define MAXSPEED 5
+//#define MAXBOIDS 10
 
 //// Class Headers ===============================================================
 //class OldVector {
@@ -97,15 +97,15 @@
 // Parameter string
 //Boid* boidList[MAXBOIDS];			// The indices correspond to the boid ID
 //Boid* neighbours[2];				// FIXME: Change initial size
-uint8 boidCount;
+//uint8 boidCount;
 
-uint32 locationNeighbours[MAX_NEIGHBOURS];
-uint32 locationPosition[8];
+//uint32 locationNeighbours[MAX_NEIGHBOURS];
+//uint32 locationPosition[8];
 
-bool dbg;
+//bool dbg;
 
-uint8 locationID;
-uint8 initBoidCount;
+//uint8 locationID;
+//uint8 initBoidCount;
 //==============================================================================
 
 
@@ -273,13 +273,15 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable=output core=AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
-	locationID = 16;		// TODO: Generate random initial ID
-	dbg = true;				// Enable debug or not
-	bool stop = false;		// Stop condition
+	std::cout << "Empty" << std::endl;
 
-	// Read in the command -----------------------------------------------------
-	uint32 command[MAX_CMD_LEN];
-	bool ignoreCmd;
+//	locationID = 16;		// TODO: Generate random initial ID
+//	dbg = true;				// Enable debug or not
+//	bool stop = false;		// Stop condition
+//
+//	// Read in the command -----------------------------------------------------
+//	uint32 command[MAX_CMD_LEN];
+//	bool ignoreCmd;
 
 //	while(!stop) {
 //		// First read the command header

@@ -15,18 +15,21 @@ typedef ap_int<32> int32;
 typedef ap_uint<8> uint8;
 typedef ap_int<8> int8;
 
+typedef ap_int<12> int12;	// Used to represent position and negative velocity
+typedef ap_int<12> uint12;
+
 //Prototypes
 void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output);
 
 // Classes
 class Vector {
 	public:
-		int8 x;
-		int8 y;
-		int8 z;
+		int12 x;
+		int12 y;
+		int12 z;
 
 		Vector();
-		Vector(int8 x_, int8 y_, int8 z_);
+		Vector(int12 x_, int12 y_, int12 z_);
 
 		void add(Vector v);
 		void sub(Vector v);
@@ -36,8 +39,7 @@ class Vector {
 		uint8 mag();
 		void normalise();
 		void bound(uint8 n);
-		void rand(uint8 min, uint8 max);
-		void rand2D(uint8 xMin, uint8 xMax, uint8 yMin, uint8 yMax);
+		void rand(int12 xMin, int12 yMin, int12 xMax, int12 yMax);
 		bool empty();
 
 		void setMag(uint8 mag);
@@ -56,31 +58,33 @@ class Boid {
 		Boid();
 		Boid(int _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
 
-		void CalculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount);  // Calculate the neighbours for the boid
-		void Update(); 						// Calculate the new position of the boid
-		void Draw();						// Draw the boid
+		void calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount);  // Calculate the neighbours for the boid
+		void update(); 						// Calculate the new position of the boid
+		void draw();						// Draw the boid
 
 		Vector getDummyVector();
 		Vector getVelocity();
 		Vector getPosition();
-		int getID();
+		uint8 getID();
+
+		void printBoidInfo();
 
 	private:
 		Vector position;                    // The current pixel position of the boid
 		Vector velocity;                   	// The current velocity of the boid
 		Vector acceleration;
 
-		int boidID;
-		int neighbouringBoidsCount;
+		uint8 id;
+		uint8 neighbouringBoidsCount;
 
 		Boid *neighbouringBoids[MAX_NEIGHBOURS];
 
-		Vector Align();						// Calculate the alignment force
-		Vector Separate();					// Calculate the separation force
-		Vector Cohesion();					// Calculate the cohesion force
+		Vector align();						// Calculate the alignment force
+		Vector separate();					// Calculate the separation force
+		Vector cohesion();					// Calculate the cohesion force
 
-		Vector Seek(Vector);				// Seek a new position
-		void Contain();						// Contain the boids within the simulation area
+		Vector seek(Vector);				// Seek a new position
+		void contain();						// Contain the boids within the simulation area
 };
 
 #endif
