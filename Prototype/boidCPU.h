@@ -45,6 +45,7 @@ class Vector {
 
 		static Vector add(Vector v1, Vector v2);
 		static Vector sub(Vector v1, Vector v2);
+		static double distanceBetween(Vector v1, Vector v2);
 
 		// TODO: Is this needed?
 		friend std::ostream& operator<<(std::ostream& os, const Vector& v);
@@ -55,13 +56,14 @@ class Boid {
 		Boid();
 		Boid(int _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
 
-		void CalculateNeighbours(int possibleNeighbours);  // Calculate the neighbours for the boid
+		void CalculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount);  // Calculate the neighbours for the boid
 		void Update(); 						// Calculate the new position of the boid
 		void Draw();						// Draw the boid
 
 		Vector getDummyVector();
 		Vector getVelocity();
 		Vector getPosition();
+		int getID();
 
 	private:
 		Vector position;                    // The current pixel position of the boid
@@ -71,8 +73,7 @@ class Boid {
 		int boidID;
 		int neighbouringBoidsCount;
 
-		// A list of IDs of neighbouring Boids - cannot be a list of Boids...
-		int neighbouringBoids[MAX_NEIGHBOURS];
+		Boid *neighbouringBoids[MAX_NEIGHBOURS];
 
 		Vector Align();						// Calculate the alignment force
 		Vector Separate();					// Calculate the separation force

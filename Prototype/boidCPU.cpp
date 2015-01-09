@@ -2,6 +2,8 @@
 
 #include <stdlib.h>     /* srand, rand */
 #include <time.h>       /* time */
+#include <iostream>		/* cout */
+#include <math.h>       /* sqrt */
 
 #define MAX_BOIDS		30
 #define MAX_VELOCITY	10
@@ -9,6 +11,8 @@
 
 #define AREA_WIDTH		720
 #define AREA_HEIGHT		720
+
+#define VISION_RADIUS	100
 
 // Function headers
 static void initialisation (void);
@@ -146,6 +150,10 @@ void receive() {
 // Classes /////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+//==============================================================================
+// Vector ======================================================================
+//==============================================================================
+
 // Constructors ////////////////////////////////////////////////////////////////
 Vector::Vector() {
 	x = 0;
@@ -197,8 +205,13 @@ Vector Vector::sub(Vector v1, Vector v2) {
 	return v3;
 }
 
-// Advanced Operations /////////////////////////////////////////////////////////
+// FIXME: The pow function returns a double and the sqrt takes a double, these
+// 	will probably not be allowed in hardware - or will be expensive.
+double Vector::distanceBetween(Vector v1, Vector v2) {
+	return sqrt(pow((v1.x - v2.x), 2) + pow((v1.y - v2.y), 2) + pow((v1.z - v2.z), 2));
+}
 
+// Advanced Operations /////////////////////////////////////////////////////////
 uint8 Vector::mag() {
 	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
 }
@@ -257,17 +270,17 @@ std::ostream& operator <<(std::ostream& os, const Vector& v) {
 	return os;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Boid ////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+//==============================================================================
+// Boid ========================================================================
+//==============================================================================
 
 Boid::Boid() {
 	boidID = 0;
 
 	position = Vector(0, 0, 0);
 	velocity = Vector(0, 0, 0);
+	acceleration = Vector(0, 0, 0);
 
-//	neighbouringBoids = {0};
 	neighbouringBoidsCount = 0;
 }
 
@@ -276,9 +289,23 @@ Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
 
 	position = initPosition;
 	velocity = initVelocity;
+	acceleration = Vector(0, 0, 0);
 
-//	neighbouringBoids = {0};
 	neighbouringBoidsCount = 0;
+}
+
+// TODO: Will need to make a copy of the neighbours rather than a reference so
+//	that as the neighbours are updated, the neighbour list doesn't change
+void Boid::CalculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount) {
+	for (int i = 0; i < possibleNeighbourCount; i++) {
+		if (possibleNeighbours[i].getID() != boidID) {
+			double distance = Vector::distanceBetween(position, possibleNeighbours[i].getPosition());
+			if (distance < VISION_RADIUS) {
+				neighbouringBoids[neighbouringBoidsCount] = &possibleNeighbours[i];
+				neighbouringBoidsCount++;
+			}
+		}
+	}
 }
 
 // Used until actual velocity and position can be retrieved for a boid
@@ -306,8 +333,8 @@ Vector Boid::Align(void) {
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
-		// 	total += neighbouringBoids[i].getVelocity();
-		total.add(getDummyVector());
+		total.add(neighbouringBoids[i]->getVelocity());
+		//total.add(getDummyVector());
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -325,8 +352,8 @@ Vector Boid::Separate(void) {
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
-		//	diff = Vector::sub(position, neighbouringBoids[i].getPosition());
-		diff = Vector::sub(position, getDummyVector());
+		diff = Vector::sub(position, neighbouringBoids[i]->getPosition());
+		//diff = Vector::sub(position, getDummyVector());
 		diff.normalise();
 		total.add(diff);
 	}
@@ -346,8 +373,8 @@ Vector Boid::Cohesion(void) {
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
-		//	total.add(neighbouringBoids[i].getPosition());
-		total.add(getDummyVector());
+		total.add(neighbouringBoids[i]->getPosition());
+		//total.add(getDummyVector());
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -385,4 +412,8 @@ Vector Boid::getVelocity(void) {
 
 Vector Boid::getPosition(void) {
 	return position;
+}
+
+int Boid::getID(void) {
+	return boidID;
 }
