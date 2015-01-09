@@ -52,11 +52,14 @@ class Vector {
 
 class Boid {
 	public:
-		Boid(int _boidID, Vector initPosition, Vector initVelocity);                         	// Constructor - initialise the boid
+		Boid();
+		Boid(int _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
+
 		void CalculateNeighbours(int possibleNeighbours);  // Calculate the neighbours for the boid
 		void Update(); 						// Calculate the new position of the boid
 		void Draw();						// Draw the boid
 
+		Vector getDummyVector();
 		Vector getVelocity();
 		Vector getPosition();
 
@@ -68,7 +71,8 @@ class Boid {
 		int boidID;
 		int neighbouringBoidsCount;
 
-		Boid neighbouringBoids[MAX_NEIGHBOURS];
+		// A list of IDs of neighbouring Boids - cannot be a list of Boids...
+		int neighbouringBoids[MAX_NEIGHBOURS];
 
 		Vector Align();						// Calculate the alignment force
 		Vector Separate();					// Calculate the separation force

@@ -187,13 +187,13 @@ void Vector::div(uint8 n) {
 }
 
 // Static Operations /////////////////////////////////////////////////////////
-static Vector Vector::add(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y);
+Vector Vector::add(Vector v1, Vector v2) {
+	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
 	return v3;
 }
 
-static Vector Vector::sub(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
+Vector Vector::sub(Vector v1, Vector v2) {
+	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
 	return v3;
 }
 
@@ -238,6 +238,7 @@ void Vector::rand2D(uint8 xMin, uint8 xMax, uint8 yMin, uint8 yMax) {
 //		y = yMin + (rand(1) % (int)(yMax - yMin + 1));
 	x = 10;
 	y = 10;
+	z = 0;
 }
 
 bool Vector::empty() {
@@ -256,21 +257,33 @@ std::ostream& operator <<(std::ostream& os, const Vector& v) {
 	return os;
 }
 
-Vector::Vector(int8 x_, int8 y_, int8 z_) {
-	x = x_;
-	y = y_;
-	z = z_;
+////////////////////////////////////////////////////////////////////////////////
+// Boid ////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+Boid::Boid() {
+	boidID = 0;
+
+	position = Vector(0, 0, 0);
+	velocity = Vector(0, 0, 0);
+
+//	neighbouringBoids = {0};
+	neighbouringBoidsCount = 0;
 }
 
 Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
-
 	boidID = _boidID;
 
 	position = initPosition;
 	velocity = initVelocity;
 
-	neighbouringBoids = {0};
+//	neighbouringBoids = {0};
 	neighbouringBoidsCount = 0;
+}
+
+// Used until actual velocity and position can be retrieved for a boid
+Vector Boid::getDummyVector() {
+	return Vector(1, 2, 0);
 }
 
 void Boid::Update(void) {
@@ -291,8 +304,10 @@ void Boid::Update(void) {
 Vector Boid::Align(void) {
 	Vector total;
 
-	for (Boid b : neighbouringBoids) {
-		total += b.getVelocity();
+	for (int i = 0; i < neighbouringBoidsCount; i++) {
+		// FIXME: This doesn't work as Boid can't have a list of Boids
+		// 	total += neighbouringBoids[i].getVelocity();
+		total.add(getDummyVector());
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -308,8 +323,10 @@ Vector Boid::Separate(void) {
 	Vector total;
 	Vector diff;
 
-	for (Boid b : neighbouringBoids) {
-		diff = Vector::sub(position, b.getPosition());
+	for (int i = 0; i < neighbouringBoidsCount; i++) {
+		// FIXME: This doesn't work as Boid can't have a list of Boids
+		//	diff = Vector::sub(position, neighbouringBoids[i].getPosition());
+		diff = Vector::sub(position, getDummyVector());
 		diff.normalise();
 		total.add(diff);
 	}
@@ -325,13 +342,16 @@ Vector Boid::Separate(void) {
 
 Vector Boid::Cohesion(void) {
 	Vector total;
+	Vector steer;
 
-	for(Boid b : neighbouringBoids) {
-		total.add(b.getPosition());
+	for (int i = 0; i < neighbouringBoidsCount; i++) {
+		// FIXME: This doesn't work as Boid can't have a list of Boids
+		//	total.add(neighbouringBoids[i].getPosition());
+		total.add(getDummyVector());
 	}
 
 	total.div(neighbouringBoidsCount);
-	Vector steer = Seek(total);
+	steer = Seek(total);
 	return steer;
 }
 
