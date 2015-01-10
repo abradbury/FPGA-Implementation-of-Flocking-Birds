@@ -42,6 +42,7 @@ class Boid:
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and 
     # the possible neighbour. Possible neighbouring boids include boids from neighbouring boidCPUs.
     def calculateNeighbours(self, possibleNeighbours):
+        self.neighbouringBoids = []
         for boid in possibleNeighbours:
             if boid.BOID_ID != self.BOID_ID:
                 dist = self.distanceBetweenTwoPoints(self.position, boid.position)
