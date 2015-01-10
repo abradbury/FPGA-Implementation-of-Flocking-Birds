@@ -86,20 +86,7 @@ class BoidCPU:
     # need to be transferred to neighbouring boidCPUs based on their new positions. 
     def update(self):
         for boid in self.boids:
-            # self.logger.debug("Boid #" + str(self.boids[i].BOID_ID) + ":  OLD position = " + str(self.boids[i].position) + ", OLD velocity = " + str(self.boids[i].velocity))
             boid.update()
-            # self.logger.debug("Boid #" + str(self.boids[i].BOID_ID) + ":  NEW position = " + str(self.boids[i].position) + ", NEW velocity = " + str(self.boids[i].velocity))
-  
-        # # If the number of boids in the boidCPU are greater than a threshold, signal controller
-        # if self.config['loadBalance']:
-        #     if self.boidCount >= self.config['BOID_THRESHOLD']:
-        #         self.loadBalance()
-
-        # Determine if the new positions of the boids lie outside the boidCPU's bounds
-        # Do not perform this step here if load balancing is performed
-        # if not self.config['loadBalance']:
-        #     for boid in self.boids:
-        #         self.determineBoidTransfer(boid)
                 
 
     # Draw the new positions of the boids.
@@ -256,9 +243,6 @@ class BoidCPU:
         widthSegments = boidCPUWidth / self.config['stepSize']
         heightSegments = boidCPUHeight / self.config['stepSize']
 
-        self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " width = " + str(boidCPUWidth) + ", height = " + str(boidCPUHeight))
-        self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " coords: " + str(self.boidCPUCoords))
-
         # Draw a grid on for the BoidCPU
         self.boidGPU.drawBoidCPUGrid(self.boidCPUCoords, widthSegments, heightSegments)
 
@@ -365,9 +349,11 @@ class BoidCPU:
     # Used to check that the proposed change doesn't violate the minimum size of the BoidCPU. The 
     # minimum BoidCPU size is defined as the boid vision radius. This ensures that a boid's 
     # neighbours would always be in an adjacent BoidCPU and not one that is further away.
-    def minSizeEnforced(self, edgeID, proposedChange, tmpCoords):
+    def minSizeEnforced(self, edgeID, proposedChange, tmpCoords = None):
         change = (self.config['stepSize'] * proposedChange)
         result = False
+        if tmpCoords == None:
+            tmpCoords = self.boidCPUCoords
 
         # If the edge to change is the top or the bottom edge, check the proposed BoidCPU height
         if (edgeID == 0) or (edgeID == 2):
@@ -438,8 +424,8 @@ class BoidCPU:
         return validEdges[edgeID]
 
 
-    # Evaluates the requested boundary adjustment to determine what the state of the current BoidCPU 
-    # would be if the change is made. Returns either the predicted numer of boids.
+    # Evaluates the requested edge adjustment to determine what the state of the current BoidCPU 
+    # would be if the change is made. Returns the predicted number of boids.
     # 
     # Gets the boids of neighbouring BoidCPUs that would be affected by the change, uses this, and 
     # its own boids to calculate the number of boids the BoidCPU will have if the requested edge 
@@ -448,22 +434,11 @@ class BoidCPU:
     # An alternative would be to use a distribution, but this has to be created and maintained. 
     # 
     # FIXME: The reported numbers are not always correct, possibly due to a draw happening 
-    def evaluateBoundaryChange(self, changeRequests, gridPosition):
-        [row, col] = gridPosition
-
+    def evaluateBoundaryChange(self, changeRequests, overloadedBoidCPUGridPosition):
         # Print out request
         for i in changeRequests:
-            if i[0] == 0:
-                t = "top"
-            if i[0] == 1:
-                t = "right"
-            if i[0] == 2:
-                t = "bottom"
-            if i[0] == 3:
-                t = "left"
-
-            self.logger.debug("\tRequest to change " + t + " of BoidCPU " + str(self.BOIDCPU_ID) + 
-                " by " + str(i[1]) + " step")
+            self.logger.debug("\tRequest to change edge " + str(i[0]) + " of BoidCPU " + 
+                str(self.BOIDCPU_ID) + " by " + str(i[1]) + " step")
 
         # Make a list of the edges that are requested to change
         edgeChanges = [False, False, False, False]
@@ -498,39 +473,33 @@ class BoidCPU:
             
         # Determine the new bounds, but not by changing the actual bounds
         tempBounds = copy.deepcopy(self.boidCPUCoords)
-        for edge in changeRequests:
-            stepChange = edge[1] * self.config['stepSize']
-            if row == self.gridPosition[0]:     # If this is on the same row as the overloaded one
-                if edge[0] == 0:                #   If the top edge is to be changed
-                    tempBounds[1] += stepChange #     Increase the top boundary
-                elif edge[0] == 2:              #   If the bottom edge is to be changed
-                    tempBounds[3] -= stepChange #     Decrease the bottom boundary
-            else:
-                if edge[0] == 0:                # Decrease top edge
-                    tempBounds[1] -= stepChange
-                elif edge[0] == 2:              # Increase bottom edge
-                    tempBounds[3] += stepChange
 
-            if col == self.gridPosition[1]:
-                if edge[0] == 1:                # Decrease right edge
-                    tempBounds[2] -= stepChange
-                elif edge[0] == 3:              # Increase left edge
-                    tempBounds[0] += stepChange
+        for edge in changeRequests:
+            # If this BoidCPU is on the same row as the overloaded BoidCPU, constrict edges
+            if overloadedBoidCPUGridPosition[0] == self.gridPosition[0]:
+                if (edge[0] == 0) or (edge[0] == 2):
+                    tempBounds = self.moveEdge(edge[0], True, edge[1], tempBounds)
             else:
-                if edge[0] == 1:                # Increase right edge
-                    tempBounds[2] += stepChange
-                elif edge[0] == 3:              # Decrease left edge
-                    tempBounds[0] -= stepChange
+                if (edge[0] == 0) or (edge[0] == 2):
+                    tempBounds = self.moveEdge(edge[0], False, edge[1], tempBounds)
+
+            # If this BoidCPU is in the same column as the overloaded BoidCPU, constrict edges
+            if overloadedBoidCPUGridPosition[1] == self.gridPosition[1]:
+                if (edge[0] == 1) or (edge[0] == 3):
+                    tempBounds = self.moveEdge(edge[0], True, edge[1], tempBounds)
+            else:
+                if (edge[0] == 1) or (edge[0] == 3):
+                    tempBounds = self.moveEdge(edge[0], False, edge[1], tempBounds)
+
 
         # Iterate over all the boids in the current BoidCPU and those gather from affected 
-        # neighbouring BoidCPUs to determine how many boids lie within the new bounds
+        # neighbouring BoidCPUs to determine how many boids lie within the new bounds.
+        # 
+        # TODO: Check '=' with other usages, e.g. when transferring boids
         counter = 0
         for boid in boidsToCheck:
-            # If the boid lies within the new x bounds of the BoidCPU
             if (boid.position[0] >= tempBounds[0]) and (boid.position[0] <= tempBounds[2]):
-                # And if the boid lies within the new y bounds of the BoidCPU
                 if (boid.position[1] >= tempBounds[1]) and (boid.position[1] <= tempBounds[3]):
-                    # Increment counter
                     counter += 1
 
         self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " would have " + str(counter) + 
@@ -539,6 +508,7 @@ class BoidCPU:
         return [len(self.boids), counter]
 
 
+    # TODO: Rename 'decrease'
     def moveEdge(self, edgeID, decrease, steps, coords):
         change = self.config['stepSize'] * steps
         coordsIdx = self.edgeToCoord(edgeID)
@@ -546,26 +516,34 @@ class BoidCPU:
         if edgeID == 0:     # Top edge
             if decrease:
                 coords[coordsIdx] += change
+                print "Increasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] -= change
+                print "Decreasing edge " + str(edgeID) + " (2)"
 
         elif edgeID == 1:   # Right edge
             if decrease:
                 coords[coordsIdx] -= change
+                print "Decreasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] += change
+                print "Increasing edge " + str(edgeID) + " (2)"
 
         elif edgeID == 2:   # Bottom edge
             if decrease:
                 coords[coordsIdx] -= change
+                print "Decreasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] += change
+                print "Increasing edge " + str(edgeID) + " (2)"
 
         elif edgeID == 3:   # Left edge
             if decrease:
                 coords[coordsIdx] += change
+                print "Increasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] -= change
+                print "Decreasing edge " + str(edgeID) + " (2)"
 
         return coords
 
@@ -627,11 +605,4 @@ class BoidCPU:
         self.boidCPUAtMinimalSize = False
 
         self.boidGPU.updateBoidCPU(self.BOIDCPU_ID, self.boidCPUCoords)
-
-
-        # boidCPUWidth = self.boidCPUCoords[2] - self.boidCPUCoords[0]
-        # boidCPUHeight = self.boidCPUCoords[3] - self.boidCPUCoords[1]
-
-        # self.logger.debug("New BoidCPU #" + str(self.BOIDCPU_ID) + " width = " + str(boidCPUWidth) + ", height = " + str(boidCPUHeight))
-        # self.logger.debug("New BoidCPU #" + str(self.BOIDCPU_ID) + " coords: " + str(self.boidCPUCoords))
 

@@ -73,7 +73,7 @@ class Simulation:
         
         # Load balancing parameters
         self.config['loadBalance'] = True       # True to enable load balancing
-        self.config['loadBalanceType'] = 2      # See notes at top of file
+        self.config['loadBalanceType'] = 3      # See notes at top of file
         self.config['BOID_THRESHOLD'] = 3      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
 
@@ -175,10 +175,7 @@ class Simulation:
             self.drawStep()
             self.calcStep()
             self.loadStep()
-
-            for boidCPU in self.boidCPUs:
-                for boid in boidCPU.boids:
-                    boidCPU.determineBoidTransfer(boid)
+            self.transferStep()
 
             # Update the counter label
             self.timeStepCounter += 1
@@ -251,6 +248,14 @@ class Simulation:
         if self.config['loadBalance']:
             for boidCPU in self.boidCPUs:
                 boidCPU.loadBalance()
+
+
+    # Determine if the new positions of the boids are outside their BoidCPU, if they are, transfere 
+    # the boids to neighbouring BoidCPUS
+    def transferStep(self):
+        for boidCPU in self.boidCPUs:
+            for boid in boidCPU.boids:
+                boidCPU.determineBoidTransfer(boid)
 
 
     # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
