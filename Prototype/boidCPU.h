@@ -48,6 +48,7 @@ class Vector {
 		static Vector add(Vector v1, Vector v2);
 		static Vector sub(Vector v1, Vector v2);
 		static double distanceBetween(Vector v1, Vector v2);
+		static bool equal(Vector v1, Vector v2);
 
 		// TODO: Is this needed?
 		friend std::ostream& operator<<(std::ostream& os, const Vector& v);
@@ -62,10 +63,11 @@ class Boid {
 		void update(); 						// Calculate the new position of the boid
 		void draw();						// Draw the boid
 
-		Vector getDummyVector();
 		Vector getVelocity();
 		Vector getPosition();
 		uint8 getID();
+//		uint8 getNeighbourCount();
+//		Boid* getNeighbours();
 
 		void printBoidInfo();
 

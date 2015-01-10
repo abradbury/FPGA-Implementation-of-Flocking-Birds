@@ -98,24 +98,43 @@ void simulationSetup() {
 
 	// These should be supplied by the controller over the communications link
 	boidCPUID = 6;
-	int12 boidCPUCoords[4] = {0, 0, 240, 240};
-	int12 initialBoidCount = 10;
+	int12 boidCPUCoords[4] = {480, 240, 720, 480};
+	int8 initialBoidCount = 10;
 	// TODO: Supply the neighbouring BoidCPUs
 
 	boidCount = initialBoidCount;
 
-	for(int8 i = 0; i < boidCount; i++) {
-		Vector position;
-		Vector velocity;
+	// Use this for testing
+	int testBoidCount = 10;
+	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
+			{Vector(594, 404, 0), Vector(-10, -1, 0)},
+			{Vector(550, 350, 0), Vector(-10, -3, 0)},
+			{Vector(661, 446, 0), Vector(-6, -4, 0)},
+			{Vector(539, 283, 0), Vector(-8, -2, 0)},
+			{Vector(551, 256, 0), Vector(-5, 7, 0)},
+			{Vector(644, 342, 0), Vector(-1, -7, 0)},
+			{Vector(592, 399, 0), Vector(-9, 6, 0)},
+			{Vector(644, 252, 0), Vector(-5, -8, 0)},
+			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
 
-		position.rand(boidCPUCoords[0], boidCPUCoords[1], boidCPUCoords[2], boidCPUCoords[3]);
-		velocity.rand(-MAX_VELOCITY, -MAX_VELOCITY, MAX_VELOCITY, MAX_VELOCITY);
-
+	for(int i = 0; i < testBoidCount; i++) {
 		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-
-		Boid boid = Boid(boidID, position, velocity);
+		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
 		boids[i] = boid;
 	}
+
+//	for(int8 i = 0; i < boidCount; i++) {
+//		Vector position;
+//		Vector velocity;
+//
+//		position.rand(boidCPUCoords[0], boidCPUCoords[1], boidCPUCoords[2], boidCPUCoords[3]);
+//		velocity.rand(-MAX_VELOCITY, -MAX_VELOCITY, MAX_VELOCITY, MAX_VELOCITY);
+//
+//		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+//
+//		Boid boid = Boid(boidID, position, velocity);
+//		boids[i] = boid;
+//	}
 
 	state = NBRS;
 }
@@ -139,7 +158,7 @@ void findNeighbours() {
 		if (neighbouringBoidCPUs[i] != 0) {
 			// TODO: Get boids from neighbouring BoidCPUs
 			// possibleNeighbouringBoids[] =
-			possibleNeighbourCount++;
+			// possibleNeighbourCount++;
 		}
 	}
 
@@ -147,6 +166,19 @@ void findNeighbours() {
 	for (int i = 0; i < boidCount; i++) {
 		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
 	}
+
+	// A list of the known neighbours for the boids at time step 1 (from Python)
+	// Sat 10th Jan: HLS is correct
+	int knownSetupNeighbours [10][5] = {{59},
+			 {53, 54, 57, 58},
+			 {52, 55, 56, 57, 58},
+			 {52, 58, 60},
+			 {53, 56},
+			 {53, 55, 59},
+			 {52, 53, 58, 59},
+			 {52, 53, 54, 57},
+			 {51, 56, 57},
+			 {54}};
 
 	state = BOID;
 }
@@ -156,6 +188,27 @@ void calcNextBoidPositions() {
 
 	for (int i = 0; i < boidCount; i++) {
 		boids[i].update();
+	}
+
+	// The next positions of the boids, rounded to ints from floats, from Python
+	Vector knownSetupNextPos[10][2] = {{Vector(691, 244, 0), Vector(-4, -8, 0)},
+			{Vector(586, 403, 0), Vector(-8, -2, 0)},
+			{Vector(541, 349, 0), Vector(-9, -2, 0)},
+			{Vector(655, 444, 0), Vector(-6, -2, 0)},
+			{Vector(532, 283, 0), Vector(-7, -2, 0)},
+			{Vector(547, 261, 0), Vector(-4, 5, 0)},
+			{Vector(642, 337, 0), Vector(-2, -5, 0)},
+			{Vector(584, 403, 0), Vector(-8, 4, 0)},
+			{Vector(639, 245, 0), Vector(-5, -7, 0)},
+			{Vector(680, 485, 0), Vector(-7, 7, 0)}};
+
+	for (int i = 0; i < boidCount; i++) {
+		if (!Vector::equal(boids[i].getPosition(), knownSetupNextPos[i][0])) {
+			std::cout << "Boid #" << boids[i].getID() << " position differs" << std::endl;
+			std::cout << "   " << boids[i].getPosition() << " vs " << knownSetupNextPos[i][0] << std::endl;
+		} else {
+			std::cout << "Boid #" << boids[i].getID() << " position same" << std::endl;
+		}
 	}
 
 	state = LOAD;
@@ -190,119 +243,6 @@ void receive() {
 ////////////////////////////////////////////////////////////////////////////////
 
 //==============================================================================
-// Vector ======================================================================
-//==============================================================================
-
-// Constructors ////////////////////////////////////////////////////////////////
-Vector::Vector() {
-	x = 0;
-	y = 0;
-	z = 0;
-}
-
-Vector::Vector(int12 x_, int12 y_, int12 z_) {
-	x = x_;
-	y = y_;
-	z = z_;
-}
-
-// Basic Operations ////////////////////////////////////////////////////////////
-void Vector::add(Vector v) {
-	x = x + v.x;
-	y = y + v.y;
-	z = z + v.z;
-}
-
-void Vector::sub(Vector v) {
-	x = x - v.x;
-	y = y - v.y;
-	z = z - v.z;
-}
-
-void Vector::mul(uint8 n) {
-	x = x * n;
-	y = y * n;
-	z = z * n;
-}
-
-void Vector::div(uint8 n) {
-	if (n != 0) {
-		x = x / n;
-		y = y / n;
-		z = z / n;
-	}
-}
-
-// Static Operations /////////////////////////////////////////////////////////
-Vector Vector::add(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
-	return v3;
-}
-
-Vector Vector::sub(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
-	return v3;
-}
-
-// FIXME: The pow function returns a double and the sqrt takes a double, these
-// 	will probably not be allowed in hardware - or will be expensive.
-double Vector::distanceBetween(Vector v1, Vector v2) {
-	return sqrt(pow((v1.x - v2.x), 2) + pow((v1.y - v2.y), 2) + pow((v1.z - v2.z), 2));
-}
-
-// Advanced Operations /////////////////////////////////////////////////////////
-uint8 Vector::mag() {
-	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
-}
-
-void Vector::setMag(uint8 mag) {
-	normalise();
-	mul(mag);
-}
-
-void Vector::normalise() {
-	uint8 m = mag();
-	div(m);
-}
-
-void Vector::limit(uint8 max) {
-	if(mag() > max) {
-		normalise();
-		mul(max);
-	}
-}
-
-void Vector::bound(uint8 n) {
-	// TODO: The is technically not binding the speed, which is the magnitude
-	if(x > n) x = n;
-	if(y > n) y = n;
-	if(z > n) z = n;
-}
-
-// http://stackoverflow.com/a/5009006
-void Vector::rand(int12 xMin, int12 yMin, int12 xMax, int12 yMax) {
-	x = xMin + (std::rand() % (int)(xMax - xMin + 1));
-	y = yMin + (std::rand() % (int)(yMax - yMin + 1));
-	z = 0;
-}
-
-bool Vector::empty() {
-	bool result = true;
-
-	if(x) result = false;
-	else if(y) result = false;
-	else if(z) result = false;
-
-	return result;
-}
-
-// Other ///////////////////////////////////////////////////////////////////////
-std::ostream& operator <<(std::ostream& os, const Vector& v) {
-	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
-	return os;
-}
-
-//==============================================================================
 // Boid ========================================================================
 //==============================================================================
 
@@ -330,6 +270,8 @@ Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
 // TODO: Will need to make a copy of the neighbours rather than a reference so
 //	that as the neighbours are updated, the neighbour list doesn't change
 void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount) {
+	std::cout << "Calculating neighbours for boid #" << id << std::endl;
+
 	for (int i = 0; i < possibleNeighbourCount; i++) {
 		if (possibleNeighbours[i].getID() != id) {
 			double distance = Vector::distanceBetween(position, possibleNeighbours[i].getPosition());
@@ -339,11 +281,11 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCo
 			}
 		}
 	}
-}
 
-// Used until actual velocity and position can be retrieved for a boid
-Vector Boid::getDummyVector() {
-	return Vector(1, 2, 0);
+	std::cout << "Boid #" << id << " has " << neighbouringBoidsCount << " neighbours: ";
+	for (int i = 0; i < neighbouringBoidsCount; i++) {
+		std::cout << neighbouringBoids[i]->getID() << ", ";
+	} std::cout << std::endl;
 }
 
 void Boid::update(void) {
@@ -453,9 +395,138 @@ uint8 Boid::getID(void) {
 	return id;
 }
 
+//uint8 Boid::getNeighbourCount(void) {
+//	return neighbouringBoidsCount;
+//}
+//
+//Boid* Boid::getNeighbours(void) {
+//	return &neighbouringBoids;
+//}
+
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
 	std::cout << "Boid Velocity: " << velocity << std::endl;
 	std::cout << "Boid Position: " << position << std::endl;
 	std::cout << "===================================" << std::endl;
+}
+
+//==============================================================================
+// Vector ======================================================================
+//==============================================================================
+
+// Constructors ////////////////////////////////////////////////////////////////
+Vector::Vector() {
+	x = 0;
+	y = 0;
+	z = 0;
+}
+
+Vector::Vector(int12 x_, int12 y_, int12 z_) {
+	x = x_;
+	y = y_;
+	z = z_;
+}
+
+// Basic Operations ////////////////////////////////////////////////////////////
+void Vector::add(Vector v) {
+	x = x + v.x;
+	y = y + v.y;
+	z = z + v.z;
+}
+
+void Vector::sub(Vector v) {
+	x = x - v.x;
+	y = y - v.y;
+	z = z - v.z;
+}
+
+void Vector::mul(uint8 n) {
+	x = x * n;
+	y = y * n;
+	z = z * n;
+}
+
+void Vector::div(uint8 n) {
+	if (n != 0) {
+		x = x / n;
+		y = y / n;
+		z = z / n;
+	}
+}
+
+// Static Operations /////////////////////////////////////////////////////////
+Vector Vector::add(Vector v1, Vector v2) {
+	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
+	return v3;
+}
+
+Vector Vector::sub(Vector v1, Vector v2) {
+	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
+	return v3;
+}
+
+// FIXME: The pow function returns a double and the sqrt takes a double, these
+// 	will probably not be allowed in hardware - or will be expensive.
+double Vector::distanceBetween(Vector v1, Vector v2) {
+	return sqrt(pow((v1.x - v2.x), 2) + pow((v1.y - v2.y), 2) + pow((v1.z - v2.z), 2));
+}
+
+bool Vector::equal(Vector v1, Vector v2) {
+	if ((v1.x == v2.x) && (v1.y == v2.y) && (v1.z == v2.z)) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+// Advanced Operations /////////////////////////////////////////////////////////
+uint8 Vector::mag() {
+	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
+}
+
+void Vector::setMag(uint8 mag) {
+	normalise();
+	mul(mag);
+}
+
+void Vector::normalise() {
+	uint8 m = mag();
+	div(m);
+}
+
+void Vector::limit(uint8 max) {
+	if(mag() > max) {
+		normalise();
+		mul(max);
+	}
+}
+
+void Vector::bound(uint8 n) {
+	// TODO: The is technically not binding the speed, which is the magnitude
+	if(x > n) x = n;
+	if(y > n) y = n;
+	if(z > n) z = n;
+}
+
+// http://stackoverflow.com/a/5009006
+void Vector::rand(int12 xMin, int12 yMin, int12 xMax, int12 yMax) {
+	x = xMin + (std::rand() % (int)(xMax - xMin + 1));
+	y = yMin + (std::rand() % (int)(yMax - yMin + 1));
+	z = 0;
+}
+
+bool Vector::empty() {
+	bool result = true;
+
+	if(x) result = false;
+	else if(y) result = false;
+	else if(z) result = false;
+
+	return result;
+}
+
+// Other ///////////////////////////////////////////////////////////////////////
+std::ostream& operator <<(std::ostream& os, const Vector& v) {
+	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
+	return os;
 }
