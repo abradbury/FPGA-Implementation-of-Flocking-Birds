@@ -219,11 +219,8 @@ class BoidCPU:
         if self.boidCount >= self.config['BOID_THRESHOLD']:
             # Analyse the distribution of the boids in this BoidCPU to determine the step
             if (self.config['loadBalanceType'] == 2) or (self.config['loadBalanceType'] == 3): 
-                if not self.boidCPUAtMinimalSize:
-                    self.createBoidDistribution()
-                    requestedChange = self.analyseBoidDistribution()
-                else:
-                    self.logger.debug("BoidCPU #" + str(self.BOIDCPU_ID) + " at minimal size")
+                self.createBoidDistribution()
+                requestedChange = self.analyseBoidDistribution()
             elif self.config['loadBalanceType'] == 1: 
                 requestedChange = None
 
