@@ -54,6 +54,7 @@ Transition trans[MAX_STATES] = {
 int8 boidCPUID;
 int8 boidCount;
 Boid boids[MAX_BOIDS];
+uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 
 void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port=input
@@ -79,7 +80,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 void initialisation() {
 	std::cout << "-Initialising BoidCPU..." << std::endl;
 
-	int boidCPUID = 6;
+	boidCPUID = 6;
 	int fpgaID = 123;
 
 	state = IDEN;
@@ -143,7 +144,7 @@ void findNeighbours() {
 	std::cout << "Finding neighbouring boids..." << std::endl;
 
 	// The neighbouring BoidCPUs would be supplied by the controller on intialisation
-	uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS] = {2, 3, 1, 4, 7, 9, 8, 5};
+	neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS] = {2, 3, 1, 4, 7, 9, 8, 5};
 
 	// Generate a list of possible neighbouring boids
 	Boid possibleNeighbouringBoids[MAX_NEIGHBOURING_BOIDS];
@@ -221,6 +222,13 @@ void loadBalance() {
 
 void moveBoids() {
 	std::cout << "Moving boids..." << std::endl;
+
+	for (int i = 0; i < boidCount; i++) {
+		if((neighbouringBoidCPUs[0] != 0) && (boids[i].getPosition().x < neighbouringBoidCPUs[])) {
+
+		}
+	}
+
 	state = DRAW;
 }
 
@@ -236,6 +244,20 @@ void transmit(int to, int data) {
 
 void receive() {
 //	input.read();
+
+	// Identify the input and if it is a boid, send data to function
+	acceptBoid(inputData);
+}
+
+void acceptBoid(uint32 *boidData) {
+	// TODO: Parse the input data to create a boid object
+	int boidID = 12;
+	Vector boidPosition = Vector(12, 100, 0);
+	Vector boidVelocity = Vector(10, -2, 0);
+	Boid b = Boid(boidID, boidPosition, boidVelocity);
+
+	boids[boidCount] = b;
+	boidCount++;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
