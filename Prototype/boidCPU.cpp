@@ -8,13 +8,26 @@
 #define MAX_BOIDS				30
 #define MAX_VELOCITY			10
 #define MAX_FORCE				1
+#define MAX_CMD_LEN				10		// TODO: Decide on appropriate value
 
 #define AREA_WIDTH				720
 #define AREA_HEIGHT				720
 
+#define CMD_HEADER_LEN			5
+
 #define VISION_RADIUS			100
 #define MAX_BOIDCPU_NEIGHBOURS	9
 #define MAX_NEIGHBOURING_BOIDS	90		// TODO: Decide on appropriate value?
+
+#define CMD_PING		1	// Controller asking how many locations their are
+#define CMD_KILL		2	// Controller stopping the simulation
+#define CMD_PING_REPLY	3	// Location response to controller ping
+#define CMD_INIT		4	// Controller initiation command
+#define CMD_BEGIN 		5	// Begin the simulation
+#define CMD_LOAD_INFO	6	// Each location reports its current load
+#define CMD_LOAD_ACT	7	// The decision of the controller based on the load
+#define CMD_LOC_UPDATE	8	// The new parameters for location if load balanced
+#define CMD_BOID		9	// Used to transfer boids between locations
 
 // Function headers
 static void initialisation (void);
@@ -25,6 +38,9 @@ static void calcNextBoidPositions (void);
 static void loadBalance (void);
 static void moveBoids (void);
 static void updateDisplay (void);
+
+void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
+void printCommand(bool send);
 
 // Define the states
 enum States {INIT, IDEN, SIMS, NBRS, BOID, LOAD, MOVE, DRAW, MAX_STATES};
@@ -52,9 +68,17 @@ Transition trans[MAX_STATES] = {
 // Define variables
 // FIXME: Should these really be global?
 int8 boidCPUID;
+int8 fpgaID;
+
 int8 boidCount;
 Boid boids[MAX_BOIDS];
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
+int12 boidCPUCoords[4];
+
+uint32 outputData[MAX_CMD_LEN];
+uint32 outputBody[20];
+
+bool outputAvailable = false;		// True if there is output ready to send
 
 void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port=input
@@ -63,17 +87,47 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable=output core=AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
+	uint32 inputData[MAX_CMD_LEN];
+
+
+	// Perform initialisation
+	// TODO: This only needs to be called on power up, not every time the
+	//	BoidCPU is called.
 	state = INIT;
+	(trans[state].function)();
+
+	// Block until there is input available
+	int size = input.read();
+
+	// When there is input, read in the command
+	for (int i = 1; i < size; i++) {
+		inputData[i] = input.read();
+	}
+
+	// Parse the command - [size, to, from, type, data]?
+	if ((inputData[1] == 0) || (inputData[1] == boidCPUID)) {
+		state = States((int)inputData[3]);
+		(trans[state].function)();
+	}
+
+	// If there is output to send, send it
+	if (outputAvailable) {
+		for (int i = 0; i < outputData[0]; i++) {
+			output.write(outputData[i]);
+		}
+		printCommand(true);
+	}
+
 	// Can a while(1) be used in h/w is there one implicitly elsewhere?
-	while (state != DRAW) {
+//	while (state != DRAW) {
 //		for(int i = 0; i < TRANS_COUNT; i++) {
 //			if (state == trans[i].state) {
 //				(trans[i].function)();
 //			}
 //		}
-		// Catch invalid values
-		(trans[state].function)();
-	}
+//		// Catch invalid values
+//		(trans[state].function)();
+//	}
 }
 
 // State methods
@@ -81,7 +135,7 @@ void initialisation() {
 	std::cout << "-Initialising BoidCPU..." << std::endl;
 
 	boidCPUID = 6;
-	int fpgaID = 123;
+	fpgaID = 123;
 
 	state = IDEN;
 }
@@ -91,6 +145,10 @@ void identify() {
 
 	std::cout << "-Responded to ping" << std::endl;
 
+	outputBody[0] = boidCPUID;
+	outputBody[1] = fpgaID;
+	generateOutput(2, 0, CMD_PING_REPLY, outputBody);
+
 	state = SIMS;
 }
 
@@ -99,7 +157,10 @@ void simulationSetup() {
 
 	// These should be supplied by the controller over the communications link
 	boidCPUID = 6;
-	int12 boidCPUCoords[4] = {480, 240, 720, 480};
+	boidCPUCoords[0] = 480;
+	boidCPUCoords[1] = 240;
+	boidCPUCoords[2] = 720;
+	boidCPUCoords[3] = 480;
 	int8 initialBoidCount = 10;
 	// TODO: Supply the neighbouring BoidCPUs
 
@@ -144,7 +205,14 @@ void findNeighbours() {
 	std::cout << "Finding neighbouring boids..." << std::endl;
 
 	// The neighbouring BoidCPUs would be supplied by the controller on intialisation
-	neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS] = {2, 3, 1, 4, 7, 9, 8, 5};
+	neighbouringBoidCPUs[0] = 2;
+	neighbouringBoidCPUs[1] = 3;
+	neighbouringBoidCPUs[2] = 1;
+	neighbouringBoidCPUs[3] = 4;
+	neighbouringBoidCPUs[4] = 7;
+	neighbouringBoidCPUs[5] = 9;
+	neighbouringBoidCPUs[6] = 8;
+	neighbouringBoidCPUs[7] = 5;
 
 	// Generate a list of possible neighbouring boids
 	Boid possibleNeighbouringBoids[MAX_NEIGHBOURING_BOIDS];
@@ -221,13 +289,57 @@ void loadBalance() {
 }
 
 void moveBoids() {
-	std::cout << "Moving boids..." << std::endl;
+	std::cout << "Transferring boids..." << std::endl;
+
+	Boid boidToTransfer;
+	int recipientBoidCPU = 0;
 
 	for (int i = 0; i < boidCount; i++) {
-		if((neighbouringBoidCPUs[0] != 0) && (boids[i].getPosition().x < neighbouringBoidCPUs[])) {
-
+		if (neighbouringBoidCPUs[0] != 0) {
+			if ((boids[i].getPosition().y < boidCPUCoords[1]) && (boids[i].getPosition().x < boidCPUCoords[0])) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[0];
+			}
+		} else if (neighbouringBoidCPUs[2] != 0) {
+			if ((boids[i].getPosition().y < boidCPUCoords[1]) && (boids[i].getPosition().x > boidCPUCoords[2])) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[2];
+			}
+		} else if (neighbouringBoidCPUs[4] != 0) {
+			if ((boids[i].getPosition().y > boidCPUCoords[3]) && (boids[i].getPosition().x > boidCPUCoords[2])) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[4];
+			}
+		} else if (neighbouringBoidCPUs[6] != 0) {
+			if ((boids[i].getPosition().y > boidCPUCoords[3]) && (boids[i].getPosition().x < boidCPUCoords[0])) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[6];
+			}
+		} else if (neighbouringBoidCPUs[1] != 0) {
+			if (boids[i].getPosition().y < boidCPUCoords[1]) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[1];
+			}
+		} else if (neighbouringBoidCPUs[3] != 0) {
+			if (boids[i].getPosition().x > boidCPUCoords[2]) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[3];
+			}
+		} else if (neighbouringBoidCPUs[5] != 0) {
+			if (boids[i].getPosition().y > boidCPUCoords[3]) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[5];
+			}
+		} else if (neighbouringBoidCPUs[7] != 0) {
+			if (boids[i].getPosition().x < boidCPUCoords[0]) {
+				boidToTransfer = boids[i];
+				recipientBoidCPU = neighbouringBoidCPUs[7];
+			}
 		}
 	}
+
+	std::cout << "Transferring boid #" << boidToTransfer.getID() <<
+		" to boidCPU #" << recipientBoidCPU << std::endl;
 
 	state = DRAW;
 }
@@ -246,7 +358,96 @@ void receive() {
 //	input.read();
 
 	// Identify the input and if it is a boid, send data to function
-	acceptBoid(inputData);
+//	acceptBoid(inputData);
+}
+
+void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
+	outputData[0] = len + 4;
+	outputData[1] = to;
+	outputData[2] = boidCPUID;
+	outputData[3] = type;
+	outputData[4] = 0;
+
+	if (len > 0) {
+		dataToCmd: for(int i = 0; i < outputData[3]; i++) {
+			outputData[5 + i] = data[i];
+		}
+	}
+
+	outputAvailable = true;
+}
+
+/**
+ * Parses the supplied command and prints it out to the terminal
+ *
+ * FIXME: Testbench file cannot have same method name
+ */
+void printCommand(bool send) {
+	if(send) {
+		if(outputData[1] == 0) {
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
+		} else {
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << outputData[1] << ": ";
+		}
+	} else {
+		if(outputData[1] == 0) {
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from " << outputData[2] << ": ";
+		} else {
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << outputData[2] << ": ";
+		}
+	}
+
+	switch(outputData[3]) {
+		case(0):
+			std::cout << "do something";
+			break;
+		case CMD_PING:
+			std::cout << "location ping";
+			break;
+		case CMD_KILL:
+			std::cout << "kill simulation";
+			break;
+		case CMD_PING_REPLY:
+			std::cout << "location ping response";
+			break;
+		case CMD_INIT:
+			std::cout << "initialise location";
+			break;
+		case CMD_BEGIN:
+			std::cout << "begin the simulation";
+			break;
+		case CMD_LOAD_INFO:
+			std::cout << "location load information";
+			break;
+		case CMD_LOAD_ACT:
+			std::cout << "load-balancing decision";
+			break;
+		case CMD_LOC_UPDATE:
+			std::cout << "new location parameters";
+			break;
+		case CMD_BOID:
+			std::cout << "boid";
+			break;
+		default:
+			std::cout << "UNKNOWN COMMAND";
+			break;
+	}
+
+	std::cout << std::endl;
+
+//	if(cdbg) {
+		std::cout << "\t";
+		for(int i = 0; i < CMD_HEADER_LEN; i++) {
+			std::cout << outputData[i] << " ";
+		}
+
+		std::cout << "|| ";
+
+		for(int i = 0; i < outputData[0] - 4; i++) {
+			std::cout << outputData[CMD_HEADER_LEN + i] << " ";
+		}
+		std::cout << std::endl;
+//	}
 }
 
 void acceptBoid(uint32 *boidData) {
