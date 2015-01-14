@@ -10,6 +10,7 @@ matplotlib.use('TkAgg')
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 import matplotlib.pyplot as plt     # Used to plot the graphs
+from matplotlib.figure import Figure
 
 # Handles all the simulation's graphic components and output
 class BoidGPU:
@@ -32,9 +33,10 @@ class BoidGPU:
         master = Frame(self.root, name = "master")
         master.pack(fill = BOTH)
 
+        # Notebook tabs ---------------------------------------------------------------------------#
         # Create the tabs/notebook
         self.notebook = ttk.Notebook(master, name = "notebook")
-        self.notebook.enable_traversal()
+        # self.notebook.enable_traversal()
         self.notebook.pack(fill = BOTH)
 
         # Add the simulation frame to the notebook
@@ -50,15 +52,20 @@ class BoidGPU:
         self.graph2Frame = Frame(self.notebook, name = 'graphs2')
         self.notebook.add(self.graph2Frame, text = "Overloaded BoidCPUs")
 
+        # Add the graph frame to the notebook
+        self.graph3Frame = Frame(self.notebook, name = 'graphs3')
+        self.notebook.add(self.graph3Frame, text = "Timings")
+
+        # Setup the simulation area ---------------------------------------------------------------#
         self.canvas = Canvas(frame, bg = "black", width = self.config['width'], 
-            height = self.config['height'])
+        height = self.config['height'])
         self.canvas.grid(row = r, rowspan = 20, column = 3);
         
         # Place the title
         self.title = Label(frame, text = "Flocking Boid Simulator", font = "Helvetica 16 bold underline")
         self.title.grid(row = r, column = 1, columnspan = 2)
 
-        # Create the simulation buttons
+        # Simulation buttons ----------------------------------------------------------------------#
         r += 1
         self.timeButton = Button(frame, text = "Next Time Step", 
             command = self.simulation.nextStepButton)
@@ -73,6 +80,7 @@ class BoidGPU:
             command = self.updateGraphs)
         self.graphButton.grid(row = r, column  = 1, columnspan = 2)
 
+        # Boid sliders ----------------------------------------------------------------------------#
         # Create the boid rule weighting sliders
         r += 1
         self.heading1 = Label(frame, text = "Boid Rule Weightings", font = "Helvetica 14 bold underline")
@@ -106,7 +114,7 @@ class BoidGPU:
         self.separationScale.grid(row = r, column = 2, sticky = W)
         self.separationScale.set(self.config['REPULSION_WEIGHT'])
 
-        # Other boid parameters
+        # Other boid parameters -------------------------------------------------------------------#
         r += 1
         self.heading1 = Label(frame, text = "Other Boid Parameters", font = "Helvetica 14 bold underline")
         self.heading1.grid(row = r, column = 1, columnspan = 2)
@@ -228,184 +236,6 @@ class BoidGPU:
     def beginMainLoop(self):
         # Start everything going
         self.root.mainloop()
-
-
-    ################################################################################################
-    ## Graphical Functions -----------------------------------------------------------------------##
-    ################################################################################################
-
-    # Create the graphs
-    def setupGraphs(self, boidCPUCount):
-        self.yData = []
-
-        # Need to hold a list of lines for each graph, surely there must be a better way to do this?
-        self.lines = []
-        self.lines2 = []
-        self.thresholdLines = []
-        self.andallLines = []
-
-        self.axes = []
-        self.axes2 = []
-
-        self.graphFigure = plt.figure()
-
-        # Add the graph to the UI tab
-        canvas = FigureCanvasTkAgg(self.graphFigure, master = self.graphFrame)
-        canvas.show()
-        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
-
-        # Add the toolbar
-        toolbar = NavigationToolbar2TkAgg(canvas, self.graphFrame)
-        toolbar.update()
-        canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
-
-        def on_key_event(event):
-            key_press_handler(event, canvas, toolbar)
-
-        canvas.mpl_connect('key_press_event', on_key_event)
-
-        for i in range(0, boidCPUCount):
-            # Create the subplots and sync the axes
-            if i != 0:
-                axis = self.graphFigure.add_subplot(3, 3, i + 1, sharex = self.axes[0], 
-                    sharey = self.axes[0])
-            else:
-                axis = self.graphFigure.add_subplot(3, 3, i + 1)
-
-            axis.set_title("BoidCPU %d" % (i + 1))
-            axis.grid(True)
-            
-            # Setup the first y axis
-            for tl in axis.get_yticklabels():
-                tl.set_color('b')
-    
-            # Setup the second y axis
-            axis2 = axis.twinx()
-            for tl in axis2.get_yticklabels():
-                tl.set_color('r')
-            axis2.set_ylim([0, self.config['boidCount']])
-
-            # Plot each line, returns a list of lines - the comma is needed
-            # If the x data set is not specified, it is assumed to be the number 
-            # of element contained in the y data set - which is fine here.
-            line1, = axis.plot(self.yData, color = 'b')
-            line2, = axis2.plot(self.yData, color = 'r')
-
-            # Add the Andall(sp?) and max boid threshold lines
-            thresholdLine, = axis2.plot([], [], color = 'm')
-            andallLine, = axis2.plot([], [], color = 'g')
-            
-            # Customise the suplot grid so that axes don't overlap
-            if (i % 3) != 0:
-                plt.setp(axis.get_yticklabels(), visible = False)
-            else:
-                axis.set_ylabel("Computation time, ms", color = 'b')
-
-            if (i % 3) != (3 - 1):
-                plt.setp(axis2.get_yticklabels(), visible = False)
-            else:
-                axis2.set_ylabel("Number of boids", color = 'r')
-
-            if int(np.floor(i / 3)) != 2:
-                plt.setp(axis.get_xticklabels(), visible = False)
-            else:
-                axis.set_xlabel("Number of timesteps")
-
-            # Add the lines to the line lists
-            self.lines.append(line1)
-            self.lines2.append(line2)
-            self.andallLines.append(andallLine)
-            self.thresholdLines.append(thresholdLine)
-
-            # Add the axes to the axes lists
-            self.axes.append(axis)
-            self.axes2.append(axis2)
-
-        # Show the subplots in interactive mode (doesn't block)
-        # plt.ion()
-        # plt.show()
-
-        # plt.close()
-
-
-    # Create a sumary graph showing the number of boidCPUs exceeding the boid threshold over time
-    def setupSummaryGraph(self, boidCPUCount):
-        plt.ion()
-
-        self.summaryFigure, self.summaryAxis = plt.subplots(1,1)
-        self.summaryAxis.plot([], [])
-        self.summaryAxis.fill_between([], 0, [])
-
-        canvas = FigureCanvasTkAgg(self.summaryFigure, master = self.graph2Frame)
-        canvas.show()
-        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
-
-        # Add the toolbar
-        toolbar = NavigationToolbar2TkAgg(canvas, self.graph2Frame)
-        toolbar.update()
-        canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
-
-        def on_key_event(event):
-            key_press_handler(event, canvas, toolbar)
-
-        canvas.mpl_connect('key_press_event', on_key_event)
-
-        self.summaryAxis.set_ylim([0, boidCPUCount])
-        
-        self.summaryAxis.set_title("Graph showing number of boidCPUs exceeding the boid threshold")
-        self.summaryAxis.grid(True)
-
-        self.summaryAxis.set_xlabel("Number of time steps")
-        self.summaryAxis.set_ylabel("BoidCPUs over threshold")
-
-        plt.show()
-
-
-    # For each boidCPU, get the graph lines and set the data to the current data  
-    # plus the new data. Then reformat both axes to accommodate the new data.
-    def updateGraphs(self):
-
-        for i in range(0, self.simulation.boidCPUCount):
-            # Update the boidCPU boid calculation time lines
-            self.lines[i].set_xdata(self.simulation.boidCPUs[i].xData)
-            self.lines[i].set_ydata(self.simulation.boidCPUs[i].yData)
-
-            # Update the boidCPU boid count lines. Because the draw routine is called first, but 
-            # not on time step 1, it has one less data element in than the values for the update 
-            # stage. Therefore, [0:-1] is used to ignore the last x value.
-            self.lines2[i].set_xdata(self.simulation.boidCPUs[i].xData[0:-1])
-            self.lines2[i].set_ydata(self.simulation.boidCPUs[i].y2Data)
-
-            # Update the Andall (sp?) lines
-            self.andallLines[i].set_xdata([0, len(self.simulation.boidCPUs[i].xData)])
-            self.andallLines[i].set_ydata([self.simulation.initialBoidCount, self.simulation.initialBoidCount])
-
-            # Update the max boid threshold lines
-            self.thresholdLines[i].set_xdata([0, len(self.simulation.boidCPUs[i].xData)])
-            self.thresholdLines[i].set_ydata([self.config['BOID_THRESHOLD'], self.config['BOID_THRESHOLD']])
-
-            # Adjust the axes accordingly
-            self.axes[i].relim()
-            self.axes[i].autoscale_view()
-
-            self.axes2[i].relim()
-            self.axes2[i].autoscale_view()
-
-            # Re-draw the graphs
-            self.graphFigure.canvas.draw()
-
-        # Update summary graph
-        self.summaryAxis.lines[0].set_xdata(range(0, self.simulation.timeStepCounter))
-        self.summaryAxis.lines[0].set_ydata(self.simulation.violationList)
-        self.summaryAxis.fill_between(range(0, self.simulation.timeStepCounter), 0, self.simulation.violationList)
-
-        self.summaryAxis.relim()
-        self.summaryAxis.autoscale_view()
-
-        self.summaryFigure.canvas.draw()
-
-        # Switch to the graphs tab
-        self.selectTab(1)
 
 
     ################################################################################################
@@ -564,4 +394,209 @@ class BoidGPU:
     def removeObject(self, tag):
         self.canvas.delete(tag)
 
+
+    ################################################################################################
+    ## Graphical Functions -----------------------------------------------------------------------##
+    ################################################################################################
+
+    def setupGraphs(self, boidCPUCount):
+
+        self.setupTimingGraphs(boidCPUCount)
+        self.setupOverloadedGraph(boidCPUCount)
+        self.setupOtherGraphs(boidCPUCount)
+
+    # Create the graphs
+    def setupTimingGraphs(self, boidCPUCount):
+        self.yData = []
+
+        # Need to hold a list of lines for each graph, surely there must be a better way to do this?
+        self.lines = []
+        self.lines2 = []
+        self.thresholdLines = []
+        self.andallLines = []
+
+        self.axes = []
+        self.axes2 = []
+
+        self.graphFigure = Figure()
+
+        # Add the graph to the UI tab
+        canvas = FigureCanvasTkAgg(self.graphFigure, master = self.graphFrame)
+        canvas.show()
+        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
+
+        # Add the toolbar
+        toolbar = NavigationToolbar2TkAgg(canvas, self.graphFrame)
+        toolbar.update()
+        canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
+
+        def on_key_event(event):
+            key_press_handler(event, canvas, toolbar)
+
+        canvas.mpl_connect('key_press_event', on_key_event)
+
+        for i in range(0, boidCPUCount):
+            # Create the subplots and sync the axes
+            if i != 0:
+                axis = self.graphFigure.add_subplot(3, 3, i + 1, sharex = self.axes[0], 
+                    sharey = self.axes[0])
+            else:
+                axis = self.graphFigure.add_subplot(3, 3, i + 1)
+
+            axis.set_title("BoidCPU #%d" % (i + 1))
+            axis.grid(True)
+            
+            # Setup the first y axis
+            for tl in axis.get_yticklabels():
+                tl.set_color('b')
+    
+            # Setup the second y axis
+            axis2 = axis.twinx()
+            for tl in axis2.get_yticklabels():
+                tl.set_color('r')
+            axis2.set_ylim([0, self.config['boidCount']])
+
+            # Plot each line, returns a list of lines - the comma is needed
+            # If the x data set is not specified, it is assumed to be the number 
+            # of element contained in the y data set - which is fine here.
+            line1, = axis.plot(self.yData, color = 'b')
+            line2, = axis2.plot(self.yData, color = 'r')
+
+            # Add the Andall(sp?) and max boid threshold lines
+            thresholdLine, = axis2.plot([], [], color = 'm')
+            andallLine, = axis2.plot([], [], color = 'g')
+            
+            # Customise the suplot grid so that axes don't overlap
+            if (i % 3) != 0:
+                plt.setp(axis.get_yticklabels(), visible = False)
+            else:
+                axis.set_ylabel("Computation time, ms", color = 'b')
+
+            if (i % 3) != (3 - 1):
+                plt.setp(axis2.get_yticklabels(), visible = False)
+            else:
+                axis2.set_ylabel("Number of boids", color = 'r')
+
+            if int(np.floor(i / 3)) != 2:
+                plt.setp(axis.get_xticklabels(), visible = False)
+            else:
+                axis.set_xlabel("Number of timesteps")
+
+            # Add the lines to the line lists
+            self.lines.append(line1)
+            self.lines2.append(line2)
+            self.andallLines.append(andallLine)
+            self.thresholdLines.append(thresholdLine)
+
+            # Add the axes to the axes lists
+            self.axes.append(axis)
+            self.axes2.append(axis2)
+
+        # Show the subplots in interactive mode (doesn't block)
+        plt.ion()
+        plt.show()
+        
+
+    def setupOtherGraphs(self, boidCPUCount):
+
+        fnx = lambda : np.random.randint(5, 50, 10)
+        y = np.row_stack((fnx(), fnx(), fnx()))
+        x = np.arange(10)
+
+        fig = Figure()
+        ax = fig.add_subplot(111)
+
+        ax.stackplot(x, y)
+        plt.show()
+
+        canvas = FigureCanvasTkAgg(fig, master = self.graph3Frame)
+        canvas.show()
+        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
+
+        # Add the toolbar
+        toolbar = NavigationToolbar2TkAgg(canvas, self.graph3Frame)
+        toolbar.update()
+        canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
+
+
+    # Create a sumary graph showing the number of boidCPUs exceeding the boid threshold over time
+    def setupOverloadedGraph(self, boidCPUCount):
+        plt.ion()
+
+        self.summaryFigure = Figure()
+        self.summaryAxis = self.summaryFigure.add_subplot(111)
+
+        self.summaryAxis.plot([], [])
+        self.summaryAxis.fill_between([], 0, [])
+
+        canvas = FigureCanvasTkAgg(self.summaryFigure, master = self.graph2Frame)
+        canvas.show()
+        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
+
+        # Add the toolbar
+        toolbar = NavigationToolbar2TkAgg(canvas, self.graph2Frame)
+        toolbar.update()
+        canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
+
+        def on_key_event(event):
+            key_press_handler(event, canvas, toolbar)
+
+        canvas.mpl_connect('key_press_event', on_key_event)
+
+        self.summaryAxis.set_ylim([0, boidCPUCount])
+        
+        self.summaryAxis.set_title("Graph showing number of boidCPUs exceeding the boid threshold")
+        self.summaryAxis.grid(True)
+
+        self.summaryAxis.set_xlabel("Number of time steps")
+        self.summaryAxis.set_ylabel("BoidCPUs over threshold")
+
+        plt.show()
+
+
+    # For each boidCPU, get the graph lines and set the data to the current data  
+    # plus the new data. Then reformat both axes to accommodate the new data.
+    def updateGraphs(self):
+
+        for i in range(0, self.simulation.boidCPUCount):
+            # Update the boidCPU boid calculation time lines
+            self.lines[i].set_xdata(self.simulation.boidCPUs[i].xData)
+            self.lines[i].set_ydata(self.simulation.boidCPUs[i].yData)
+
+            # Update the boidCPU boid count lines. Because the draw routine is called first, but 
+            # not on time step 1, it has one less data element in than the values for the update 
+            # stage. Therefore, [0:-1] is used to ignore the last x value.
+            self.lines2[i].set_xdata(self.simulation.boidCPUs[i].xData[0:-1])
+            self.lines2[i].set_ydata(self.simulation.boidCPUs[i].y2Data)
+
+            # Update the Andall (sp?) lines
+            self.andallLines[i].set_xdata([0, len(self.simulation.boidCPUs[i].xData)])
+            self.andallLines[i].set_ydata([self.simulation.initialBoidCount, self.simulation.initialBoidCount])
+
+            # Update the max boid threshold lines
+            self.thresholdLines[i].set_xdata([0, len(self.simulation.boidCPUs[i].xData)])
+            self.thresholdLines[i].set_ydata([self.config['BOID_THRESHOLD'], self.config['BOID_THRESHOLD']])
+
+            # Adjust the axes accordingly
+            self.axes[i].relim()
+            self.axes[i].autoscale_view()
+
+            self.axes2[i].relim()
+            self.axes2[i].autoscale_view()
+
+            # Re-draw the graphs
+            self.graphFigure.canvas.draw()
+
+        # Update summary graph
+        self.summaryAxis.lines[0].set_xdata(range(0, self.simulation.timeStepCounter))
+        self.summaryAxis.lines[0].set_ydata(self.simulation.violationList)
+        self.summaryAxis.fill_between(range(0, self.simulation.timeStepCounter), 0, self.simulation.violationList)
+
+        self.summaryAxis.relim()
+        self.summaryAxis.autoscale_view()
+
+        self.summaryFigure.canvas.draw()
+
+        # Switch to the first graphs tab
+        self.selectTab(1)
 

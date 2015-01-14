@@ -513,34 +513,26 @@ class BoidCPU:
         if edgeID == 0:     # Top edge
             if decrease:
                 coords[coordsIdx] += change
-                print "Increasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] -= change
-                print "Decreasing edge " + str(edgeID) + " (2)"
 
         elif edgeID == 1:   # Right edge
             if decrease:
                 coords[coordsIdx] -= change
-                print "Decreasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] += change
-                print "Increasing edge " + str(edgeID) + " (2)"
 
         elif edgeID == 2:   # Bottom edge
             if decrease:
                 coords[coordsIdx] -= change
-                print "Decreasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] += change
-                print "Increasing edge " + str(edgeID) + " (2)"
 
         elif edgeID == 3:   # Left edge
             if decrease:
                 coords[coordsIdx] += change
-                print "Increasing edge " + str(edgeID) + " (2)"
             else:
                 coords[coordsIdx] -= change
-                print "Decreasing edge " + str(edgeID) + " (2)"
 
         return coords
 
