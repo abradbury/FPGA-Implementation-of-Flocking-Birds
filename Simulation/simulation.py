@@ -74,7 +74,7 @@ class Simulation:
         
         # Load balancing parameters
         self.config['loadBalance'] = True       # True to enable load balancing
-        self.config['loadBalanceType'] = 1      # See notes at top of file
+        self.config['loadBalanceType'] = 2      # See notes at top of file
         self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
 
@@ -94,7 +94,7 @@ class Simulation:
 
         # Define the testing state
         self.config['useTestingSetup'] = True   # True to use a known initial setup
-        self.config['testingStopPoint'] = 1000  # The timestep to stop the simulation for tests
+        self.config['testingStopPoint'] = 500  # The timestep to stop the simulation for tests
         if self.config['useTestingSetup']:
             self.configureKnownInitialSetup()   # Makes the known initial setup available
         self.config["showBoidIds"] = False       # To show the boid and BoidCPU IDs
@@ -157,7 +157,6 @@ class Simulation:
 
         # Setup the graphs
         self.boidGPU.setupGraphs(self.boidCPUCount)
-        self.boidGPU.setupSummaryGraph(self.boidCPUCount)
 
         # Print out the state of the boids in the simulation
         # self.saveState()
@@ -187,7 +186,7 @@ class Simulation:
             if self.config['useTestingSetup']:
                 if self.timeStepCounter == self.config['testingStopPoint']:
                     self.pause()
-                    self.updateGraphs()
+                    self.boidGPU.updateGraphs()
 
             # Call self after 20ms (50 Hz)
             self.boidGPU.nextSimulationStep(self.config['updateInterval'])
@@ -218,13 +217,13 @@ class Simulation:
         for boidCPU in self.boidCPUs:
             self.logger.debug("Calculating neighbours for BoidCPU #" + str(boidCPU.BOIDCPU_ID))
             
-            # startTime = time.clock()
+            startTime = time.clock()
             boidCPU.calculateBoidNeighbours()
-            # endTime = time.clock()
+            endTime = time.clock()
 
             # Store the timing information for later plotting
-            # boidCPU.xData.append(self.timeStepCounter)
-            # boidCPU.yData.append((endTime - startTime) * 1000)
+            boidCPU.xData.append(self.timeStepCounter)
+            boidCPU.yData.append((endTime - startTime) * 1000)
 
         # Update each boid
         for boidCPU in self.boidCPUs:
@@ -237,8 +236,7 @@ class Simulation:
             endTime = time.clock()
 
             # Store the timing information for later plotting
-            boidCPU.xData.append(self.timeStepCounter)
-            boidCPU.yData.append((endTime - startTime) * 1000)
+            boidCPU.yData[self.timeStepCounter] += ((endTime - startTime) * 1000)
 
             # If the boidCPU is exceeding the threshold, increment counter
             if boidCPU.boidCount > self.config['BOID_THRESHOLD']:
@@ -255,13 +253,13 @@ class Simulation:
     def loadStep(self):
         if self.config['loadBalance']:
             for boidCPU in self.boidCPUs:
-                # startTime = time.clock()
+
+                startTime = time.clock()
                 boidCPU.loadBalance()
-                # endTime = time.clock()
+                endTime = time.clock()
 
                 # Store the timing information for later plotting
-                # boidCPU.xData.append(self.timeStepCounter)
-                # boidCPU.yData.append((endTime - startTime) * 1000)
+                boidCPU.yData[self.timeStepCounter] += ((endTime - startTime) * 1000)
 
 
     # Determine if the new positions of the boids are outside their BoidCPU, if they are, transfere 
@@ -270,13 +268,12 @@ class Simulation:
         for boidCPU in self.boidCPUs:
             for boid in boidCPU.boids:
 
-                # startTime = time.clock()
+                startTime = time.clock()
                 boidCPU.determineBoidTransfer(boid)
-                # endTime = time.clock()
+                endTime = time.clock()
 
                 # Store the timing information for later plotting
-                # boidCPU.xData.append(self.timeStepCounter)
-                # boidCPU.yData.append((endTime - startTime) * 1000)
+                boidCPU.yData[self.timeStepCounter] += ((endTime - startTime) * 1000)
 
 
     # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 
