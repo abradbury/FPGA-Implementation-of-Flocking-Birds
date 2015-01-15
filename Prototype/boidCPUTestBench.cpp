@@ -2,7 +2,9 @@
 
 #define MAX_CMD_LEN			10		// TODO: Decide on appropriate value
 #define MAX_CMD_BODY_LEN	20
-#define CMD_HEADER_LEN		5
+#define CMD_HEADER_LEN		4
+
+#define MAX_NEIGHBOUR_BOIDCPUS	8
 
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
@@ -30,9 +32,30 @@ int main() {
 	uint32 data[MAX_CMD_BODY_LEN];
 	uint32 to = 6;
 	uint32 from = 0;
+	uint32 dataLength = 0;
 
 	// Test ping response ----------------------------------------------------//
-	createCommand(0, to, from, CMD_PING, 0);
+	// 4, 6, 0, 1 ||
+//	dataLength = 0;
+//	createCommand(dataLength, to, from, CMD_PING, data);
+
+	// Test simulation setup ---------------------------------------------------
+	// 14, 6, 0, 4 || 5, 10, 1, 2, 3, 6, 9, 8, 7, 4
+	dataLength = 10;
+	uint32 newID = 5;
+	uint32 initialBoidCount = 10;
+	uint32 neighbours[MAX_NEIGHBOUR_BOIDCPUS] = {1, 2, 3, 6, 9, 8, 7, 4};
+
+	data[0] = newID;
+	data[1] = initialBoidCount;
+
+	for (int i = 0; i < MAX_NEIGHBOUR_BOIDCPUS; i++) {
+		data[2 + i] = neighbours[i];
+	}
+
+	createCommand(dataLength, to, from, CMD_INIT, data);
+
+	// Send and receive data ---------------------------------------------------
 	printTestBenchCommand(true);
 
 	cmdOut: for(int i = 0; i < command[0]; i++) {
@@ -87,15 +110,14 @@ int main() {
 }
 
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {
-	command[0] = len + 4;
+	command[0] = len + CMD_HEADER_LEN;
 	command[1] = to;
 	command[2] = from;
 	command[3] = type;
-	command[4] = 0;
 
 	if (len > 0) {
-		dataToCmd: for(int i = 0; i < command[3]; i++) {
-			command[5 + i] = data[i];
+		dataToCmd: for(int i = 0; i < len; i++) {
+			command[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
 }
@@ -166,7 +188,7 @@ void printTestBenchCommand(bool send) {
 
 		std::cout << "|| ";
 
-		for(int i = 0; i < command[0] - 4; i++) {
+		for(int i = 0; i < command[0] - CMD_HEADER_LEN; i++) {
 			std::cout << command[CMD_HEADER_LEN + i] << " ";
 		}
 		std::cout << std::endl;

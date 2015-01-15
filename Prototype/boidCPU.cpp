@@ -13,7 +13,7 @@
 #define AREA_WIDTH				720
 #define AREA_HEIGHT				720
 
-#define CMD_HEADER_LEN			5
+#define CMD_HEADER_LEN			4
 
 #define VISION_RADIUS			100
 #define MAX_BOIDCPU_NEIGHBOURS	9
@@ -40,7 +40,7 @@ static void moveBoids (void);
 static void updateDisplay (void);
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
-void printCommand(bool send);
+void printCommand(bool send, uint32 *data);
 
 // Define the states
 enum States {INIT, IDEN, SIMS, NBRS, BOID, LOAD, MOVE, DRAW, MAX_STATES};
@@ -97,12 +97,13 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	(trans[state].function)();
 
 	// Block until there is input available
-	int size = input.read();
+	inputData[0] = input.read();
 
 	// When there is input, read in the command
-	for (int i = 1; i < size; i++) {
-		inputData[i] = input.read();
+	for (int i = 0; i < inputData[0] - 1; i++) {
+		inputData[1 + i] = input.read();
 	}
+	printCommand(false, inputData);
 
 	// Parse the command - [size, to, from, type, data]?
 	if ((inputData[1] == 0) || (inputData[1] == boidCPUID)) {
@@ -115,7 +116,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		for (int i = 0; i < outputData[0]; i++) {
 			output.write(outputData[i]);
 		}
-		printCommand(true);
+		printCommand(true, outputData);
 	}
 
 	// Can a while(1) be used in h/w is there one implicitly elsewhere?
@@ -148,6 +149,7 @@ void identify() {
 	outputBody[0] = boidCPUID;
 	outputBody[1] = fpgaID;
 	generateOutput(2, 0, CMD_PING_REPLY, outputBody);
+	// 6, 0, 6, 3 || 6, 123
 
 	state = SIMS;
 }
@@ -362,15 +364,14 @@ void receive() {
 }
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
-	outputData[0] = len + 4;
+	outputData[0] = len + CMD_HEADER_LEN;
 	outputData[1] = to;
 	outputData[2] = boidCPUID;
 	outputData[3] = type;
-	outputData[4] = 0;
 
 	if (len > 0) {
-		dataToCmd: for(int i = 0; i < outputData[3]; i++) {
-			outputData[5 + i] = data[i];
+		dataToCmd: for(int i = 0; i < len; i++) {
+			outputData[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
 
@@ -382,22 +383,22 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
  *
  * FIXME: Testbench file cannot have same method name
  */
-void printCommand(bool send) {
+void printCommand(bool send, uint32 *data) {
 	if(send) {
-		if(outputData[1] == 0) {
+		if(data[1] == 0) {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
 		} else {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << outputData[1] << ": ";
 		}
 	} else {
-		if(outputData[1] == 0) {
+		if(data[1] == 0) {
 			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from " << outputData[2] << ": ";
 		} else {
 			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << outputData[2] << ": ";
 		}
 	}
 
-	switch(outputData[3]) {
+	switch(data[3]) {
 		case(0):
 			std::cout << "do something";
 			break;
@@ -438,13 +439,13 @@ void printCommand(bool send) {
 //	if(cdbg) {
 		std::cout << "\t";
 		for(int i = 0; i < CMD_HEADER_LEN; i++) {
-			std::cout << outputData[i] << " ";
+			std::cout << data[i] << " ";
 		}
 
 		std::cout << "|| ";
 
-		for(int i = 0; i < outputData[0] - 4; i++) {
-			std::cout << outputData[CMD_HEADER_LEN + i] << " ";
+		for(int i = 0; i < data[0] - CMD_HEADER_LEN; i++) {
+			std::cout << data[CMD_HEADER_LEN + i] << " ";
 		}
 		std::cout << std::endl;
 //	}
