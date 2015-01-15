@@ -10,14 +10,18 @@
 #define MAX_FORCE				1
 #define MAX_CMD_LEN				10		// TODO: Decide on appropriate value
 
-#define AREA_WIDTH				720
-#define AREA_HEIGHT				720
+#define AREA_WIDTH				720		// TODO: Should a BoidCPU know this?
+#define AREA_HEIGHT				720		// TODO: Should a BoidCPU know this?
+#define EDGE_COUNT				4		// The number of edges a BoidCPU has
 
 #define CMD_HEADER_LEN			4
 
 #define VISION_RADIUS			100
-#define MAX_BOIDCPU_NEIGHBOURS	9
+#define MAX_BOIDCPU_NEIGHBOURS	8		// The max neighbours a BoidCPUs has
 #define MAX_NEIGHBOURING_BOIDS	90		// TODO: Decide on appropriate value?
+
+#define POLY_MASK_16			0xD295
+#define POLY_MASK_15			0x6699
 
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
@@ -41,6 +45,9 @@ static void updateDisplay (void);
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 void printCommand(bool send, uint32 *data);
+
+int getRand(void);
+int shiftLSFR(uint16 *lsfr, uint16 mask);
 
 // Define the states
 enum States {INIT, IDEN, SIMS, NBRS, BOID, LOAD, MOVE, DRAW, MAX_STATES};
@@ -75,10 +82,23 @@ Boid boids[MAX_BOIDS];
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 int12 boidCPUCoords[4];
 
+uint32 inputData[MAX_CMD_LEN];
 uint32 outputData[MAX_CMD_LEN];
 uint32 outputBody[20];
 
+// LSFR seed values
+uint16 lfsr16 = 0xF429;	// 16 bit binary (62505)
+uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
+
 bool outputAvailable = false;		// True if there is output ready to send
+
+/**
+ * TODO: Remove function pointers - unsynthesizable
+ * TODO: Sync states and command types?
+ * TODO: Argument 'this' of function 'getVelocity' has an unsynthesizable type?
+ * TODO: Random generator needs random seeds - FPGA clock?
+ * TODO: Try and programmatically calculate the length of the commands
+ */
 
 void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port=input
@@ -87,8 +107,6 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable=output core=AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
-	uint32 inputData[MAX_CMD_LEN];
-
 
 	// Perform initialisation
 	// TODO: This only needs to be called on power up, not every time the
@@ -96,6 +114,8 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	state = INIT;
 	(trans[state].function)();
 
+
+	// INPUT -------------------------------------------------------------------
 	// Block until there is input available
 	inputData[0] = input.read();
 
@@ -110,6 +130,8 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		state = States((int)inputData[3]);
 		(trans[state].function)();
 	}
+	// -------------------------------------------------------------------------
+
 
 	// If there is output to send, send it
 	if (outputAvailable) {
@@ -118,55 +140,61 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		}
 		printCommand(true, outputData);
 	}
-
-	// Can a while(1) be used in h/w is there one implicitly elsewhere?
-//	while (state != DRAW) {
-//		for(int i = 0; i < TRANS_COUNT; i++) {
-//			if (state == trans[i].state) {
-//				(trans[i].function)();
-//			}
-//		}
-//		// Catch invalid values
-//		(trans[state].function)();
-//	}
 }
 
 // State methods
+
+/**
+ * TODO: Setup necessary components - maybe?
+ * Generate a random initial ID
+ * TODO: Identify the serial number of the host FPGA
+ */
 void initialisation() {
 	std::cout << "-Initialising BoidCPU..." << std::endl;
 
-	boidCPUID = 6;
+	boidCPUID = getRand();
 	fpgaID = 123;
 
 	state = IDEN;
 }
 
+/**
+ * Waits for a ping from the controller
+ * Transmits its temporary ID and FPGA serial number to the controller
+ */
 void identify() {
 	std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
-
-	std::cout << "-Responded to ping" << std::endl;
 
 	outputBody[0] = boidCPUID;
 	outputBody[1] = fpgaID;
 	generateOutput(2, 0, CMD_PING_REPLY, outputBody);
 	// 6, 0, 6, 3 || 6, 123
 
+	std::cout << "-Responded to ping" << std::endl;
+
 	state = SIMS;
 }
 
+/**
+ * Sets ID to that provided by the controller
+ * Populates list of neighbouring BoidCPUs
+ * Initialises pixel coordinates and edges
+ * Creates own boids
+ */
 void simulationSetup() {
 	std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
 
-	// These should be supplied by the controller over the communications link
-	boidCPUID = 6;
-	boidCPUCoords[0] = 480;
-	boidCPUCoords[1] = 240;
-	boidCPUCoords[2] = 720;
-	boidCPUCoords[3] = 480;
-	int8 initialBoidCount = 10;
-	// TODO: Supply the neighbouring BoidCPUs
+	// Supplied by the controller
+	boidCPUID = inputData[CMD_HEADER_LEN + 0];
+	boidCount = inputData[CMD_HEADER_LEN + 1];
 
-	boidCount = initialBoidCount;
+	for (int i = 0; i < EDGE_COUNT; i++) {
+		boidCPUCoords[i] = inputData[CMD_HEADER_LEN + 2 + i];
+	}
+
+	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		neighbouringBoidCPUs[i] = inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
+	}
 
 	// Use this for testing
 	int testBoidCount = 10;
@@ -462,6 +490,30 @@ void acceptBoid(uint32 *boidData) {
 	boidCount++;
 }
 
+//==============================================================================
+// Random ======================================================================
+//==============================================================================
+
+int getRand() {
+	shiftLSFR(&lfsr16, POLY_MASK_16);
+	return(shiftLSFR(&lfsr16, POLY_MASK_16) ^ shiftLSFR(&lfsr15, POLY_MASK_15));
+}
+
+int shiftLSFR(uint16 *lfsr, uint16 mask) {
+	unsigned period = 0;
+
+	do {
+		unsigned lsb = *lfsr & 1;  /* Get LSB (i.e., the output bit). */
+		*lfsr >>= 1;               /* Shift register */
+		if (lsb == 1)             /* Only apply toggle mask if output bit is 1. */
+			*lfsr ^= 0xB400u;      /* Apply toggle mask, value has 1 at bits corresponding
+								   * to taps, 0 elsewhere. */
+		++period;
+	} while (*lfsr != mask);
+
+	return *lfsr;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Classes /////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -607,11 +659,11 @@ void Boid::contain() {
 	}
 }
 
-Vector Boid::getVelocity(void) {
+Vector Boid::getVelocity() {
 	return velocity;
 }
 
-Vector Boid::getPosition(void) {
+Vector Boid::getPosition() {
 	return position;
 }
 
@@ -629,8 +681,8 @@ uint8 Boid::getID(void) {
 
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
-	std::cout << "Boid Velocity: " << velocity << std::endl;
-	std::cout << "Boid Position: " << position << std::endl;
+	std::cout << "Boid Position: [" << position.x << " " << position.y << " " << position.z << "]" << std::endl;
+	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << " " << velocity.z << "]" << std::endl;
 	std::cout << "===================================" << std::endl;
 }
 
@@ -689,10 +741,17 @@ Vector Vector::sub(Vector v1, Vector v2) {
 	return v3;
 }
 
-// FIXME: The pow function returns a double and the sqrt takes a double, these
-// 	will probably not be allowed in hardware - or will be expensive.
+// FIXME: The sqrt takes a double, probably will be expensive in h/w
 double Vector::distanceBetween(Vector v1, Vector v2) {
-	return sqrt(pow((v1.x - v2.x), 2) + pow((v1.y - v2.y), 2) + pow((v1.z - v2.z), 2));
+	int12 xPart = v1.x - v2.x;
+	int12 yPart = v1.y - v2.y;
+	int12 zPart = v1.z - v2.z;
+
+	xPart = xPart * xPart;
+	yPart = yPart * yPart;
+	zPart = zPart * zPart;
+
+	return sqrt(double(xPart + yPart + zPart));
 }
 
 bool Vector::equal(Vector v1, Vector v2) {

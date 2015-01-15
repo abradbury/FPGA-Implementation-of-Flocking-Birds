@@ -4,7 +4,8 @@
 #define MAX_CMD_BODY_LEN	20
 #define CMD_HEADER_LEN		4
 
-#define MAX_NEIGHBOUR_BOIDCPUS	8
+#define EDGE_COUNT				4		// The number of edges a BoidCPU has
+#define MAX_BOIDCPU_NEIGHBOURS	8		// The max neighbours a BoidCPUs has
 
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
@@ -40,17 +41,22 @@ int main() {
 //	createCommand(dataLength, to, from, CMD_PING, data);
 
 	// Test simulation setup ---------------------------------------------------
-	// 14, 6, 0, 4 || 5, 10, 1, 2, 3, 6, 9, 8, 7, 4
-	dataLength = 10;
+	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
+	dataLength = 14;
 	uint32 newID = 5;
 	uint32 initialBoidCount = 10;
-	uint32 neighbours[MAX_NEIGHBOUR_BOIDCPUS] = {1, 2, 3, 6, 9, 8, 7, 4};
+	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
+	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
 
 	data[0] = newID;
 	data[1] = initialBoidCount;
 
-	for (int i = 0; i < MAX_NEIGHBOUR_BOIDCPUS; i++) {
-		data[2 + i] = neighbours[i];
+	for (int i = 0; i < EDGE_COUNT; i++) {
+		data[2 + i] = coords[i];
+	}
+
+	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		data[EDGE_COUNT + 2 + i] = neighbours[i];
 	}
 
 	createCommand(dataLength, to, from, CMD_INIT, data);
