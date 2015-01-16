@@ -1,9 +1,7 @@
 #include "boidCPU.h"
 
-#include <stdlib.h>     /* srand, rand */
-#include <time.h>       /* time */
-#include <iostream>		/* cout */
-#include <math.h>       /* sqrt */
+#include <iostream>		// cout
+#include <math.h>       // sqrt
 
 #define MAX_BOIDS				30
 #define MAX_VELOCITY			10
@@ -22,6 +20,16 @@
 
 #define POLY_MASK_16			0xD295
 #define POLY_MASK_15			0x6699
+
+#define X_MIN			0	// The coordinate index of the minimum x position
+#define Y_MIN			1	// The coordinate index of the minimum y position
+#define X_MAX			2	// The coordinate index of the maximum x position
+#define Y_MAX			3	// The coordinate index of the maximum y position
+
+#define CMD_LEN			0	// The index of the command length
+#define CMD_TO			1	// The index of the command target
+#define CMD_FROM		2	// The index of the command sender
+#define	CMD_TYPE		3	// The index of the command type
 
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
@@ -46,31 +54,12 @@ static void updateDisplay (void);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 void printCommand(bool send, uint32 *data);
 
-int getRand(void);
+int getRandom(int min, int max);
 int shiftLSFR(uint16 *lsfr, uint16 mask);
 
 // Define the states
 enum States {INIT, IDEN, SIMS, NBRS, BOID, LOAD, MOVE, DRAW, MAX_STATES};
 States state;
-
-// Define a transition type
-typedef struct {
-	States state;
-	void (*function)(void);
-} Transition;
-
-// Create the transition table
-Transition trans[MAX_STATES] = {
-	{INIT, &initialisation},
-	{IDEN, &identify},
-	{SIMS, &simulationSetup},
-	{NBRS, &findNeighbours},
-	{BOID, &calcNextBoidPositions},
-	{LOAD, &loadBalance},
-	{MOVE, &moveBoids},
-	{DRAW, &updateDisplay}
-};
-#define TRANS_COUNT (sizeof(trans)/sizeof(*trans))
 
 // Define variables
 // FIXME: Should these really be global?
@@ -93,7 +82,6 @@ uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
 bool outputAvailable = false;		// True if there is output ready to send
 
 /**
- * TODO: Remove function pointers - unsynthesizable
  * TODO: Sync states and command types?
  * TODO: Argument 'this' of function 'getVelocity' has an unsynthesizable type?
  * TODO: Random generator needs random seeds - FPGA clock?
@@ -107,42 +95,57 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable=output core=AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port=return
 
-
 	// Perform initialisation
 	// TODO: This only needs to be called on power up, not every time the
 	//	BoidCPU is called.
 	state = INIT;
-	(trans[state].function)();
-
+	initialisation();
 
 	// INPUT -------------------------------------------------------------------
 	// Block until there is input available
 	inputData[0] = input.read();
 
 	// When there is input, read in the command
-	for (int i = 0; i < inputData[0] - 1; i++) {
+	for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
 		inputData[1 + i] = input.read();
 	}
 	printCommand(false, inputData);
+	// -------------------------------------------------------------------------
 
-	// Parse the command - [size, to, from, type, data]?
-	if ((inputData[1] == 0) || (inputData[1] == boidCPUID)) {
-		state = States((int)inputData[3]);
-		(trans[state].function)();
+	// STATE CHANGE ------------------------------------------------------------
+	// TODO: Replace '6' with 'boidCPUID' when deploying
+	if ((inputData[CMD_TO] == 0) || (inputData[CMD_TO] == 6)) {
+		switch(inputData[CMD_TYPE]) {
+		case CMD_PING:
+			identify();
+			break;
+		case CMD_INIT:
+			simulationSetup();
+			break;
+		case CMD_BEGIN:
+			findNeighbours();
+			break;
+		default:
+			std::cout << "Command state " << inputData[CMD_TYPE] << " not recognised" << std::endl;
+			break;
+		}
 	}
 	// -------------------------------------------------------------------------
 
-
+	// OUTPUT ------------------------------------------------------------------
 	// If there is output to send, send it
 	if (outputAvailable) {
-		for (int i = 0; i < outputData[0]; i++) {
+		for (int i = 0; i < outputData[CMD_LEN]; i++) {
 			output.write(outputData[i]);
 		}
 		printCommand(true, outputData);
 	}
+	// -------------------------------------------------------------------------
 }
 
-// State methods
+//==============================================================================
+// State functions =============================================================
+//==============================================================================
 
 /**
  * TODO: Setup necessary components - maybe?
@@ -152,9 +155,10 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 void initialisation() {
 	std::cout << "-Initialising BoidCPU..." << std::endl;
 
-	boidCPUID = getRand();
+	boidCPUID = getRandom(1, 100);
 	fpgaID = 123;
 
+	std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
 	state = IDEN;
 }
 
@@ -163,15 +167,12 @@ void initialisation() {
  * Transmits its temporary ID and FPGA serial number to the controller
  */
 void identify() {
-	std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
-
 	outputBody[0] = boidCPUID;
 	outputBody[1] = fpgaID;
 	generateOutput(2, 0, CMD_PING_REPLY, outputBody);
-	// 6, 0, 6, 3 || 6, 123
+	// 6, 0, [RANDOM ID], 3 || [RANDOM ID], 123
 
 	std::cout << "-Responded to ping" << std::endl;
-
 	state = SIMS;
 }
 
@@ -184,7 +185,8 @@ void identify() {
 void simulationSetup() {
 	std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
 
-	// Supplied by the controller
+	// Set BoidCPU parameters (supplied by the controller)
+	int8 oldBoidCPUID = boidCPUID;
 	boidCPUID = inputData[CMD_HEADER_LEN + 0];
 	boidCount = inputData[CMD_HEADER_LEN + 1];
 
@@ -196,35 +198,45 @@ void simulationSetup() {
 		neighbouringBoidCPUs[i] = inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
 	}
 
-	// Use this for testing
-	int testBoidCount = 10;
-	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
-			{Vector(594, 404, 0), Vector(-10, -1, 0)},
-			{Vector(550, 350, 0), Vector(-10, -3, 0)},
-			{Vector(661, 446, 0), Vector(-6, -4, 0)},
-			{Vector(539, 283, 0), Vector(-8, -2, 0)},
-			{Vector(551, 256, 0), Vector(-5, 7, 0)},
-			{Vector(644, 342, 0), Vector(-1, -7, 0)},
-			{Vector(592, 399, 0), Vector(-9, 6, 0)},
-			{Vector(644, 252, 0), Vector(-5, -8, 0)},
-			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
+	// Print out BoidCPU parameters
+	std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" << boidCPUID << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " initial boid count: " << boidCount << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " coordinates: [";
+	for (int i = 0; i < EDGE_COUNT; i++) {
+		std::cout << boidCPUCoords[i] << ", ";
+	} std::cout << "]" << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " neighbours: [";
+	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		std::cout << neighbouringBoidCPUs[i] << ", ";
+	} std::cout << "]" << std::endl;
 
-	for(int i = 0; i < testBoidCount; i++) {
+	// Create the boids (actual implementation)
+	for(int i = 0; i < boidCount; i++) {
+		Vector position = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
+		Vector velocity = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
+
 		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
+
+		Boid boid = Boid(boidID, position, velocity);
 		boids[i] = boid;
 	}
 
-//	for(int8 i = 0; i < boidCount; i++) {
-//		Vector position;
-//		Vector velocity;
+	// Create the boids (testing implementation)
+//	int testBoidCount = 10;
+//	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
+//			{Vector(594, 404, 0), Vector(-10, -1, 0)},
+//			{Vector(550, 350, 0), Vector(-10, -3, 0)},
+//			{Vector(661, 446, 0), Vector(-6, -4, 0)},
+//			{Vector(539, 283, 0), Vector(-8, -2, 0)},
+//			{Vector(551, 256, 0), Vector(-5, 7, 0)},
+//			{Vector(644, 342, 0), Vector(-1, -7, 0)},
+//			{Vector(592, 399, 0), Vector(-9, 6, 0)},
+//			{Vector(644, 252, 0), Vector(-5, -8, 0)},
+//			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
 //
-//		position.rand(boidCPUCoords[0], boidCPUCoords[1], boidCPUCoords[2], boidCPUCoords[3]);
-//		velocity.rand(-MAX_VELOCITY, -MAX_VELOCITY, MAX_VELOCITY, MAX_VELOCITY);
-//
+//	for(int i = 0; i < testBoidCount; i++) {
 //		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-//
-//		Boid boid = Boid(boidID, position, velocity);
+//		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
 //		boids[i] = boid;
 //	}
 
@@ -379,6 +391,10 @@ void updateDisplay() {
 	//state = NBRS;
 }
 
+//==============================================================================
+// Supporting functions ========================================================
+//==============================================================================
+
 // Generic methods
 void transmit(int to, int data) {
 //	output.write('a');
@@ -392,10 +408,10 @@ void receive() {
 }
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
-	outputData[0] = len + CMD_HEADER_LEN;
-	outputData[1] = to;
-	outputData[2] = boidCPUID;
-	outputData[3] = type;
+	outputData[CMD_LEN]  = len + CMD_HEADER_LEN;
+	outputData[CMD_TO]   = to;
+	outputData[CMD_FROM] = boidCPUID;
+	outputData[CMD_TYPE] = type;
 
 	if (len > 0) {
 		dataToCmd: for(int i = 0; i < len; i++) {
@@ -408,51 +424,49 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
 
 /**
  * Parses the supplied command and prints it out to the terminal
- *
- * FIXME: Testbench file cannot have same method name
  */
 void printCommand(bool send, uint32 *data) {
 	if(send) {
-		if(data[1] == 0) {
+		if(data[CMD_TO] == 0) {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
 		} else {
-			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << outputData[1] << ": ";
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << outputData[CMD_TO] << ": ";
 		}
 	} else {
-		if(data[1] == 0) {
-			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from " << outputData[2] << ": ";
+		if(data[CMD_TO] == 0) {
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from controller: ";
 		} else {
-			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << outputData[2] << ": ";
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << outputData[CMD_FROM] << ": ";
 		}
 	}
 
-	switch(data[3]) {
+	switch(data[CMD_TYPE]) {
 		case(0):
 			std::cout << "do something";
 			break;
 		case CMD_PING:
-			std::cout << "location ping";
+			std::cout << "BoidCPU ping";
 			break;
 		case CMD_KILL:
 			std::cout << "kill simulation";
 			break;
 		case CMD_PING_REPLY:
-			std::cout << "location ping response";
+			std::cout << "BoidCPU ping response";
 			break;
 		case CMD_INIT:
-			std::cout << "initialise location";
+			std::cout << "initialise BoidCPU";
 			break;
 		case CMD_BEGIN:
 			std::cout << "begin the simulation";
 			break;
 		case CMD_LOAD_INFO:
-			std::cout << "location load information";
+			std::cout << "BoidCPU load information";
 			break;
 		case CMD_LOAD_ACT:
 			std::cout << "load-balancing decision";
 			break;
 		case CMD_LOC_UPDATE:
-			std::cout << "new location parameters";
+			std::cout << "new BoidCPU parameters";
 			break;
 		case CMD_BOID:
 			std::cout << "boid";
@@ -461,22 +475,19 @@ void printCommand(bool send, uint32 *data) {
 			std::cout << "UNKNOWN COMMAND";
 			break;
 	}
-
 	std::cout << std::endl;
 
-//	if(cdbg) {
-		std::cout << "\t";
-		for(int i = 0; i < CMD_HEADER_LEN; i++) {
-			std::cout << data[i] << " ";
-		}
+	std::cout << "\t";
+	for(int i = 0; i < CMD_HEADER_LEN; i++) {
+		std::cout << data[i] << " ";
+	}
 
-		std::cout << "|| ";
+	std::cout << "|| ";
 
-		for(int i = 0; i < data[0] - CMD_HEADER_LEN; i++) {
-			std::cout << data[CMD_HEADER_LEN + i] << " ";
-		}
-		std::cout << std::endl;
-//	}
+	for(int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		std::cout << data[CMD_HEADER_LEN + i] << " ";
+	}
+	std::cout << std::endl;
 }
 
 void acceptBoid(uint32 *boidData) {
@@ -494,20 +505,25 @@ void acceptBoid(uint32 *boidData) {
 // Random ======================================================================
 //==============================================================================
 
-int getRand() {
+// http://en.wikipedia.org/wiki/Linear_feedback_shift_register#Galois_LFSRs
+// http://stackoverflow.com/q/17764587
+// http://stackoverflow.com/a/5009006
+int getRandom(int min, int max) {
 	shiftLSFR(&lfsr16, POLY_MASK_16);
-	return(shiftLSFR(&lfsr16, POLY_MASK_16) ^ shiftLSFR(&lfsr15, POLY_MASK_15));
+	int result = (shiftLSFR(&lfsr16, POLY_MASK_16) ^ shiftLSFR(&lfsr15, POLY_MASK_15));
+
+	return (min + (result % (int)(max - min + 1)));
 }
 
 int shiftLSFR(uint16 *lfsr, uint16 mask) {
 	unsigned period = 0;
 
 	do {
-		unsigned lsb = *lfsr & 1;  /* Get LSB (i.e., the output bit). */
-		*lfsr >>= 1;               /* Shift register */
-		if (lsb == 1)             /* Only apply toggle mask if output bit is 1. */
-			*lfsr ^= 0xB400u;      /* Apply toggle mask, value has 1 at bits corresponding
-								   * to taps, 0 elsewhere. */
+		unsigned lsb = *lfsr & 1;	// Get LSB (i.e., the output bit)
+		*lfsr >>= 1;				// Shift register
+		if (lsb == 1)				// Only apply toggle mask if output bit is 1
+			*lfsr ^= 0xB400u;		// Apply toggle mask, value has 1 at bits
+									//  corresponding to taps, 0 elsewhere
 		++period;
 	} while (*lfsr != mask);
 
@@ -789,13 +805,6 @@ void Vector::bound(uint8 n) {
 	if(x > n) x = n;
 	if(y > n) y = n;
 	if(z > n) z = n;
-}
-
-// http://stackoverflow.com/a/5009006
-void Vector::rand(int12 xMin, int12 yMin, int12 xMax, int12 yMax) {
-	x = xMin + (std::rand() % (int)(xMax - xMin + 1));
-	y = yMin + (std::rand() % (int)(yMax - yMin + 1));
-	z = 0;
 }
 
 bool Vector::empty() {

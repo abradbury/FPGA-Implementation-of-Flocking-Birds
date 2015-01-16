@@ -7,6 +7,11 @@
 #define EDGE_COUNT				4		// The number of edges a BoidCPU has
 #define MAX_BOIDCPU_NEIGHBOURS	8		// The max neighbours a BoidCPUs has
 
+#define CMD_LEN			0	// The index of the command length
+#define CMD_TO			1	// The index of the command target
+#define CMD_FROM		2	// The index of the command sender
+#define	CMD_TYPE		3	// The index of the command type
+
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
 #define CMD_PING_REPLY	3	// Location response to controller ping
@@ -35,47 +40,58 @@ int main() {
 	uint32 from = 0;
 	uint32 dataLength = 0;
 
+	bool expectResponse[CMD_BOID + 1];
+	expectResponse[CMD_PING] = true;
+	expectResponse[CMD_KILL] = false;
+	expectResponse[CMD_PING_REPLY] = false;
+	expectResponse[CMD_INIT] = false;
+	expectResponse[CMD_BEGIN] = false;
+
 	// Test ping response ----------------------------------------------------//
-	// 4, 6, 0, 1 ||
-//	dataLength = 0;
-//	createCommand(dataLength, to, from, CMD_PING, data);
+	// 4, 0, 0, 1 ||
+	to = 0;
+	dataLength = 0;
+	createCommand(dataLength, to, from, CMD_PING, data);
 
 	// Test simulation setup ---------------------------------------------------
 	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
-	dataLength = 14;
-	uint32 newID = 5;
-	uint32 initialBoidCount = 10;
-	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
-	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
-
-	data[0] = newID;
-	data[1] = initialBoidCount;
-
-	for (int i = 0; i < EDGE_COUNT; i++) {
-		data[2 + i] = coords[i];
-	}
-
-	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-		data[EDGE_COUNT + 2 + i] = neighbours[i];
-	}
-
-	createCommand(dataLength, to, from, CMD_INIT, data);
+//	dataLength = 14;
+//	uint32 newID = 6;
+//	uint32 initialBoidCount = 10;
+//	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
+//	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
+//
+//	data[0] = newID;
+//	data[1] = initialBoidCount;
+//
+//	for (int i = 0; i < EDGE_COUNT; i++) {
+//		data[2 + i] = coords[i];
+//	}
+//
+//	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+//		data[EDGE_COUNT + 2 + i] = neighbours[i];
+//	}
+//
+//	createCommand(dataLength, to, from, CMD_INIT, data);
 
 	// Send and receive data ---------------------------------------------------
 	printTestBenchCommand(true);
 
-	cmdOut: for(int i = 0; i < command[0]; i++) {
+	cmdOut: for(int i = 0; i < command[CMD_LEN]; i++) {
 		to_hw.write(command[i]);
 	}
 
 	topleveltwo(to_hw, from_hw);
 
-	command[0] = from_hw.read();
-	cmdIn: for (int i = 1; i < command[0]; i++) {
-		command[i] = from_hw.read();
-	}
+	if (expectResponse[command[CMD_TYPE]] == true) {
+		command[CMD_LEN] = from_hw.read();
 
-	printTestBenchCommand(false);
+		cmdIn: for (int i = 0; i < command[CMD_LEN] - 1; i++) {
+			command[i + 1] = from_hw.read();
+		}
+
+		printTestBenchCommand(false);
+	}
 
 	// Test
 
@@ -116,10 +132,10 @@ int main() {
 }
 
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {
-	command[0] = len + CMD_HEADER_LEN;
-	command[1] = to;
-	command[2] = from;
-	command[3] = type;
+	command[CMD_LEN]  = len + CMD_HEADER_LEN;
+	command[CMD_TO]   = to;
+	command[CMD_FROM] = from;
+	command[CMD_TYPE] = type;
 
 	if (len > 0) {
 		dataToCmd: for(int i = 0; i < len; i++) {
@@ -135,46 +151,46 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
  */
 void printTestBenchCommand(bool send) {
 	if(send) {
-		if(command[1] == 0) {
+		if(command[CMD_TO] == 0) {
 			std::cout << "-> TX, Controller sent broadcast: ";
 		} else {
-			std::cout << "-> TX, Controller sent command to " << command[1] << ": ";
+			std::cout << "-> TX, Controller sent command to " << command[CMD_TO] << ": ";
 		}
 	} else {
-		if(command[1] == 0) {
-			std::cout << "<- RX, Controller received broadcast from " << command[2] << ": ";
+		if(command[CMD_TO] == 0) {
+			std::cout << "<- RX, Controller received broadcast from " << command[CMD_FROM] << ": ";
 		} else {
-			std::cout << "<- RX, Controller received command from " << command[2] << ": ";
+			std::cout << "<- RX, Controller received command from " << command[CMD_FROM] << ": ";
 		}
 	}
 
-	switch(command[3]) {
+	switch(command[CMD_TYPE]) {
 		case(0):
 			std::cout << "do something";
 			break;
 		case CMD_PING:
-			std::cout << "location ping";
+			std::cout << "BoidCPU ping";
 			break;
 		case CMD_KILL:
 			std::cout << "kill simulation";
 			break;
 		case CMD_PING_REPLY:
-			std::cout << "location ping response";
+			std::cout << "BoidCPU ping response";
 			break;
 		case CMD_INIT:
-			std::cout << "initialise location";
+			std::cout << "initialise BoidCPU";
 			break;
 		case CMD_BEGIN:
 			std::cout << "begin the simulation";
 			break;
 		case CMD_LOAD_INFO:
-			std::cout << "location load information";
+			std::cout << "BoidCPU load information";
 			break;
 		case CMD_LOAD_ACT:
 			std::cout << "load-balancing decision";
 			break;
 		case CMD_LOC_UPDATE:
-			std::cout << "new location parameters";
+			std::cout << "new BoidCPU parameters";
 			break;
 		case CMD_BOID:
 			std::cout << "boid";
@@ -183,23 +199,18 @@ void printTestBenchCommand(bool send) {
 			std::cout << "UNKNOWN COMMAND";
 			break;
 	}
-
 	std::cout << std::endl;
 
-//	if(cdbg) {
-		std::cout << "\t";
-		for(int i = 0; i < CMD_HEADER_LEN; i++) {
-			std::cout << command[i] << " ";
-		}
+	std::cout << "\t";
+	for(int i = 0; i < CMD_HEADER_LEN; i++) {
+		std::cout << command[i] << " ";
+	}
 
-		std::cout << "|| ";
+	std::cout << "|| ";
 
-		for(int i = 0; i < command[0] - CMD_HEADER_LEN; i++) {
-			std::cout << command[CMD_HEADER_LEN + i] << " ";
-		}
-		std::cout << std::endl;
-//	}
+	for(int i = 0; i < command[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		std::cout << command[CMD_HEADER_LEN + i] << " ";
+	}
+	std::cout << std::endl;
 }
-
-
 

@@ -42,7 +42,6 @@ class Vector {
 		uint8 mag();
 		void normalise();
 		void bound(uint8 n);
-		void rand(int12 xMin, int12 yMin, int12 xMax, int12 yMax);
 		bool empty();
 
 		void setMag(uint8 mag);
