@@ -97,6 +97,8 @@ bool outputAvailable = false;		// True if there is output ready to send
  * 	typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
  */
 
+Boid *neighbouringBoids[MAX_NEIGHBOURS];
+
 /**
  * TODO: Sync states and command types?
  * TODO: Argument 'this' of function 'getVelocity' has an unsynthesizable type?
@@ -164,23 +166,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 /**
  * TODO: Setup necessary components - maybe?
- * Generate a random initial ID/**
- * Fixed-point arithmetic attempt (failed)
- * --------------------------------------
- * Tried using HLS's fixed point library (ap_fixed.h) but it did not make sense.
- * For example:
- * 	ap_fixed<6,3, AP_RND, AP_WRAP> Val = 3.25;
- * 	std::cout << Val << std::endl; 				// Gives 3.25
- * However, this one didn't work for some reason:
- * 	din1_t a = -345.8;
- * 	std::cout << a << std::endl;				// Gives 0
- * 	fint12 b = -345.8;
- * 	std::cout << b << std::endl;				// Gives -346
- *
- * Where the types were defined in the header:
- * 	typedef ap_fixed<22,22, AP_RND, AP_SAT> fint12;
- * 	typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
- */
+ * Generate a random initial ID
  * TODO: Identify the serial number of the host FPGA
  */
 void initialisation() {
@@ -357,11 +343,11 @@ void calcNextBoidPositions() {
 //			{Vector(680, 485, 0), Vector(-7, 7, 0)}};
 //
 //	for (int i = 0; i < boidCount; i++) {
-//		if (!Vector::equal(boids[i].getPosition(), knownSetupNextPos[i][0])) {
-//			std::cout << "Boid #" << boids[i].getID() << " position differs" << std::endl;
-//			std::cout << "   " << boids[i].getPosition() << " vs " << knownSetupNextPos[i][0] << std::endl;
+//		if (!Vector::equal(boids[i].position, knownSetupNextPos[i][0])) {
+//			std::cout << "Boid #" << boids[i].id << " position differs" << std::endl;
+//			std::cout << "   " << boids[i].position << " vs " << knownSetupNextPos[i][0] << std::endl;
 //		} else {
-//			std::cout << "Boid #" << boids[i].getID() << " position same" << std::endl;
+//			std::cout << "Boid #" << boids[i].id << " position same" << std::endl;
 //		}
 //	}
 }
@@ -378,49 +364,49 @@ void moveBoids() {
 
 	for (int i = 0; i < boidCount; i++) {
 		if (neighbouringBoidCPUs[0] != 0) {
-			if ((boids[i].getPosition().y < boidCPUCoords[1]) && (boids[i].getPosition().x < boidCPUCoords[0])) {
+			if ((boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[0];
 			}
 		} else if (neighbouringBoidCPUs[2] != 0) {
-			if ((boids[i].getPosition().y < boidCPUCoords[1]) && (boids[i].getPosition().x > boidCPUCoords[2])) {
+			if ((boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[2];
 			}
 		} else if (neighbouringBoidCPUs[4] != 0) {
-			if ((boids[i].getPosition().y > boidCPUCoords[3]) && (boids[i].getPosition().x > boidCPUCoords[2])) {
+			if ((boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[4];
 			}
 		} else if (neighbouringBoidCPUs[6] != 0) {
-			if ((boids[i].getPosition().y > boidCPUCoords[3]) && (boids[i].getPosition().x < boidCPUCoords[0])) {
+			if ((boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[6];
 			}
 		} else if (neighbouringBoidCPUs[1] != 0) {
-			if (boids[i].getPosition().y < boidCPUCoords[1]) {
+			if (boids[i].position.y < boidCPUCoords[1]) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[1];
 			}
 		} else if (neighbouringBoidCPUs[3] != 0) {
-			if (boids[i].getPosition().x > boidCPUCoords[2]) {
+			if (boids[i].position.x > boidCPUCoords[2]) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[3];
 			}
 		} else if (neighbouringBoidCPUs[5] != 0) {
-			if (boids[i].getPosition().y > boidCPUCoords[3]) {
+			if (boids[i].position.y > boidCPUCoords[3]) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[5];
 			}
 		} else if (neighbouringBoidCPUs[7] != 0) {
-			if (boids[i].getPosition().x < boidCPUCoords[0]) {
+			if (boids[i].position.x < boidCPUCoords[0]) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[7];
 			}
 		}
 	}
 
-	std::cout << "-Transferring boid #" << boidToTransfer.getID() <<
+	std::cout << "-Transferring boid #" << boidToTransfer.id <<
 		" to boidCPU #" << recipientBoidCPU << std::endl;
 }
 
@@ -602,8 +588,8 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCo
 	std::cout << "Calculating neighbours for boid #" << id << std::endl;
 
 	for (int i = 0; i < possibleNeighbourCount; i++) {
-		if (possibleNeighbours[i].getID() != id) {
-			double distance = Vector::distanceBetween(position, possibleNeighbours[i].getPosition());
+		if (possibleNeighbours[i].id != id) {
+			double distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
 			if (distance < VISION_RADIUS) {
 				neighbouringBoids[neighbouringBoidsCount] = &possibleNeighbours[i];
 				neighbouringBoidsCount++;
@@ -613,7 +599,7 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCo
 
 	std::cout << "Boid #" << id << " has " << neighbouringBoidsCount << " neighbours: ";
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
-		std::cout << neighbouringBoids[i]->getID() << ", ";
+		std::cout << neighbouringBoids[i]->id << ", ";
 	} std::cout << std::endl;
 }
 
@@ -639,7 +625,7 @@ Vector Boid::align(void) {
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
-		total.add(neighbouringBoids[i]->getVelocity());
+		total.add(neighbouringBoids[i]->velocity);
 		//total.add(getDummyVector());
 	}
 
@@ -658,7 +644,7 @@ Vector Boid::separate(void) {
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
-		diff = Vector::sub(position, neighbouringBoids[i]->getPosition());
+		diff = Vector::sub(position, neighbouringBoids[i]->position);
 		//diff = Vector::sub(position, getDummyVector());
 		diff.normalise();
 		total.add(diff);
@@ -679,7 +665,7 @@ Vector Boid::cohesion(void) {
 
 	for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
-		total.add(neighbouringBoids[i]->getPosition());
+		total.add(neighbouringBoids[i]->position);
 		//total.add(getDummyVector());
 	}
 
@@ -712,17 +698,17 @@ void Boid::contain() {
 	}
 }
 
-Vector Boid::getVelocity() {
-	return velocity;
-}
+//Vector Boid::getVelocity() {
+//	return velocity;
+//}
+//
+//Vector Boid::getPosition() {
+//	return position;
+//}
 
-Vector Boid::getPosition() {
-	return position;
-}
-
-uint8 Boid::getID(void) {
-	return id;
-}
+//uint8 Boid::getID(void) {
+//	return id;
+//}
 
 //uint8 Boid::getNeighbourCount(void) {
 //	return neighbouringBoidsCount;
@@ -855,7 +841,7 @@ bool Vector::empty() {
 }
 
 // Other ///////////////////////////////////////////////////////////////////////
-std::ostream& operator <<(std::ostream& os, const Vector& v) {
-	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
-	return os;
-}
+//std::ostream& operator <<(std::ostream& os, const Vector& v) {
+//	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
+//	return os;
+//}
