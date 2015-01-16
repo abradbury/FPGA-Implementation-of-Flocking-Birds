@@ -3,7 +3,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <ap_int.h>
+#include <ap_int.h>			// For arbitrary precision types
+#include <ap_fixed.h>		// For fixed point data types
 #include <hls_stream.h>
 
 #define MAX_NEIGHBOURS 	8	// The maximum number of neighbouring locations

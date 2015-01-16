@@ -80,6 +80,24 @@ uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
 bool outputAvailable = false;		// True if there is output ready to send
 
 /**
+ * Fixed-point arithmetic attempt (failed)
+ * --------------------------------------
+ * Tried using HLS's fixed point library (ap_fixed.h) but it did not make sense.
+ * For example:
+ * 	ap_fixed<6,3, AP_RND, AP_WRAP> Val = 3.25;
+ * 	std::cout << Val << std::endl; 				// Gives 3.25
+ * However, this one didn't work for some reason:
+ * 	din1_t a = -345.8;
+ * 	std::cout << a << std::endl;				// Gives 0
+ * 	fint12 b = -345.8;
+ * 	std::cout << b << std::endl;				// Gives -346
+ *
+ * Where the types were defined in the header:
+ * 	typedef ap_fixed<22,22, AP_RND, AP_SAT> fint12;
+ * 	typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
+ */
+
+/**
  * TODO: Sync states and command types?
  * TODO: Argument 'this' of function 'getVelocity' has an unsynthesizable type?
  * TODO: Random generator needs random seeds - FPGA clock?
@@ -146,7 +164,23 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 /**
  * TODO: Setup necessary components - maybe?
- * Generate a random initial ID
+ * Generate a random initial ID/**
+ * Fixed-point arithmetic attempt (failed)
+ * --------------------------------------
+ * Tried using HLS's fixed point library (ap_fixed.h) but it did not make sense.
+ * For example:
+ * 	ap_fixed<6,3, AP_RND, AP_WRAP> Val = 3.25;
+ * 	std::cout << Val << std::endl; 				// Gives 3.25
+ * However, this one didn't work for some reason:
+ * 	din1_t a = -345.8;
+ * 	std::cout << a << std::endl;				// Gives 0
+ * 	fint12 b = -345.8;
+ * 	std::cout << b << std::endl;				// Gives -346
+ *
+ * Where the types were defined in the header:
+ * 	typedef ap_fixed<22,22, AP_RND, AP_SAT> fint12;
+ * 	typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
+ */
  * TODO: Identify the serial number of the host FPGA
  */
 void initialisation() {

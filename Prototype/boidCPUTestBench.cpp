@@ -51,9 +51,9 @@ int main() {
 
 	// Test ping response ----------------------------------------------------//
 	// 4, 0, 0, 1 ||
-//	to = CMD_BROADCAST;
-//	dataLength = 0;
-//	createCommand(dataLength, to, from, CMD_PING, data);
+	to = CMD_BROADCAST;
+	dataLength = 0;
+	createCommand(dataLength, to, from, CMD_PING, data);
 
 	// Test simulation setup ---------------------------------------------------
 	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
@@ -79,9 +79,9 @@ int main() {
 //	createCommand(dataLength, to, from, CMD_INIT, data);
 
 	// Test starting the simulation
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, CMD_BEGIN, data);
+//	dataLength = 0;
+//	to = CMD_BROADCAST;
+//	createCommand(dataLength, to, from, CMD_BEGIN, data);
 
 	// Send and receive data ---------------------------------------------------
 	printTestBenchCommand(true);
