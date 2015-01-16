@@ -12,6 +12,8 @@
 #define CMD_FROM		2	// The index of the command sender
 #define	CMD_TYPE		3	// The index of the command type
 
+#define CMD_BROADCAST	0	// The number representing a broadcast command
+
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
 #define CMD_PING_REPLY	3	// Location response to controller ping
@@ -36,7 +38,7 @@ int main() {
 	hls::stream<uint32> to_hw, from_hw;
 
 	uint32 data[MAX_CMD_BODY_LEN];
-	uint32 to = 6;
+	uint32 to;
 	uint32 from = 0;
 	uint32 dataLength = 0;
 
@@ -49,13 +51,15 @@ int main() {
 
 	// Test ping response ----------------------------------------------------//
 	// 4, 0, 0, 1 ||
-	to = 0;
-	dataLength = 0;
-	createCommand(dataLength, to, from, CMD_PING, data);
+//	to = CMD_BROADCAST;
+//	dataLength = 0;
+//	createCommand(dataLength, to, from, CMD_PING, data);
 
 	// Test simulation setup ---------------------------------------------------
 	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
 //	dataLength = 14;
+//  to = 93;			// The current random ID of the test BoidCPU
+//
 //	uint32 newID = 6;
 //	uint32 initialBoidCount = 10;
 //	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
@@ -73,6 +77,11 @@ int main() {
 //	}
 //
 //	createCommand(dataLength, to, from, CMD_INIT, data);
+
+	// Test starting the simulation
+	dataLength = 0;
+	to = CMD_BROADCAST;
+	createCommand(dataLength, to, from, CMD_BEGIN, data);
 
 	// Send and receive data ---------------------------------------------------
 	printTestBenchCommand(true);
@@ -151,13 +160,13 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
  */
 void printTestBenchCommand(bool send) {
 	if(send) {
-		if(command[CMD_TO] == 0) {
+		if(command[CMD_TO] == CMD_BROADCAST) {
 			std::cout << "-> TX, Controller sent broadcast: ";
 		} else {
 			std::cout << "-> TX, Controller sent command to " << command[CMD_TO] << ": ";
 		}
 	} else {
-		if(command[CMD_TO] == 0) {
+		if(command[CMD_TO] == CMD_BROADCAST) {
 			std::cout << "<- RX, Controller received broadcast from " << command[CMD_FROM] << ": ";
 		} else {
 			std::cout << "<- RX, Controller received command from " << command[CMD_FROM] << ": ";

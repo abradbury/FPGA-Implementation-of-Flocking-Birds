@@ -14,9 +14,9 @@
 
 #define CMD_HEADER_LEN			4
 
-#define VISION_RADIUS			100
-#define MAX_BOIDCPU_NEIGHBOURS	8		// The max neighbours a BoidCPUs has
-#define MAX_NEIGHBOURING_BOIDS	90		// TODO: Decide on appropriate value?
+#define VISION_RADIUS				100
+#define MAX_NEIGHBOURING_BOIDCPUS	8		// The max neighbours a BoidCPUs has
+#define MAX_NEIGHBOURING_BOIDS		90		// TODO: Decide on appropriate value?
 
 #define POLY_MASK_16			0xD295
 #define POLY_MASK_15			0x6699
@@ -30,6 +30,8 @@
 #define CMD_TO			1	// The index of the command target
 #define CMD_FROM		2	// The index of the command sender
 #define	CMD_TYPE		3	// The index of the command type
+
+#define CMD_BROADCAST	0	// The number representing a broadcast command
 
 #define CMD_PING		1	// Controller asking how many locations their are
 #define CMD_KILL		2	// Controller stopping the simulation
@@ -57,18 +59,14 @@ void printCommand(bool send, uint32 *data);
 int getRandom(int min, int max);
 int shiftLSFR(uint16 *lsfr, uint16 mask);
 
-// Define the states
-enum States {INIT, IDEN, SIMS, NBRS, BOID, LOAD, MOVE, DRAW, MAX_STATES};
-States state;
-
 // Define variables
-// FIXME: Should these really be global?
+// TODO: Should these really be global?
 int8 boidCPUID;
 int8 fpgaID;
 
 int8 boidCount;
 Boid boids[MAX_BOIDS];
-uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
+uint8 neighbouringBoidCPUs[MAX_NEIGHBOURING_BOIDCPUS];
 int12 boidCPUCoords[4];
 
 uint32 inputData[MAX_CMD_LEN];
@@ -98,7 +96,6 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// Perform initialisation
 	// TODO: This only needs to be called on power up, not every time the
 	//	BoidCPU is called.
-	state = INIT;
 	initialisation();
 
 	// INPUT -------------------------------------------------------------------
@@ -114,7 +111,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 	// STATE CHANGE ------------------------------------------------------------
 	// TODO: Replace '6' with 'boidCPUID' when deploying
-	if ((inputData[CMD_TO] == 0) || (inputData[CMD_TO] == 6)) {
+	if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 6)) {
 		switch(inputData[CMD_TYPE]) {
 		case CMD_PING:
 			identify();
@@ -159,7 +156,6 @@ void initialisation() {
 	fpgaID = 123;
 
 	std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
-	state = IDEN;
 }
 
 /**
@@ -173,7 +169,6 @@ void identify() {
 	// 6, 0, [RANDOM ID], 3 || [RANDOM ID], 123
 
 	std::cout << "-Responded to ping" << std::endl;
-	state = SIMS;
 }
 
 /**
@@ -194,7 +189,7 @@ void simulationSetup() {
 		boidCPUCoords[i] = inputData[CMD_HEADER_LEN + 2 + i];
 	}
 
-	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+	for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
 		neighbouringBoidCPUs[i] = inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
 	}
 
@@ -206,7 +201,7 @@ void simulationSetup() {
 		std::cout << boidCPUCoords[i] << ", ";
 	} std::cout << "]" << std::endl;
 	std::cout << "BoidCPU #" << boidCPUID << " neighbours: [";
-	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+	for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
 		std::cout << neighbouringBoidCPUs[i] << ", ";
 	} std::cout << "]" << std::endl;
 
@@ -239,99 +234,110 @@ void simulationSetup() {
 //		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
 //		boids[i] = boid;
 //	}
-
-	state = NBRS;
 }
 
 void findNeighbours() {
-	std::cout << "Finding neighbouring boids..." << std::endl;
+	std::cout << "-Finding neighbouring boids..." << std::endl;
 
-	// The neighbouring BoidCPUs would be supplied by the controller on intialisation
-	neighbouringBoidCPUs[0] = 2;
-	neighbouringBoidCPUs[1] = 3;
-	neighbouringBoidCPUs[2] = 1;
-	neighbouringBoidCPUs[3] = 4;
-	neighbouringBoidCPUs[4] = 7;
-	neighbouringBoidCPUs[5] = 9;
-	neighbouringBoidCPUs[6] = 8;
-	neighbouringBoidCPUs[7] = 5;
+	//--------------------------------------------------------------------------
+	// TODO: Remove this when deployed
+	boidCount = 10;
+	boidCPUID = 6;
+	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
+			{Vector(594, 404, 0), Vector(-10, -1, 0)},
+			{Vector(550, 350, 0), Vector(-10, -3, 0)},
+			{Vector(661, 446, 0), Vector(-6, -4, 0)},
+			{Vector(539, 283, 0), Vector(-8, -2, 0)},
+			{Vector(551, 256, 0), Vector(-5, 7, 0)},
+			{Vector(644, 342, 0), Vector(-1, -7, 0)},
+			{Vector(592, 399, 0), Vector(-9, 6, 0)},
+			{Vector(644, 252, 0), Vector(-5, -8, 0)},
+			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
+
+	for(int i = 0; i < boidCount; i++) {
+		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
+		boids[i] = boid;
+	}
+	//--------------------------------------------------------------------------
 
 	// Generate a list of possible neighbouring boids
 	Boid possibleNeighbouringBoids[MAX_NEIGHBOURING_BOIDS];
 	uint8 possibleNeighbourCount = 0;
 
+	// Add the boids of the current BoidCPU to the possible neighbour list
 	for (int i = 0; i < boidCount; i++) {
 		possibleNeighbouringBoids[i] = boids[i];
 		possibleNeighbourCount++;
 	}
 
-	for (int i = boidCount; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-		if (neighbouringBoidCPUs[i] != 0) {
+	// Add the boids from the neighbouring BoidCPUs to the possible neighbour list
+	for (int i = boidCount; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+//		if (neighbouringBoidCPUs[i] != 0) {
 			// TODO: Get boids from neighbouring BoidCPUs
 			// possibleNeighbouringBoids[] =
 			// possibleNeighbourCount++;
-		}
+//		}
 	}
 
-	// Calculate a the neighbours for each boid
+	// Calculate the neighbours for each boid
+	// TODO: This could be done when calculating each boid's positions as C/C++
+	//	seems to be pass by value - unlike Python
 	for (int i = 0; i < boidCount; i++) {
 		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
 	}
 
-	// A list of the known neighbours for the boids at time step 1 (from Python)
-	// Sat 10th Jan: HLS is correct
-	int knownSetupNeighbours [10][5] = {{59},
-			 {53, 54, 57, 58},
-			 {52, 55, 56, 57, 58},
-			 {52, 58, 60},
-			 {53, 56},
-			 {53, 55, 59},
-			 {52, 53, 58, 59},
-			 {52, 53, 54, 57},
-			 {51, 56, 57},
-			 {54}};
+//	// A list of the known neighbours for the boids at time step 1 (from Python)
+//	// Sat 10th Jan: HLS is correct
+//	int knownSetupNeighbours [10][5] = {{59},
+//			 {53, 54, 57, 58},
+//			 {52, 55, 56, 57, 58},
+//			 {52, 58, 60},
+//			 {53, 56},
+//			 {53, 55, 59},
+//			 {52, 53, 58, 59},
+//			 {52, 53, 54, 57},
+//			 {51, 56, 57},
+//			 {54}};
 
-	state = BOID;
+//	calcNextBoidPositions();
 }
 
 void calcNextBoidPositions() {
-	std::cout << "Calculating next boid positions..." << std::endl;
+	std::cout << "-Calculating next boid positions..." << std::endl;
 
 	for (int i = 0; i < boidCount; i++) {
 		boids[i].update();
 	}
 
-	// The next positions of the boids, rounded to ints from floats, from Python
-	Vector knownSetupNextPos[10][2] = {{Vector(691, 244, 0), Vector(-4, -8, 0)},
-			{Vector(586, 403, 0), Vector(-8, -2, 0)},
-			{Vector(541, 349, 0), Vector(-9, -2, 0)},
-			{Vector(655, 444, 0), Vector(-6, -2, 0)},
-			{Vector(532, 283, 0), Vector(-7, -2, 0)},
-			{Vector(547, 261, 0), Vector(-4, 5, 0)},
-			{Vector(642, 337, 0), Vector(-2, -5, 0)},
-			{Vector(584, 403, 0), Vector(-8, 4, 0)},
-			{Vector(639, 245, 0), Vector(-5, -7, 0)},
-			{Vector(680, 485, 0), Vector(-7, 7, 0)}};
-
-	for (int i = 0; i < boidCount; i++) {
-		if (!Vector::equal(boids[i].getPosition(), knownSetupNextPos[i][0])) {
-			std::cout << "Boid #" << boids[i].getID() << " position differs" << std::endl;
-			std::cout << "   " << boids[i].getPosition() << " vs " << knownSetupNextPos[i][0] << std::endl;
-		} else {
-			std::cout << "Boid #" << boids[i].getID() << " position same" << std::endl;
-		}
-	}
-
-	state = LOAD;
+//	// The next positions of the boids, rounded to ints from floats, from Python
+//	Vector knownSetupNextPos[10][2] = {{Vector(691, 244, 0), Vector(-4, -8, 0)},
+//			{Vector(586, 403, 0), Vector(-8, -2, 0)},
+//			{Vector(541, 349, 0), Vector(-9, -2, 0)},
+//			{Vector(655, 444, 0), Vector(-6, -2, 0)},
+//			{Vector(532, 283, 0), Vector(-7, -2, 0)},
+//			{Vector(547, 261, 0), Vector(-4, 5, 0)},
+//			{Vector(642, 337, 0), Vector(-2, -5, 0)},
+//			{Vector(584, 403, 0), Vector(-8, 4, 0)},
+//			{Vector(639, 245, 0), Vector(-5, -7, 0)},
+//			{Vector(680, 485, 0), Vector(-7, 7, 0)}};
+//
+//	for (int i = 0; i < boidCount; i++) {
+//		if (!Vector::equal(boids[i].getPosition(), knownSetupNextPos[i][0])) {
+//			std::cout << "Boid #" << boids[i].getID() << " position differs" << std::endl;
+//			std::cout << "   " << boids[i].getPosition() << " vs " << knownSetupNextPos[i][0] << std::endl;
+//		} else {
+//			std::cout << "Boid #" << boids[i].getID() << " position same" << std::endl;
+//		}
+//	}
 }
 
 void loadBalance() {
-	std::cout << "Load balancing..." << std::endl;
-	state = MOVE;
+	std::cout << "-Load balancing..." << std::endl;
 }
 
 void moveBoids() {
-	std::cout << "Transferring boids..." << std::endl;
+	std::cout << "-Transferring boids..." << std::endl;
 
 	Boid boidToTransfer;
 	int recipientBoidCPU = 0;
@@ -380,15 +386,12 @@ void moveBoids() {
 		}
 	}
 
-	std::cout << "Transferring boid #" << boidToTransfer.getID() <<
+	std::cout << "-Transferring boid #" << boidToTransfer.getID() <<
 		" to boidCPU #" << recipientBoidCPU << std::endl;
-
-	state = DRAW;
 }
 
 void updateDisplay() {
-	std::cout << "Updating display" << std::endl;
-	//state = NBRS;
+	std::cout << "-Updating display" << std::endl;
 }
 
 //==============================================================================
@@ -427,13 +430,13 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
  */
 void printCommand(bool send, uint32 *data) {
 	if(send) {
-		if(data[CMD_TO] == 0) {
+		if(data[CMD_TO] == CMD_BROADCAST) {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
 		} else {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << outputData[CMD_TO] << ": ";
 		}
 	} else {
-		if(data[CMD_TO] == 0) {
+		if(data[CMD_TO] == CMD_BROADCAST) {
 			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from controller: ";
 		} else {
 			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << outputData[CMD_FROM] << ": ";
