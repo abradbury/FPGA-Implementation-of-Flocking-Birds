@@ -33,15 +33,20 @@
 
 #define CMD_BROADCAST	0	// The number representing a broadcast command
 
-#define CMD_PING		1	// Controller asking how many locations their are
-#define CMD_KILL		2	// Controller stopping the simulation
-#define CMD_PING_REPLY	3	// Location response to controller ping
-#define CMD_INIT		4	// Controller initiation command
-#define CMD_BEGIN 		5	// Begin the simulation
-#define CMD_LOAD_INFO	6	// Each location reports its current load
-#define CMD_LOAD_ACT	7	// The decision of the controller based on the load
-#define CMD_LOC_UPDATE	8	// The new parameters for location if load balanced
-#define CMD_BOID		9	// Used to transfer boids between locations
+#define MODE_INIT 		1	//
+#define	CMD_PING		2	// Controller -> BoidCPU
+#define CMD_PING_REPLY	3	// BoidCPU -> Controller
+#define CMD_USER_INFO	4	// Controller -> BoidGPU
+#define CMD_SIM_SETUP	5	// Controller -> Boid[CG]PU
+#define MODE_CALC_NBRS	6	//
+#define CMD_NBR_REQUEST	7	// BoidCPU -> BoidCPU
+#define CMD_NBR_REPLY	8	// BoidCPU -> BoidCPU
+#define MODE_POS_BOIDS	9	//
+#define CMD_LOAD_BAL	10	// TODO: Decide on implementation
+#define MODE_TRAN_BOIDS	11	//
+#define MODE_DRAW		12	// TODO: Perhaps not needed?
+#define CMD_DRAW_INFO	13	// BoidCPU -> BoidGPU
+#define CMD_KILL		14	// Controller -> All
 
 // Function headers
 static void initialisation (void);
@@ -123,7 +128,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	inputData[0] = input.read();
 
 	// When there is input, read in the command
-	for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
+	inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
 		inputData[1 + i] = input.read();
 	}
 	printCommand(false, inputData);
@@ -133,18 +138,40 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// TODO: Replace '6' with 'boidCPUID' when deploying
 	if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 6)) {
 		switch(inputData[CMD_TYPE]) {
-		case CMD_PING:
-			identify();
-			break;
-		case CMD_INIT:
-			simulationSetup();
-			break;
-		case CMD_BEGIN:
-			findNeighbours();
-			break;
-		default:
-			std::cout << "Command state " << inputData[CMD_TYPE] << " not recognised" << std::endl;
-			break;
+			case MODE_INIT:
+				initialisation();
+				break;
+			case CMD_PING:
+				identify();
+				break;
+			case CMD_SIM_SETUP:
+				simulationSetup();
+				break;
+			case MODE_CALC_NBRS:
+				findNeighbours();
+				break;
+			case CMD_NBR_REQUEST:
+//				sendBoidsToNeighbour();
+				break;
+			case CMD_NBR_REPLY:
+//				processNeighbouringBoids();
+				break;
+			case MODE_POS_BOIDS:
+				calcNextBoidPositions();
+				break;
+			case CMD_LOAD_BAL:
+				loadBalance();
+				break;
+			case MODE_TRAN_BOIDS:
+				moveBoids();
+				break;
+			case MODE_DRAW:
+				updateDisplay();
+				break;
+			default:
+				std::cout << "Command state " << inputData[CMD_TYPE] <<
+					" not recognised" << std::endl;
+				break;
 		}
 	}
 	// -------------------------------------------------------------------------
@@ -152,7 +179,7 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// OUTPUT ------------------------------------------------------------------
 	// If there is output to send, send it
 	if (outputAvailable) {
-		for (int i = 0; i < outputData[CMD_LEN]; i++) {
+		outputLoop: for (int i = 0; i < outputData[CMD_LEN]; i++) {
 			output.write(outputData[i]);
 		}
 		printCommand(true, outputData);
@@ -205,11 +232,11 @@ void simulationSetup() {
 	boidCPUID = inputData[CMD_HEADER_LEN + 0];
 	boidCount = inputData[CMD_HEADER_LEN + 1];
 
-	for (int i = 0; i < EDGE_COUNT; i++) {
+	edgeSetupLoop: for (int i = 0; i < EDGE_COUNT; i++) {
 		boidCPUCoords[i] = inputData[CMD_HEADER_LEN + 2 + i];
 	}
 
-	for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+	neighbourSetupLoop: for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
 		neighbouringBoidCPUs[i] = inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
 	}
 
@@ -217,16 +244,16 @@ void simulationSetup() {
 	std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" << boidCPUID << std::endl;
 	std::cout << "BoidCPU #" << boidCPUID << " initial boid count: " << boidCount << std::endl;
 	std::cout << "BoidCPU #" << boidCPUID << " coordinates: [";
-	for (int i = 0; i < EDGE_COUNT; i++) {
+	printEdgeLoop: for (int i = 0; i < EDGE_COUNT; i++) {
 		std::cout << boidCPUCoords[i] << ", ";
 	} std::cout << "]" << std::endl;
 	std::cout << "BoidCPU #" << boidCPUID << " neighbours: [";
-	for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+	printNeighbourLoop: for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
 		std::cout << neighbouringBoidCPUs[i] << ", ";
 	} std::cout << "]" << std::endl;
 
 	// Create the boids (actual implementation)
-	for(int i = 0; i < boidCount; i++) {
+	boidCreationLoop: for(int i = 0; i < boidCount; i++) {
 		Vector position = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
 		Vector velocity = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
 
@@ -249,7 +276,7 @@ void simulationSetup() {
 //			{Vector(644, 252, 0), Vector(-5, -8, 0)},
 //			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
 //
-//	for(int i = 0; i < testBoidCount; i++) {
+//	testBoidCreationLoop: for(int i = 0; i < testBoidCount; i++) {
 //		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 //		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
 //		boids[i] = boid;
@@ -274,7 +301,7 @@ void findNeighbours() {
 			{Vector(644, 252, 0), Vector(-5, -8, 0)},
 			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
 
-	for(int i = 0; i < boidCount; i++) {
+	tmpBoidCreationLoop: for(int i = 0; i < boidCount; i++) {
 		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
 		boids[i] = boid;
@@ -286,13 +313,13 @@ void findNeighbours() {
 	uint8 possibleNeighbourCount = 0;
 
 	// Add the boids of the current BoidCPU to the possible neighbour list
-	for (int i = 0; i < boidCount; i++) {
+	addOwnAsNbrsLoops: for (int i = 0; i < boidCount; i++) {
 		possibleNeighbouringBoids[i] = boids[i];
 		possibleNeighbourCount++;
 	}
 
 	// Add the boids from the neighbouring BoidCPUs to the possible neighbour list
-	for (int i = boidCount; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+	getOthersAsNbrsLoop: for (int i = boidCount; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
 //		if (neighbouringBoidCPUs[i] != 0) {
 			// TODO: Get boids from neighbouring BoidCPUs
 			// possibleNeighbouringBoids[] =
@@ -303,7 +330,7 @@ void findNeighbours() {
 	// Calculate the neighbours for each boid
 	// TODO: This could be done when calculating each boid's positions as C/C++
 	//	seems to be pass by value - unlike Python
-	for (int i = 0; i < boidCount; i++) {
+	calcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
 		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
 	}
 
@@ -319,14 +346,12 @@ void findNeighbours() {
 //			 {52, 53, 54, 57},
 //			 {51, 56, 57},
 //			 {54}};
-
-//	calcNextBoidPositions();
 }
 
 void calcNextBoidPositions() {
 	std::cout << "-Calculating next boid positions..." << std::endl;
 
-	for (int i = 0; i < boidCount; i++) {
+	updateBoidsLoop: for (int i = 0; i < boidCount; i++) {
 		boids[i].update();
 	}
 
@@ -362,7 +387,7 @@ void moveBoids() {
 	Boid boidToTransfer;
 	int recipientBoidCPU = 0;
 
-	for (int i = 0; i < boidCount; i++) {
+	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
 		if (neighbouringBoidCPUs[0] != 0) {
 			if ((boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
 				boidToTransfer = boids[i];
@@ -437,7 +462,7 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
 	outputData[CMD_TYPE] = type;
 
 	if (len > 0) {
-		dataToCmd: for(int i = 0; i < len; i++) {
+		createOutputCommandLoop: for(int i = 0; i < len; i++) {
 			outputData[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
@@ -464,35 +489,50 @@ void printCommand(bool send, uint32 *data) {
 	}
 
 	switch(data[CMD_TYPE]) {
-		case(0):
+		case 0:
 			std::cout << "do something";
+			break;
+		case MODE_INIT:
+			std::cout << "initialise self";
 			break;
 		case CMD_PING:
 			std::cout << "BoidCPU ping";
 			break;
-		case CMD_KILL:
-			std::cout << "kill simulation";
-			break;
 		case CMD_PING_REPLY:
 			std::cout << "BoidCPU ping response";
 			break;
-		case CMD_INIT:
-			std::cout << "initialise BoidCPU";
+		case CMD_USER_INFO:
+			std::cout << "output user info";
 			break;
-		case CMD_BEGIN:
-			std::cout << "begin the simulation";
+		case CMD_SIM_SETUP:
+			std::cout << "setup BoidCPU";
 			break;
-		case CMD_LOAD_INFO:
-			std::cout << "BoidCPU load information";
+		case MODE_CALC_NBRS:
+			std::cout << "calculate neighbours";
 			break;
-		case CMD_LOAD_ACT:
-			std::cout << "load-balancing decision";
+		case CMD_NBR_REQUEST:
+			std::cout << "supply boids to neighbour";
 			break;
-		case CMD_LOC_UPDATE:
-			std::cout << "new BoidCPU parameters";
+		case CMD_NBR_REPLY:
+			std::cout << "neighbouring boids from neighbour";
 			break;
-		case CMD_BOID:
-			std::cout << "boid";
+		case MODE_POS_BOIDS:
+			std::cout << "calculate new boid positions";
+			break;
+		case CMD_LOAD_BAL:
+			std::cout << "load balance";
+			break;
+		case MODE_TRAN_BOIDS:
+			std::cout << "transfer boids";
+			break;
+		case MODE_DRAW:
+			std::cout << "send boids to BoidGPU";
+			break;
+		case CMD_DRAW_INFO:
+			std::cout << "boid info heading to BoidCPU";
+			break;
+		case CMD_KILL:
+			std::cout << "kill simulation";
 			break;
 		default:
 			std::cout << "UNKNOWN COMMAND";
@@ -501,13 +541,13 @@ void printCommand(bool send, uint32 *data) {
 	std::cout << std::endl;
 
 	std::cout << "\t";
-	for(int i = 0; i < CMD_HEADER_LEN; i++) {
+	printCommandLoop: for(int i = 0; i < CMD_HEADER_LEN; i++) {
 		std::cout << data[i] << " ";
 	}
 
 	std::cout << "|| ";
 
-	for(int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+	printCommandDataLoop: for(int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
 		std::cout << data[CMD_HEADER_LEN + i] << " ";
 	}
 	std::cout << std::endl;
@@ -541,7 +581,7 @@ int getRandom(int min, int max) {
 int shiftLSFR(uint16 *lfsr, uint16 mask) {
 	unsigned period = 0;
 
-	do {
+	shiftLFSRLoop: do {
 		unsigned lsb = *lfsr & 1;	// Get LSB (i.e., the output bit)
 		*lfsr >>= 1;				// Shift register
 		if (lsb == 1)				// Only apply toggle mask if output bit is 1
@@ -587,7 +627,7 @@ Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
 void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount) {
 	std::cout << "Calculating neighbours for boid #" << id << std::endl;
 
-	for (int i = 0; i < possibleNeighbourCount; i++) {
+	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
 		if (possibleNeighbours[i].id != id) {
 			double distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
 			if (distance < VISION_RADIUS) {
@@ -598,7 +638,7 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCo
 	}
 
 	std::cout << "Boid #" << id << " has " << neighbouringBoidsCount << " neighbours: ";
-	for (int i = 0; i < neighbouringBoidsCount; i++) {
+	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
 		std::cout << neighbouringBoids[i]->id << ", ";
 	} std::cout << std::endl;
 }
@@ -623,7 +663,7 @@ void Boid::update(void) {
 Vector Boid::align(void) {
 	Vector total;
 
-	for (int i = 0; i < neighbouringBoidsCount; i++) {
+	alignBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
 		total.add(neighbouringBoids[i]->velocity);
 		//total.add(getDummyVector());
@@ -642,7 +682,7 @@ Vector Boid::separate(void) {
 	Vector total;
 	Vector diff;
 
-	for (int i = 0; i < neighbouringBoidsCount; i++) {
+	separateBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
 		diff = Vector::sub(position, neighbouringBoids[i]->position);
 		//diff = Vector::sub(position, getDummyVector());
@@ -663,7 +703,7 @@ Vector Boid::cohesion(void) {
 	Vector total;
 	Vector steer;
 
-	for (int i = 0; i < neighbouringBoidsCount; i++) {
+	coheseBoidLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
 		// FIXME: This doesn't work as Boid can't have a list of Boids
 		total.add(neighbouringBoids[i]->position);
 		//total.add(getDummyVector());

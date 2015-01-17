@@ -14,15 +14,20 @@
 
 #define CMD_BROADCAST	0	// The number representing a broadcast command
 
-#define CMD_PING		1	// Controller asking how many locations their are
-#define CMD_KILL		2	// Controller stopping the simulation
-#define CMD_PING_REPLY	3	// Location response to controller ping
-#define CMD_INIT		4	// Controller initiation command
-#define CMD_BEGIN 		5	// Begin the simulation
-#define CMD_LOAD_INFO	6	// Each location reports its current load
-#define CMD_LOAD_ACT	7	// The decision of the controller based on the load
-#define CMD_LOC_UPDATE	8	// The new parameters for location if load balanced
-#define CMD_BOID		9	// Used to transfer boids between locations
+#define MODE_INIT 		1	//
+#define	CMD_PING		2	// Controller -> BoidCPU
+#define CMD_PING_REPLY	3	// BoidCPU -> Controller
+#define CMD_USER_INFO	4	// Controller -> BoidGPU
+#define CMD_SIM_SETUP	5	// Controller -> Boid[CG]PU
+#define MODE_CALC_NBRS	6	//
+#define CMD_NBR_REQUEST	7	// BoidCPU -> BoidCPU
+#define CMD_NBR_REPLY	8	// BoidCPU -> BoidCPU
+#define MODE_POS_BOIDS	9	//
+#define CMD_LOAD_BAL	10	// TODO: Decide on implementation
+#define MODE_TRAN_BOIDS	11	//
+#define MODE_DRAW		12	// TODO: Perhaps not needed?
+#define CMD_DRAW_INFO	13	// BoidCPU -> BoidGPU
+#define CMD_KILL		14	// Controller -> All
 
 // Globals
 uint32 command[MAX_CMD_LEN];
@@ -42,23 +47,33 @@ int main() {
 	uint32 from = 0;
 	uint32 dataLength = 0;
 
-	bool expectResponse[CMD_BOID + 1];
-	expectResponse[CMD_PING] = true;
-	expectResponse[CMD_KILL] = false;
-	expectResponse[CMD_PING_REPLY] = false;
-	expectResponse[CMD_INIT] = false;
-	expectResponse[CMD_BEGIN] = false;
+	// Boolean array depending on whether the controller is expecting a response
+	bool expectResponse[CMD_KILL];
+	expectResponse[MODE_INIT] 		= false;
+	expectResponse[CMD_PING] 		= true;
+	expectResponse[CMD_PING_REPLY] 	= false;
+	expectResponse[CMD_USER_INFO] 	= false;
+	expectResponse[CMD_SIM_SETUP] 	= false;
+	expectResponse[MODE_CALC_NBRS] 	= false;
+	expectResponse[CMD_NBR_REQUEST] = true;
+	expectResponse[CMD_NBR_REPLY] 	= false;
+	expectResponse[MODE_POS_BOIDS] 	= false;
+	expectResponse[CMD_LOAD_BAL] 	= true;
+	expectResponse[MODE_TRAN_BOIDS] = false;
+	expectResponse[MODE_DRAW]		= false;
+	expectResponse[CMD_DRAW_INFO] 	= false;
+	expectResponse[CMD_KILL] 		= true;
 
 	// Test ping response ----------------------------------------------------//
 	// 4, 0, 0, 1 ||
-	to = CMD_BROADCAST;
-	dataLength = 0;
-	createCommand(dataLength, to, from, CMD_PING, data);
+//	to = CMD_BROADCAST;
+//	dataLength = 0;
+//	createCommand(dataLength, to, from, CMD_PING, data);
 
 	// Test simulation setup ---------------------------------------------------
 	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
 //	dataLength = 14;
-//  to = 93;			// The current random ID of the test BoidCPU
+//	to = 93;			// The current random ID of the test BoidCPU
 //
 //	uint32 newID = 6;
 //	uint32 initialBoidCount = 10;
@@ -76,12 +91,12 @@ int main() {
 //		data[EDGE_COUNT + 2 + i] = neighbours[i];
 //	}
 //
-//	createCommand(dataLength, to, from, CMD_INIT, data);
+//	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 
 	// Test starting the simulation
-//	dataLength = 0;
-//	to = CMD_BROADCAST;
-//	createCommand(dataLength, to, from, CMD_BEGIN, data);
+	dataLength = 0;
+	to = CMD_BROADCAST;
+	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
 
 	// Send and receive data ---------------------------------------------------
 	printTestBenchCommand(true);
@@ -174,35 +189,50 @@ void printTestBenchCommand(bool send) {
 	}
 
 	switch(command[CMD_TYPE]) {
-		case(0):
+		case 0:
 			std::cout << "do something";
+			break;
+		case MODE_INIT:
+			std::cout << "initialise self";
 			break;
 		case CMD_PING:
 			std::cout << "BoidCPU ping";
 			break;
-		case CMD_KILL:
-			std::cout << "kill simulation";
-			break;
 		case CMD_PING_REPLY:
 			std::cout << "BoidCPU ping response";
 			break;
-		case CMD_INIT:
-			std::cout << "initialise BoidCPU";
+		case CMD_USER_INFO:
+			std::cout << "output user info";
 			break;
-		case CMD_BEGIN:
-			std::cout << "begin the simulation";
+		case CMD_SIM_SETUP:
+			std::cout << "setup BoidCPU";
 			break;
-		case CMD_LOAD_INFO:
-			std::cout << "BoidCPU load information";
+		case MODE_CALC_NBRS:
+			std::cout << "calculate neighbours";
 			break;
-		case CMD_LOAD_ACT:
-			std::cout << "load-balancing decision";
+		case CMD_NBR_REQUEST:
+			std::cout << "supply boids to neighbour";
 			break;
-		case CMD_LOC_UPDATE:
-			std::cout << "new BoidCPU parameters";
+		case CMD_NBR_REPLY:
+			std::cout << "neighbouring boids from neighbour";
 			break;
-		case CMD_BOID:
-			std::cout << "boid";
+		case MODE_POS_BOIDS:
+			std::cout << "calculate new boid positions";
+			break;
+		case CMD_LOAD_BAL:
+			std::cout << "load balance";
+			break;
+		case MODE_TRAN_BOIDS:
+			std::cout << "transfer boids";
+			break;
+		case MODE_DRAW:
+			std::cout << "send boids to BoidGPU";
+			break;
+		case CMD_DRAW_INFO:
+			std::cout << "boid info heading to BoidCPU";
+			break;
+		case CMD_KILL:
+			std::cout << "kill simulation";
 			break;
 		default:
 			std::cout << "UNKNOWN COMMAND";
