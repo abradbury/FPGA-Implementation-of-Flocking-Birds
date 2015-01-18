@@ -327,8 +327,6 @@ void findNeighbours() {
 //			 {52, 53, 54, 57},
 //			 {51, 56, 57},
 //			 {54}};
-
-	if (singleBoidCPU) calcNextBoidPositions();
 }
 
 void calcNextBoidPositions() {
@@ -358,8 +356,6 @@ void calcNextBoidPositions() {
 //			std::cout << "Boid #" << boids[i].id << " position same" << std::endl;
 //		}
 //	}
-
-	if (singleBoidCPU) moveBoids();
 }
 
 void loadBalance() {
@@ -418,8 +414,6 @@ void moveBoids() {
 
 	std::cout << "-Transferring boid #" << boidToTransfer.id <<
 		" to boidCPU #" << recipientBoidCPU << std::endl;
-
-	if (singleBoidCPU) updateDisplay();
 }
 
 void updateDisplay() {
@@ -437,9 +431,6 @@ void updateDisplay() {
 
 	generateOutput((3 * boidCount), 0, CMD_DRAW_INFO, outputBody);
 	// [4 + (3 * boidCount)], 0, 6, 13 || [boid information]
-
-	timestep++;
-	if (singleBoidCPU) findNeighbours();
 }
 
 //==============================================================================
