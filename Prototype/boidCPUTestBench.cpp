@@ -15,7 +15,7 @@
 #define CMD_BROADCAST	0	// The number representing a broadcast command
 
 #define MODE_INIT 		1	//
-#define	CMD_PING		2	// Controller -> BoidCPU
+#define	 CMD_PING		2	// Controller -> BoidCPU
 #define CMD_PING_REPLY	3	// BoidCPU -> Controller
 #define CMD_USER_INFO	4	// Controller -> BoidGPU
 #define CMD_SIM_SETUP	5	// Controller -> Boid[CG]PU
@@ -31,8 +31,17 @@
 
 // Globals
 uint32 command[MAX_CMD_LEN];
+uint32 data[MAX_CMD_BODY_LEN];
+uint32 to;
+uint32 from = 0;
+uint32 dataLength = 0;
 
 // Function headers
+void testPing();
+void processPingResponse();
+void testSimulationSetup();
+void testNeighbourSearch();
+
 void printTestBenchCommand(bool send);
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data);
 
@@ -41,11 +50,6 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
  */
 int main() {
 	hls::stream<uint32> to_hw, from_hw;
-
-	uint32 data[MAX_CMD_BODY_LEN];
-	uint32 to;
-	uint32 from = 0;
-	uint32 dataLength = 0;
 
 	// Boolean array depending on whether the controller is expecting a response
 	bool expectResponse[CMD_KILL];
@@ -64,58 +68,41 @@ int main() {
 	expectResponse[CMD_DRAW_INFO] 	= false;
 	expectResponse[CMD_KILL] 		= true;
 
-	// Test ping response ----------------------------------------------------//
-	// 4, 0, 0, 1 ||
-//	to = CMD_BROADCAST;
-//	dataLength = 0;
-//	createCommand(dataLength, to, from, CMD_PING, data);
+	// Test BoidCPU input ------------------------------------------------------
+	testPing();
+//	testSimulationSetup();
+//	testNeighbourSearch();
 
-	// Test simulation setup ---------------------------------------------------
-	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
-//	dataLength = 14;
-//	to = 93;			// The current random ID of the test BoidCPU
-//
-//	uint32 newID = 6;
-//	uint32 initialBoidCount = 10;
-//	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
-//	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
-//
-//	data[0] = newID;
-//	data[1] = initialBoidCount;
-//
-//	for (int i = 0; i < EDGE_COUNT; i++) {
-//		data[2 + i] = coords[i];
-//	}
-//
-//	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-//		data[EDGE_COUNT + 2 + i] = neighbours[i];
-//	}
-//
-//	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
-
-	// Test starting the simulation
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
-
-	// Send and receive data ---------------------------------------------------
+	// Send data ---------------------------------------------------------------
 	printTestBenchCommand(true);
 
 	cmdOut: for(int i = 0; i < command[CMD_LEN]; i++) {
 		to_hw.write(command[i]);
 	}
 
+	// Run the hardware --------------------------------------------------------
 	topleveltwo(to_hw, from_hw);
 
-	if (expectResponse[command[CMD_TYPE]] == true) {
+	// Receive data ------------------------------------------------------------
+	bool expectingResponse = expectResponse[command[CMD_TYPE]];
+
+	if (expectingResponse == true) {
 		command[CMD_LEN] = from_hw.read();
 
 		cmdIn: for (int i = 0; i < command[CMD_LEN] - 1; i++) {
 			command[i + 1] = from_hw.read();
 		}
 
+		//TODO: Create input buffer?
+
 		printTestBenchCommand(false);
 	}
+
+	// Process data ------------------------------------------------------------
+	if (expectingResponse == true) {
+		processPingResponse();
+	}
+
 
 	// Test
 
@@ -153,6 +140,50 @@ int main() {
 	//
 
 	return 0;
+}
+
+void testPing() {
+	// Test ping response ----------------------------------------------------//
+	// 4, 0, 0, 1 ||
+	to = CMD_BROADCAST;
+	dataLength = 0;
+	createCommand(dataLength, to, from, CMD_PING, data);
+}
+
+void testSimulationSetup() {
+	// Test simulation setup ---------------------------------------------------
+	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
+	dataLength = 14;
+	to = 93;			// The current random ID of the test BoidCPU
+
+	uint32 newID = 6;
+	uint32 initialBoidCount = 10;
+	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
+	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
+
+	data[0] = newID;
+	data[1] = initialBoidCount;
+
+	for (int i = 0; i < EDGE_COUNT; i++) {
+		data[2 + i] = coords[i];
+	}
+
+	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		data[EDGE_COUNT + 2 + i] = neighbours[i];
+	}
+
+	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
+}
+
+void testNeighbourSearch() {
+	// Test starting the simulation
+	dataLength = 0;
+	to = CMD_BROADCAST;
+	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
+}
+
+void processPingResponse() {
+
 }
 
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {

@@ -82,6 +82,7 @@ uint32 outputBody[20];
 uint16 lfsr16 = 0xF429;	// 16 bit binary (62505)
 uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
 
+bool continueOperation = true;
 bool outputAvailable = false;		// True if there is output ready to send
 
 /**
@@ -106,7 +107,6 @@ Boid *neighbouringBoids[MAX_NEIGHBOURS];
 
 /**
  * TODO: Sync states and command types?
- * TODO: Argument 'this' of function 'getVelocity' has an unsynthesizable type?
  * TODO: Random generator needs random seeds - FPGA clock?
  * TODO: Try and programmatically calculate the length of the commands
  */
@@ -123,68 +123,76 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	//	BoidCPU is called.
 	initialisation();
 
-	// INPUT -------------------------------------------------------------------
-	// Block until there is input available
-	inputData[0] = input.read();
+	// Continually check for input and deal with it. Note that reading an empty
+	// input stream will generate warnings in HLS, but should be blocking in the
+	// actual implementation.
+	//
+	// FIXME: Can't test using test bench when the while loop is used. Four
+	// 	warnings are given, then the block seems to be ignored.
+	while(continueOperation) {
+		// INPUT ---------------------------------------------------------------
+		// Block until there is input available
+		inputData[0] = input.read();
 
-	// When there is input, read in the command
-	inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
-		inputData[1 + i] = input.read();
-	}
-	printCommand(false, inputData);
-	// -------------------------------------------------------------------------
-
-	// STATE CHANGE ------------------------------------------------------------
-	// TODO: Replace '6' with 'boidCPUID' when deploying
-	if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 6)) {
-		switch(inputData[CMD_TYPE]) {
-			case MODE_INIT:
-				initialisation();
-				break;
-			case CMD_PING:
-				identify();
-				break;
-			case CMD_SIM_SETUP:
-				simulationSetup();
-				break;
-			case MODE_CALC_NBRS:
-				findNeighbours();
-				break;
-			case CMD_NBR_REQUEST:
-//				sendBoidsToNeighbour();
-				break;
-			case CMD_NBR_REPLY:
-//				processNeighbouringBoids();
-				break;
-			case MODE_POS_BOIDS:
-				calcNextBoidPositions();
-				break;
-			case CMD_LOAD_BAL:
-				loadBalance();
-				break;
-			case MODE_TRAN_BOIDS:
-				moveBoids();
-				break;
-			case MODE_DRAW:
-				updateDisplay();
-				break;
-			default:
-				std::cout << "Command state " << inputData[CMD_TYPE] <<
-					" not recognised" << std::endl;
-				break;
+		// When there is input, read in the command
+		inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
+			inputData[1 + i] = input.read();
 		}
-	}
-	// -------------------------------------------------------------------------
+		printCommand(false, inputData);
+		// ---------------------------------------------------------------------
 
-	// OUTPUT ------------------------------------------------------------------
-	// If there is output to send, send it
-	if (outputAvailable) {
-		outputLoop: for (int i = 0; i < outputData[CMD_LEN]; i++) {
-			output.write(outputData[i]);
+		// STATE CHANGE --------------------------------------------------------
+		// TODO: Replace '6' with 'boidCPUID' when deploying
+		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 6)) {
+			switch(inputData[CMD_TYPE]) {
+				case MODE_INIT:
+					initialisation();
+					break;
+				case CMD_PING:
+					identify();
+					break;
+				case CMD_SIM_SETUP:
+					simulationSetup();
+					break;
+				case MODE_CALC_NBRS:
+					findNeighbours();
+					break;
+				case CMD_NBR_REQUEST:
+		//				sendBoidsToNeighbour();
+					break;
+				case CMD_NBR_REPLY:
+		//				processNeighbouringBoids();
+					break;
+				case MODE_POS_BOIDS:
+					calcNextBoidPositions();
+					break;
+				case CMD_LOAD_BAL:
+					loadBalance();
+					break;
+				case MODE_TRAN_BOIDS:
+					moveBoids();
+					break;
+				case MODE_DRAW:
+					updateDisplay();
+					break;
+				default:
+					std::cout << "Command state " << inputData[CMD_TYPE] <<
+						" not recognised" << std::endl;
+					break;
+			}
 		}
-		printCommand(true, outputData);
+		// ---------------------------------------------------------------------
+
+		// OUTPUT --------------------------------------------------------------
+		// If there is output to send, send it
+		if (outputAvailable) {
+			outputLoop: for (int i = 0; i < outputData[CMD_LEN]; i++) {
+				output.write(outputData[i]);
+			}
+			printCommand(true, outputData);
+		}
+		// ---------------------------------------------------------------------
 	}
-	// -------------------------------------------------------------------------
 }
 
 //==============================================================================
