@@ -23,7 +23,7 @@ typedef ap_int<12> int12;	// Used to represent position and negative velocity
 typedef ap_int<12> uint12;
 
 //Prototypes
-void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output);
+void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
 
 // Classes
 class Vector {

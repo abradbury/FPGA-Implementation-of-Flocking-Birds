@@ -7,6 +7,9 @@
 #define EDGE_COUNT				4		// The number of edges a BoidCPU has
 #define MAX_BOIDCPU_NEIGHBOURS	8		// The max neighbours a BoidCPUs has
 
+#define MAX_OUTPUT				5		// The number of commands to buffer
+#define MAX_INPUT				5
+
 #define CMD_LEN			0	// The index of the command length
 #define CMD_TO			1	// The index of the command target
 #define CMD_FROM		2	// The index of the command sender
@@ -30,7 +33,11 @@
 #define CMD_KILL		14	// Controller -> All
 
 // Globals
-uint32 command[MAX_CMD_LEN];
+uint32 tbOutputData[MAX_OUTPUT][MAX_CMD_LEN];
+uint32 tbInputData[MAX_INPUT][MAX_CMD_LEN];
+uint32 tbOutputCount = 0;
+uint32 tbInputCount = 0;
+
 uint32 data[MAX_CMD_BODY_LEN];
 uint32 to;
 uint32 from = 0;
@@ -42,7 +49,7 @@ void processPingResponse();
 void testSimulationSetup();
 void testNeighbourSearch();
 
-void printTestBenchCommand(bool send);
+void tbPrintCommand(bool send, uint32 *data);
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data);
 
 /**
@@ -51,58 +58,43 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
 int main() {
 	hls::stream<uint32> to_hw, from_hw;
 
-	// Boolean array depending on whether the controller is expecting a response
-	bool expectResponse[CMD_KILL];
-	expectResponse[MODE_INIT] 		= false;
-	expectResponse[CMD_PING] 		= true;
-	expectResponse[CMD_PING_REPLY] 	= false;
-	expectResponse[CMD_USER_INFO] 	= false;
-	expectResponse[CMD_SIM_SETUP] 	= false;
-	expectResponse[MODE_CALC_NBRS] 	= false;
-	expectResponse[CMD_NBR_REQUEST] = true;
-	expectResponse[CMD_NBR_REPLY] 	= false;
-	expectResponse[MODE_POS_BOIDS] 	= false;
-	expectResponse[CMD_LOAD_BAL] 	= true;
-	expectResponse[MODE_TRAN_BOIDS] = false;
-	expectResponse[MODE_DRAW]		= false;
-	expectResponse[CMD_DRAW_INFO] 	= false;
-	expectResponse[CMD_KILL] 		= true;
-
 	// Test BoidCPU input ------------------------------------------------------
 	testPing();
-//	testSimulationSetup();
-//	testNeighbourSearch();
+	testSimulationSetup();
+	testNeighbourSearch();
 
 	// Send data ---------------------------------------------------------------
-	printTestBenchCommand(true);
-
-	cmdOut: for(int i = 0; i < command[CMD_LEN]; i++) {
-		to_hw.write(command[i]);
+	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
+		tbPrintCommand(true, tbOutputData[i]);
+		innerOutputLoop: for(int j = 0; j < tbOutputData[i][CMD_LEN]; j++) {
+			to_hw.write(tbOutputData[i][j]);
+		}
 	}
+
+	// TODO: Come up with a better buffer counter update method
+	tbOutputCount = 0;
 
 	// Run the hardware --------------------------------------------------------
-	topleveltwo(to_hw, from_hw);
+	toplevel(to_hw, from_hw);
 
 	// Receive data ------------------------------------------------------------
-	bool expectingResponse = expectResponse[command[CMD_TYPE]];
+	bool inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
 
-	if (expectingResponse == true) {
-		command[CMD_LEN] = from_hw.read();
-
-		cmdIn: for (int i = 0; i < command[CMD_LEN] - 1; i++) {
-			command[i + 1] = from_hw.read();
+	while (inputAvailable) {
+		inputLoop: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - 1; i++) {
+			tbInputData[tbInputCount][i + 1] = from_hw.read();
 		}
 
-		//TODO: Create input buffer?
+		tbPrintCommand(false, tbInputData[tbInputCount]);
 
-		printTestBenchCommand(false);
-	}
-
-	// Process data ------------------------------------------------------------
-	if (expectingResponse == true) {
+		// Process data --------------------------------------------------------
 		processPingResponse();
-	}
 
+		// Check for more input ------------------------------------------------
+		// Don't really need input buffer if data is processed before the next
+		// inputCount++;
+		inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
+	}
 
 	// Test
 
@@ -183,43 +175,43 @@ void testNeighbourSearch() {
 }
 
 void processPingResponse() {
-
+	// TODO
 }
 
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {
-	command[CMD_LEN]  = len + CMD_HEADER_LEN;
-	command[CMD_TO]   = to;
-	command[CMD_FROM] = from;
-	command[CMD_TYPE] = type;
+	tbOutputData[tbOutputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
+	tbOutputData[tbOutputCount][CMD_TO]   = to;
+	tbOutputData[tbOutputCount][CMD_FROM] = from;
+	tbOutputData[tbOutputCount][CMD_TYPE] = type;
 
 	if (len > 0) {
 		dataToCmd: for(int i = 0; i < len; i++) {
-			command[CMD_HEADER_LEN + i] = data[i];
+			tbOutputData[tbOutputCount][CMD_HEADER_LEN + i] = data[i];
 		}
 	}
+
+	tbOutputCount++;
 }
 
 /**
  * Parses the supplied command and prints it out to the terminal
- *
- * FIXME: Testbench file cannot have same method name
  */
-void printTestBenchCommand(bool send) {
+void tbPrintCommand(bool send, uint32 *data) {
 	if(send) {
-		if(command[CMD_TO] == CMD_BROADCAST) {
+		if(data[CMD_TO] == CMD_BROADCAST) {
 			std::cout << "-> TX, Controller sent broadcast: ";
 		} else {
-			std::cout << "-> TX, Controller sent command to " << command[CMD_TO] << ": ";
+			std::cout << "-> TX, Controller sent command to " << data[CMD_TO] << ": ";
 		}
 	} else {
-		if(command[CMD_TO] == CMD_BROADCAST) {
-			std::cout << "<- RX, Controller received broadcast from " << command[CMD_FROM] << ": ";
+		if(data[CMD_TO] == CMD_BROADCAST) {
+			std::cout << "<- RX, Controller received broadcast from " << data[CMD_FROM] << ": ";
 		} else {
-			std::cout << "<- RX, Controller received command from " << command[CMD_FROM] << ": ";
+			std::cout << "<- RX, Controller received command from " << data[CMD_FROM] << ": ";
 		}
 	}
 
-	switch(command[CMD_TYPE]) {
+	switch(data[CMD_TYPE]) {
 		case 0:
 			std::cout << "do something";
 			break;
@@ -273,13 +265,13 @@ void printTestBenchCommand(bool send) {
 
 	std::cout << "\t";
 	for(int i = 0; i < CMD_HEADER_LEN; i++) {
-		std::cout << command[i] << " ";
+		std::cout << data[i] << " ";
 	}
 
 	std::cout << "|| ";
 
-	for(int i = 0; i < command[CMD_LEN] - CMD_HEADER_LEN; i++) {
-		std::cout << command[CMD_HEADER_LEN + i] << " ";
+	for(int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		std::cout << data[CMD_HEADER_LEN + i] << " ";
 	}
 	std::cout << std::endl;
 }

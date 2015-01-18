@@ -111,7 +111,7 @@ Boid *neighbouringBoids[MAX_NEIGHBOURS];
  * TODO: Try and programmatically calculate the length of the commands
  */
 
-void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
+void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port=input
 #pragma HLS INTERFACE ap_fifo port=output
 #pragma HLS RESOURCE variable=input core=AXI4Stream
@@ -126,13 +126,15 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// Continually check for input and deal with it. Note that reading an empty
 	// input stream will generate warnings in HLS, but should be blocking in the
 	// actual implementation.
-	//
-	// FIXME: Can't test using test bench when the while loop is used. Four
-	// 	warnings are given, then the block seems to be ignored.
+
+	// TODO: Remove when deployment
+	inputData[0] = input.read();
+
 	while(continueOperation) {
 		// INPUT ---------------------------------------------------------------
 		// Block until there is input available
-		inputData[0] = input.read();
+		// TODO: Remove comment when deployed
+		//inputData[0] = input.read();
 
 		// When there is input, read in the command
 		inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
@@ -142,8 +144,8 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// ---------------------------------------------------------------------
 
 		// STATE CHANGE --------------------------------------------------------
-		// TODO: Replace '6' with 'boidCPUID' when deploying
-		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 6)) {
+		// TODO: Replace '93' with 'boidCPUID' when deploying
+		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 93)) {
 			switch(inputData[CMD_TYPE]) {
 				case MODE_INIT:
 					initialisation();
@@ -191,7 +193,11 @@ void topleveltwo(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 			}
 			printCommand(true, outputData);
 		}
+		outputAvailable = false;
 		// ---------------------------------------------------------------------
+
+		// TODO: Remove when deployed
+		continueOperation = input.read_nb(inputData[0]);
 	}
 }
 
@@ -296,24 +302,24 @@ void findNeighbours() {
 
 	//--------------------------------------------------------------------------
 	// TODO: Remove this when deployed
-	boidCount = 10;
-	boidCPUID = 6;
-	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
-			{Vector(594, 404, 0), Vector(-10, -1, 0)},
-			{Vector(550, 350, 0), Vector(-10, -3, 0)},
-			{Vector(661, 446, 0), Vector(-6, -4, 0)},
-			{Vector(539, 283, 0), Vector(-8, -2, 0)},
-			{Vector(551, 256, 0), Vector(-5, 7, 0)},
-			{Vector(644, 342, 0), Vector(-1, -7, 0)},
-			{Vector(592, 399, 0), Vector(-9, 6, 0)},
-			{Vector(644, 252, 0), Vector(-5, -8, 0)},
-			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
-
-	tmpBoidCreationLoop: for(int i = 0; i < boidCount; i++) {
-		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
-		boids[i] = boid;
-	}
+//	boidCount = 10;
+//	boidCPUID = 6;
+//	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
+//			{Vector(594, 404, 0), Vector(-10, -1, 0)},
+//			{Vector(550, 350, 0), Vector(-10, -3, 0)},
+//			{Vector(661, 446, 0), Vector(-6, -4, 0)},
+//			{Vector(539, 283, 0), Vector(-8, -2, 0)},
+//			{Vector(551, 256, 0), Vector(-5, 7, 0)},
+//			{Vector(644, 342, 0), Vector(-1, -7, 0)},
+//			{Vector(592, 399, 0), Vector(-9, 6, 0)},
+//			{Vector(644, 252, 0), Vector(-5, -8, 0)},
+//			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
+//
+//	tmpBoidCreationLoop: for(int i = 0; i < boidCount; i++) {
+//		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+//		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
+//		boids[i] = boid;
+//	}
 	//--------------------------------------------------------------------------
 
 	// Generate a list of possible neighbouring boids
