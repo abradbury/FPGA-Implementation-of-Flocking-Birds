@@ -1,45 +1,8 @@
 #include "boidCPU.h"
 
-#define MAX_CMD_LEN			10		// TODO: Decide on appropriate value
-#define MAX_CMD_BODY_LEN	30
-#define CMD_HEADER_LEN		4
-
-#define EDGE_COUNT				4		// The number of edges a BoidCPU has
-#define MAX_BOIDCPU_NEIGHBOURS	8		// The max neighbours a BoidCPUs has
-
-#define MAX_OUTPUT				5		// The number of commands to buffer
-#define MAX_INPUT				5
-
-#define X_MIN			0	// The coordinate index of the minimum x position
-#define Y_MIN			1	// The coordinate index of the minimum y position
-#define X_MAX			2	// The coordinate index of the maximum x position
-#define Y_MAX			3	// The coordinate index of the maximum y position
-
-#define CMD_LEN			0	// The index of the command length
-#define CMD_TO			1	// The index of the command target
-#define CMD_FROM		2	// The index of the command sender
-#define	CMD_TYPE		3	// The index of the command type
-
-#define CMD_BROADCAST	0	// The number representing a broadcast command
-
-#define MODE_INIT 		1	//
-#define	CMD_PING		2	// Controller -> BoidCPU
-#define CMD_PING_REPLY	3	// BoidCPU -> Controller
-#define CMD_USER_INFO	4	// Controller -> BoidGPU
-#define CMD_SIM_SETUP	5	// Controller -> Boid[CG]PU
-#define MODE_CALC_NBRS	6	//
-#define CMD_NBR_REQUEST	7	// BoidCPU -> BoidCPU
-#define CMD_NBR_REPLY	8	// BoidCPU -> BoidCPU
-#define MODE_POS_BOIDS	9	//
-#define CMD_LOAD_BAL	10	// TODO: Decide on implementation
-#define MODE_TRAN_BOIDS	11	//
-#define MODE_DRAW		12	// TODO: Perhaps not needed?
-#define CMD_DRAW_INFO	14	// BoidCPU -> BoidGPU
-#define CMD_KILL		15	// Controller -> All
-
 // Globals
-uint32 tbOutputData[MAX_OUTPUT][MAX_CMD_LEN];
-uint32 tbInputData[MAX_INPUT][MAX_CMD_LEN];
+uint32 tbOutputData[TB_MAX_OUTPUT_CMDS][MAX_CMD_LEN];
+uint32 tbInputData[TB_MAX_INPUT_CMDS][MAX_CMD_LEN];
 uint32 tbOutputCount = 0;
 uint32 tbInputCount = 0;
 
@@ -69,13 +32,13 @@ int main() {
 	hls::stream<uint32> to_hw, from_hw;
 
 	// Test BoidCPU input ------------------------------------------------------
-//	testPing();
-	testSimulationSetup();
-	testNeighbourSearch();
+	testPing();
+//	testSimulationSetup();
+//	testNeighbourSearch();
 //	testCalcNextBoidPos();
 //	testLoadBalance();
 //	testMoveBoids();
-	testDrawBoids();
+//	testDrawBoids();
 
 	// Send data ---------------------------------------------------------------
 	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {

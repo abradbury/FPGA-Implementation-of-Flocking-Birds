@@ -3,51 +3,6 @@
 #include <iostream>		// cout
 #include <math.h>       // sqrt
 
-#define MAX_BOIDS				30
-#define MAX_VELOCITY			10
-#define MAX_FORCE				1
-#define MAX_CMD_LEN				10		// TODO: Decide on appropriate value
-
-#define AREA_WIDTH				720		// TODO: Should a BoidCPU know this?
-#define AREA_HEIGHT				720		// TODO: Should a BoidCPU know this?
-#define EDGE_COUNT				4		// The number of edges a BoidCPU has
-
-#define CMD_HEADER_LEN			4
-
-#define VISION_RADIUS				50
-#define MAX_NEIGHBOURING_BOIDCPUS	8		// The max neighbours a BoidCPUs has
-#define MAX_NEIGHBOURING_BOIDS		90		// TODO: Decide on appropriate value?
-
-#define POLY_MASK_16			0xD295
-#define POLY_MASK_15			0x6699
-
-#define X_MIN			0	// The coordinate index of the minimum x position
-#define Y_MIN			1	// The coordinate index of the minimum y position
-#define X_MAX			2	// The coordinate index of the maximum x position
-#define Y_MAX			3	// The coordinate index of the maximum y position
-
-#define CMD_LEN			0	// The index of the command length
-#define CMD_TO			1	// The index of the command target
-#define CMD_FROM		2	// The index of the command sender
-#define	CMD_TYPE		3	// The index of the command type
-
-#define CMD_BROADCAST	0	// The number representing a broadcast command
-
-#define MODE_INIT 		1	//
-#define	CMD_PING		2	// Controller -> BoidCPU
-#define CMD_PING_REPLY	3	// BoidCPU -> Controller
-#define CMD_USER_INFO	4	// Controller -> BoidGPU
-#define CMD_SIM_SETUP	5	// Controller -> Boid[CG]PU
-#define MODE_CALC_NBRS	6	//
-#define CMD_NBR_REQUEST	7	// BoidCPU -> BoidCPU
-#define CMD_NBR_REPLY	8	// BoidCPU -> BoidCPU
-#define MODE_POS_BOIDS	9	//
-#define CMD_LOAD_BAL	10	// TODO: Decide on implementation
-#define MODE_TRAN_BOIDS	11	//
-#define MODE_DRAW		12	// TODO: Perhaps not needed?
-#define CMD_DRAW_INFO	14	// BoidCPU -> BoidGPU
-#define CMD_KILL		15	// Controller -> All
-
 // Function headers
 static void initialisation (void);
 static void identify (void);
@@ -71,7 +26,7 @@ int8 fpgaID;
 
 int8 boidCount;
 Boid boids[MAX_BOIDS];
-uint8 neighbouringBoidCPUs[MAX_NEIGHBOURING_BOIDCPUS];
+uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 int12 boidCPUCoords[4];
 
 uint32 inputData[MAX_CMD_LEN];
@@ -107,7 +62,7 @@ bool outputAvailable = false;		// True if there is output ready to send
  * 	typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
  */
 
-Boid *neighbouringBoids[MAX_NEIGHBOURS];
+Boid *neighbouringBoids[MAX_BOIDCPU_NEIGHBOURS];
 
 /**
  * TODO: Sync states and command types?
@@ -254,7 +209,7 @@ void simulationSetup() {
 		boidCPUCoords[i] = inputData[CMD_HEADER_LEN + 2 + i];
 	}
 
-	neighbourSetupLoop: for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+	neighbourSetupLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 		neighbouringBoidCPUs[i] = inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
 	}
 
@@ -274,7 +229,7 @@ void simulationSetup() {
 		std::cout << boidCPUCoords[i] << ", ";
 	} std::cout << "]" << std::endl;
 	std::cout << "BoidCPU #" << boidCPUID << " neighbours: [";
-	printNeighbourLoop: for (int i = 0; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+	printNeighbourLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 		std::cout << neighbouringBoidCPUs[i] << ", ";
 	} std::cout << "]" << std::endl;
 
@@ -345,7 +300,7 @@ void findNeighbours() {
 	}
 
 	// Add the boids from the neighbouring BoidCPUs to the possible neighbour list
-	getOthersAsNbrsLoop: for (int i = boidCount; i < MAX_NEIGHBOURING_BOIDCPUS; i++) {
+	getOthersAsNbrsLoop: for (int i = boidCount; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 //		if (neighbouringBoidCPUs[i] != 0) {
 			// TODO: Get boids from neighbouring BoidCPUs
 			// possibleNeighbouringBoids[] =
