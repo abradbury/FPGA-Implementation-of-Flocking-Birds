@@ -1,7 +1,7 @@
 #include "boidCPU.h"
 
 #define MAX_CMD_LEN			10		// TODO: Decide on appropriate value
-#define MAX_CMD_BODY_LEN	20
+#define MAX_CMD_BODY_LEN	30
 #define CMD_HEADER_LEN		4
 
 #define EDGE_COUNT				4		// The number of edges a BoidCPU has
@@ -9,6 +9,11 @@
 
 #define MAX_OUTPUT				5		// The number of commands to buffer
 #define MAX_INPUT				5
+
+#define X_MIN			0	// The coordinate index of the minimum x position
+#define Y_MIN			1	// The coordinate index of the minimum y position
+#define X_MAX			2	// The coordinate index of the maximum x position
+#define Y_MAX			3	// The coordinate index of the maximum y position
 
 #define CMD_LEN			0	// The index of the command length
 #define CMD_TO			1	// The index of the command target
@@ -18,7 +23,7 @@
 #define CMD_BROADCAST	0	// The number representing a broadcast command
 
 #define MODE_INIT 		1	//
-#define	 CMD_PING		2	// Controller -> BoidCPU
+#define	CMD_PING		2	// Controller -> BoidCPU
 #define CMD_PING_REPLY	3	// BoidCPU -> Controller
 #define CMD_USER_INFO	4	// Controller -> BoidGPU
 #define CMD_SIM_SETUP	5	// Controller -> Boid[CG]PU
@@ -29,8 +34,8 @@
 #define CMD_LOAD_BAL	10	// TODO: Decide on implementation
 #define MODE_TRAN_BOIDS	11	//
 #define MODE_DRAW		12	// TODO: Perhaps not needed?
-#define CMD_DRAW_INFO	13	// BoidCPU -> BoidGPU
-#define CMD_KILL		14	// Controller -> All
+#define CMD_DRAW_INFO	14	// BoidCPU -> BoidGPU
+#define CMD_KILL		15	// Controller -> All
 
 // Globals
 uint32 tbOutputData[MAX_OUTPUT][MAX_CMD_LEN];
@@ -43,11 +48,16 @@ uint32 to;
 uint32 from = 0;
 uint32 dataLength = 0;
 
+uint32 coords[EDGE_COUNT];
+
 // Function headers
 void testPing();
-void processPingResponse();
 void testSimulationSetup();
 void testNeighbourSearch();
+void testDrawBoids();
+
+void processPingResponse();
+void processDrawInfo();
 
 void tbPrintCommand(bool send, uint32 *data);
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data);
@@ -59,9 +69,13 @@ int main() {
 	hls::stream<uint32> to_hw, from_hw;
 
 	// Test BoidCPU input ------------------------------------------------------
-	testPing();
+//	testPing();
 	testSimulationSetup();
 	testNeighbourSearch();
+//	testCalcNextBoidPos();
+//	testLoadBalance();
+//	testMoveBoids();
+	testDrawBoids();
 
 	// Send data ---------------------------------------------------------------
 	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -88,7 +102,18 @@ int main() {
 		tbPrintCommand(false, tbInputData[tbInputCount]);
 
 		// Process data --------------------------------------------------------
-		processPingResponse();
+		switch (tbInputData[tbInputCount][CMD_TYPE]) {
+			case CMD_PING_REPLY:
+				processPingResponse();
+				break;
+			case CMD_DRAW_INFO:
+				processDrawInfo();
+				break;
+			default:
+				std::cout << "Controller received a command it cannot handle: "
+					<< tbInputData[CMD_TYPE] << std::endl;
+				break;
+		}
 
 		// Check for more input ------------------------------------------------
 		// Don't really need input buffer if data is processed before the next
@@ -146,11 +171,14 @@ void testSimulationSetup() {
 	// Test simulation setup ---------------------------------------------------
 	// 18, 6, 0, 4 || 5, 10, 480, 240, 720, 480, 1, 2, 3, 6, 9, 8, 7, 4
 	dataLength = 14;
-	to = 93;			// The current random ID of the test BoidCPU
+	to = 83;			// The current random ID of the test BoidCPU
 
 	uint32 newID = 6;
 	uint32 initialBoidCount = 10;
-	uint32 coords[EDGE_COUNT] = {480, 240, 720, 480};
+	coords[0] = 0;
+	coords[1] = 0;
+	coords[2] = 50;
+	coords[3] = 50;
 	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
 
 	data[0] = newID;
@@ -164,6 +192,13 @@ void testSimulationSetup() {
 		data[EDGE_COUNT + 2 + i] = neighbours[i];
 	}
 
+	// Additional data for testing
+	// If the value is not 0 then the BoidCPU is able to progress itself until
+	// it reaches the time step equal to the supplied value - it does not need
+	// to wait for the controller to supply synchronisation steps
+	data[18] = 100;
+	dataLength += 1;
+
 	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 }
 
@@ -174,8 +209,121 @@ void testNeighbourSearch() {
 	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
 }
 
+void testDrawBoids() {
+	dataLength = 0;
+	to = 6;
+	createCommand(dataLength, to, from, MODE_DRAW, data);
+}
+
 void processPingResponse() {
 	// TODO
+}
+
+void processDrawInfo() {
+	std::cout << "Drawing boids..." << std::endl;
+
+	int maxBoidID = 0;
+	int digits = 0;
+	int widthDigits = 0;
+	int idDigits = 0;
+	int boidAtPos = 0;
+	char space = '-';
+	char edge = '*';
+
+	// Get the boid bounds
+	int boidCPUWidth =  coords[X_MAX] - coords[X_MIN];
+	int boidCPUHeight = coords[Y_MAX] - coords[Y_MIN];
+
+	// Get the number of boids
+	int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
+
+	// Get the maximum boid ID
+	for (int i = 0; i < tbBoidCount; i++) {
+		if (tbInputData[tbInputCount][CMD_HEADER_LEN + (i * 3)] > maxBoidID) {
+			maxBoidID = tbInputData[tbInputCount][CMD_HEADER_LEN + (i * 3)];
+		}
+	}
+
+	// Determine the number of digits in the max boid ID
+	if (maxBoidID < 10) idDigits = 1;
+	else if (maxBoidID < 100) idDigits = 2;
+	else idDigits = 3;
+
+	// Calculate the top edge offset due to the left edge and index
+	if (boidCPUHeight < 10) widthDigits = 1;
+	else if (boidCPUHeight < 100) widthDigits = 2;
+	else widthDigits = 3;
+	std::cout << std::string(widthDigits, ' ') << edge;
+
+	// Print the top index row
+	for (int i = 0; i < boidCPUWidth; i++) {
+		if (i < 10) digits = widthDigits;
+		else if (i < 100) digits = widthDigits - 1;
+		else digits = widthDigits - 2;
+		std::cout << i << std::string(digits, ' ');
+	} std::cout << std::endl;
+
+	// Print the top edge (including offset)
+	std::cout << std::string(widthDigits, ' ') << edge;
+	for (int i = 0; i < boidCPUWidth; i++) {
+		std::cout << edge << std::string(idDigits, ' ');
+	} std::cout << std::endl;
+
+	// Print the positions of the boids in the BoidCPU
+	for (int y = 0; y < boidCPUHeight; y++) {
+		// Print the left edge and index
+		if (y < 10) digits = widthDigits - 1;
+		else if (y < 100) digits = widthDigits - 2;
+		else digits = widthDigits - 3;
+		std::cout << std::string(digits, ' ') << y << edge;
+
+		// Print the boid ID at the appropriate position
+		for (int x = 0; x < boidCPUWidth; x++) {
+			for (int i = 0, j = 0; j < tbBoidCount; j++, i = i + 3) {
+				int boidID = tbInputData[tbInputCount][CMD_HEADER_LEN + i];
+				int boidX =  tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1];
+				int boidY =  tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2];
+
+				if (boidX == x) {
+					if (boidY == y) {
+						boidAtPos = tbInputData[tbInputCount][CMD_HEADER_LEN + i];
+						break;
+					}
+				}
+			}
+
+			if (boidAtPos != 0) {
+				if (boidAtPos < 10) digits = idDigits;
+				else if (boidAtPos < 100) digits = idDigits - 1;
+				else digits = idDigits - 2;
+
+				std::cout << boidAtPos << std::string(digits, space);
+
+//				std::cout << boidAtPos;
+				boidAtPos = 0;
+			} else {
+				std::cout << std::string(idDigits + 1, space);
+			}
+		}
+
+		// Print the right edge
+		std::cout << edge << y << std::endl;
+	}
+
+	// Print the bottom edge (including offset)
+	std::cout << std::string(widthDigits, ' ') << edge;
+	for (int i = 0; i < boidCPUWidth; i++) {
+		std::cout << edge << std::string(idDigits, ' ');
+	} std::cout << std::endl;
+
+	// Print the bottom index row
+	std::cout << std::string(widthDigits, ' ') << edge;
+	for (int i = 0; i < boidCPUWidth; i++) {
+		if (i < 10) digits = widthDigits;
+		else if (i < 100) digits = widthDigits - 1;
+		else digits = widthDigits - 2;
+		std::cout << i << std::string(digits, ' ');
+	} std::cout << std::endl;
 }
 
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {

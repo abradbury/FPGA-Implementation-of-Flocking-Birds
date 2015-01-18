@@ -14,7 +14,7 @@
 
 #define CMD_HEADER_LEN			4
 
-#define VISION_RADIUS				100
+#define VISION_RADIUS				50
 #define MAX_NEIGHBOURING_BOIDCPUS	8		// The max neighbours a BoidCPUs has
 #define MAX_NEIGHBOURING_BOIDS		90		// TODO: Decide on appropriate value?
 
@@ -45,8 +45,8 @@
 #define CMD_LOAD_BAL	10	// TODO: Decide on implementation
 #define MODE_TRAN_BOIDS	11	//
 #define MODE_DRAW		12	// TODO: Perhaps not needed?
-#define CMD_DRAW_INFO	13	// BoidCPU -> BoidGPU
-#define CMD_KILL		14	// Controller -> All
+#define CMD_DRAW_INFO	14	// BoidCPU -> BoidGPU
+#define CMD_KILL		15	// Controller -> All
 
 // Function headers
 static void initialisation (void);
@@ -76,11 +76,15 @@ int12 boidCPUCoords[4];
 
 uint32 inputData[MAX_CMD_LEN];
 uint32 outputData[MAX_CMD_LEN];
-uint32 outputBody[20];
+uint32 outputBody[30];
 
 // LSFR seed values
 uint16 lfsr16 = 0xF429;	// 16 bit binary (62505)
 uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
+
+bool singleBoidCPU = false;
+int stopCondition;
+int timestep = 0;
 
 bool continueOperation = true;
 bool outputAvailable = false;		// True if there is output ready to send
@@ -144,8 +148,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// ---------------------------------------------------------------------
 
 		// STATE CHANGE --------------------------------------------------------
-		// TODO: Replace '93' with 'boidCPUID' when deploying
-		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == 93)) {
+		// TODO: Replace '83' with 'boidCPUID' when deploying
+		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == boidCPUID) || (inputData[CMD_TO] == 83)) {
 			switch(inputData[CMD_TYPE]) {
 				case MODE_INIT:
 					initialisation();
@@ -254,6 +258,14 @@ void simulationSetup() {
 		neighbouringBoidCPUs[i] = inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
 	}
 
+	// If the value is not 0 then the BoidCPU is able to progress itself until
+	// it reaches the time step equal to the supplied value - it does not need
+	// to wait for the controller to supply synchronisation steps
+	if (inputData[18] > 0) {
+		singleBoidCPU = true;
+		stopCondition = inputData[18];
+	}
+
 	// Print out BoidCPU parameters
 	std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" << boidCPUID << std::endl;
 	std::cout << "BoidCPU #" << boidCPUID << " initial boid count: " << boidCount << std::endl;
@@ -268,8 +280,8 @@ void simulationSetup() {
 
 	// Create the boids (actual implementation)
 	boidCreationLoop: for(int i = 0; i < boidCount; i++) {
-		Vector position = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
-		Vector velocity = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
+		Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
+		Vector position = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
 
 		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 
@@ -360,6 +372,8 @@ void findNeighbours() {
 //			 {52, 53, 54, 57},
 //			 {51, 56, 57},
 //			 {54}};
+
+	if (singleBoidCPU) calcNextBoidPositions();
 }
 
 void calcNextBoidPositions() {
@@ -389,6 +403,8 @@ void calcNextBoidPositions() {
 //			std::cout << "Boid #" << boids[i].id << " position same" << std::endl;
 //		}
 //	}
+
+	if (singleBoidCPU) moveBoids();
 }
 
 void loadBalance() {
@@ -447,10 +463,28 @@ void moveBoids() {
 
 	std::cout << "-Transferring boid #" << boidToTransfer.id <<
 		" to boidCPU #" << recipientBoidCPU << std::endl;
+
+	if (singleBoidCPU) updateDisplay();
 }
 
 void updateDisplay() {
 	std::cout << "-Updating display" << std::endl;
+
+	// TODO: On deployment, don't need to send ID, but need to know the
+	//	direction of the boid so either send full velocity or angle
+	// TODO: Decide on breakdown, should boids be sent all in one message, all
+	//	in separate messages or a mixture of the two?
+	for (int i = 0; i < boidCount; i++) {
+		outputBody[(3 * i) + 0] = boids[i].id;
+		outputBody[(3 * i) + 1] = boids[i].position.x;
+		outputBody[(3 * i) + 2] = boids[i].position.y;
+	}
+
+	generateOutput((3 * boidCount), 0, CMD_DRAW_INFO, outputBody);
+	// [4 + (3 * boidCount)], 0, 6, 13 || [boid information]
+
+	timestep++;
+	if (singleBoidCPU) findNeighbours();
 }
 
 //==============================================================================
