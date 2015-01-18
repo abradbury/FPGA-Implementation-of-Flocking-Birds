@@ -62,7 +62,7 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 void printCommand(bool send, uint32 *data);
 
 int getRandom(int min, int max);
-int shiftLSFR(uint16 *lsfr, uint16 mask);
+uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
 
 // Define variables
 // TODO: Should these really be global?
@@ -582,6 +582,7 @@ void acceptBoid(uint32 *boidData) {
 // Random ======================================================================
 //==============================================================================
 
+// TODO: Try with 32 bits
 // http://en.wikipedia.org/wiki/Linear_feedback_shift_register#Galois_LFSRs
 // http://stackoverflow.com/q/17764587
 // http://stackoverflow.com/a/5009006
@@ -592,18 +593,12 @@ int getRandom(int min, int max) {
 	return (min + (result % (int)(max - min + 1)));
 }
 
-int shiftLSFR(uint16 *lfsr, uint16 mask) {
-	unsigned period = 0;
-
-	shiftLFSRLoop: do {
-		unsigned lsb = *lfsr & 1;	// Get LSB (i.e., the output bit)
-		*lfsr >>= 1;				// Shift register
-		if (lsb == 1)				// Only apply toggle mask if output bit is 1
-			*lfsr ^= 0xB400u;		// Apply toggle mask, value has 1 at bits
-									//  corresponding to taps, 0 elsewhere
-		++period;
-	} while (*lfsr != mask);
-
+uint16 shiftLSFR(uint16 *lfsr, uint16 mask) {
+	uint16 lsb = *lfsr & 1;		// Get LSB (i.e., the output bit)
+	*lfsr >>= 1;				// Shift register
+	if (lsb == 1)				// Only apply toggle mask if output bit is 1
+		*lfsr ^= 0xB400u;		// Apply toggle mask, value has 1 at bits
+								//  corresponding to taps, 0 elsewhere
 	return *lfsr;
 }
 
