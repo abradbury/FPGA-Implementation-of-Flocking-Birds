@@ -13,6 +13,8 @@ static void loadBalance (void);
 static void moveBoids (void);
 static void updateDisplay (void);
 
+void transmitBoid(Boid boid, uint8 recipientID);
+
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 void printCommand(bool send, uint32 *data);
 
@@ -25,7 +27,7 @@ int8 boidCPUID;
 int8 fpgaID;
 
 int8 boidCount;
-Boid boids[MAX_BOIDS];
+Boid boids[MAX_BOIDS];		// TODO: Perhaps re-implement as a LL due to deletion
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 int12 boidCPUCoords[4];
 
@@ -38,8 +40,8 @@ uint16 lfsr16 = 0xF429;	// 16 bit binary (62505)
 uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
 
 bool singleBoidCPU = false;
-int stopCondition;
-int timestep = 0;
+uint16 stopCondition;
+uint16 timeStep = 0;
 
 bool continueOperation = true;
 bool outputAvailable = false;		// True if there is output ready to send
@@ -65,7 +67,6 @@ bool outputAvailable = false;		// True if there is output ready to send
 Boid *neighbouringBoids[MAX_BOIDCPU_NEIGHBOURS];
 
 /**
- * TODO: Sync states and command types?
  * TODO: Random generator needs random seeds - FPGA clock?
  * TODO: Try and programmatically calculate the length of the commands
  */
@@ -234,11 +235,12 @@ void simulationSetup() {
 	} std::cout << "]" << std::endl;
 
 	// Create the boids (actual implementation)
+	uint16 boidID;
 	boidCreationLoop: for(int i = 0; i < boidCount; i++) {
 		Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
 		Vector position = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
 
-		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 
 		Boid boid = Boid(boidID, position, velocity);
 		boids[i] = boid;
@@ -327,6 +329,11 @@ void findNeighbours() {
 //			 {52, 53, 54, 57},
 //			 {51, 56, 57},
 //			 {54}};
+
+	// If testing only a single BoidCPU, continue to next stage
+	if (singleBoidCPU) {
+		calcNextBoidPositions();
+	}
 }
 
 void calcNextBoidPositions() {
@@ -356,6 +363,11 @@ void calcNextBoidPositions() {
 //			std::cout << "Boid #" << boids[i].id << " position same" << std::endl;
 //		}
 //	}
+
+	// If testing only a single BoidCPU, continue to next stage
+	if (singleBoidCPU) {
+		moveBoids();
+	}
 }
 
 void loadBalance() {
@@ -363,12 +375,15 @@ void loadBalance() {
 }
 
 void moveBoids() {
+	//TODO: This does not work 'Transferring boid #0 to boidCPU #0'
 	std::cout << "-Transferring boids..." << std::endl;
 
 	Boid boidToTransfer;
-	int recipientBoidCPU = 0;
+	uint8 recipientBoidCPU;
 
 	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
+		recipientBoidCPU = 0;
+
 		if (neighbouringBoidCPUs[0] != 0) {
 			if ((boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
 				boidToTransfer = boids[i];
@@ -410,10 +425,18 @@ void moveBoids() {
 				recipientBoidCPU = neighbouringBoidCPUs[7];
 			}
 		}
+
+		if (recipientBoidCPU > 0) {
+			transmitBoid(boidToTransfer, recipientBoidCPU);
+			std::cout << "-Transferring boid #" << boidToTransfer.id <<
+					" to boidCPU #" << recipientBoidCPU << std::endl;
+		}
 	}
 
-	std::cout << "-Transferring boid #" << boidToTransfer.id <<
-		" to boidCPU #" << recipientBoidCPU << std::endl;
+	// If testing only a single BoidCPU, continue to next stage
+	if (singleBoidCPU) {
+		updateDisplay();
+	}
 }
 
 void updateDisplay() {
@@ -431,6 +454,17 @@ void updateDisplay() {
 
 	generateOutput((3 * boidCount), 0, CMD_DRAW_INFO, outputBody);
 	// [4 + (3 * boidCount)], 0, 6, 13 || [boid information]
+
+	// Increment the timestep counter
+	timeStep++;
+
+	// If testing only a single BoidCPU, continue to next stage
+	if (singleBoidCPU) {
+		// If the current time step is less than the stopping condition, continue
+		if (timeStep < stopCondition) {
+			findNeighbours();
+		}
+	}
 }
 
 //==============================================================================
@@ -447,6 +481,45 @@ void receive() {
 
 	// Identify the input and if it is a boid, send data to function
 //	acceptBoid(inputData);
+}
+
+// Take a copy of the boid, not the actual one
+void transmitBoid(Boid boid, uint8 recipientID) {
+
+	// TODO: Perhaps move this to the boid class?
+	outputBody[0] = boid.id;
+	outputBody[1] = boid.position.x;
+	outputBody[2] = boid.position.y;
+	outputBody[3] = boid.position.z;
+	outputBody[4] = boid.velocity.x;
+	outputBody[5] = boid.velocity.y;
+	outputBody[6] = boid.velocity.z;
+
+	generateOutput(7, recipientID, CMD_BOID, outputBody);
+
+	// Remove boid from own list
+	bool boidFound = false;
+	for (int i = 0; i < boidCount - 1; i++) {
+		if (boids[i].id == boid.id) {
+			boidFound = true;
+		}
+
+		if (boidFound) {
+			boids[i] = boids[i + 1];
+		}
+	}
+	boidCount--;
+}
+
+void acceptBoid(uint32 *boidData) {
+	// TODO: Parse the input data to create a boid object
+	int boidID = 12;
+	Vector boidPosition = Vector(12, 100, 0);
+	Vector boidVelocity = Vector(10, -2, 0);
+	Boid b = Boid(boidID, boidPosition, boidVelocity);
+
+	boids[boidCount] = b;
+	boidCount++;
 }
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
@@ -519,6 +592,9 @@ void printCommand(bool send, uint32 *data) {
 		case MODE_TRAN_BOIDS:
 			std::cout << "transfer boids";
 			break;
+		case CMD_BOID:
+			std::cout << "boid";
+			break;
 		case MODE_DRAW:
 			std::cout << "send boids to BoidGPU";
 			break;
@@ -545,17 +621,6 @@ void printCommand(bool send, uint32 *data) {
 		std::cout << data[CMD_HEADER_LEN + i] << " ";
 	}
 	std::cout << std::endl;
-}
-
-void acceptBoid(uint32 *boidData) {
-	// TODO: Parse the input data to create a boid object
-	int boidID = 12;
-	Vector boidPosition = Vector(12, 100, 0);
-	Vector boidVelocity = Vector(10, -2, 0);
-	Boid b = Boid(boidID, boidPosition, boidVelocity);
-
-	boids[boidCount] = b;
-	boidCount++;
 }
 
 //==============================================================================
@@ -599,7 +664,7 @@ Boid::Boid() {
 	neighbouringBoidsCount = 0;
 }
 
-Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
+Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
 	id = _boidID;
 
 	position = initPosition;
@@ -613,12 +678,13 @@ Boid::Boid(int _boidID, Vector initPosition, Vector initVelocity) {
 
 // TODO: Will need to make a copy of the neighbours rather than a reference so
 //	that as the neighbours are updated, the neighbour list doesn't change
-void Boid::calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount) {
+void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbourCount) {
 	std::cout << "Calculating neighbours for boid #" << id << std::endl;
 
+	uint16 distance;
 	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
 		if (possibleNeighbours[i].id != id) {
-			double distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
+			distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
 			if (distance < VISION_RADIUS) {
 				neighbouringBoids[neighbouringBoidsCount] = &possibleNeighbours[i];
 				neighbouringBoidsCount++;
@@ -653,9 +719,7 @@ Vector Boid::align(void) {
 	Vector total;
 
 	alignBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		// FIXME: This doesn't work as Boid can't have a list of Boids
 		total.add(neighbouringBoids[i]->velocity);
-		//total.add(getDummyVector());
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -672,9 +736,7 @@ Vector Boid::separate(void) {
 	Vector diff;
 
 	separateBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		// FIXME: This doesn't work as Boid can't have a list of Boids
 		diff = Vector::sub(position, neighbouringBoids[i]->position);
-		//diff = Vector::sub(position, getDummyVector());
 		diff.normalise();
 		total.add(diff);
 	}
@@ -693,9 +755,7 @@ Vector Boid::cohesion(void) {
 	Vector steer;
 
 	coheseBoidLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		// FIXME: This doesn't work as Boid can't have a list of Boids
 		total.add(neighbouringBoids[i]->position);
-		//total.add(getDummyVector());
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -784,13 +844,13 @@ void Vector::sub(Vector v) {
 	z = z - v.z;
 }
 
-void Vector::mul(uint8 n) {
+void Vector::mul(uint12 n) {
 	x = x * n;
 	y = y * n;
 	z = z * n;
 }
 
-void Vector::div(uint8 n) {
+void Vector::div(uint12 n) {
 	if (n != 0) {
 		x = x / n;
 		y = y / n;
@@ -819,7 +879,7 @@ double Vector::distanceBetween(Vector v1, Vector v2) {
 	yPart = yPart * yPart;
 	zPart = zPart * zPart;
 
-	return sqrt(double(xPart + yPart + zPart));
+	return hls::sqrt(double(xPart + yPart + zPart));
 }
 
 bool Vector::equal(Vector v1, Vector v2) {
@@ -831,28 +891,28 @@ bool Vector::equal(Vector v1, Vector v2) {
 }
 
 // Advanced Operations /////////////////////////////////////////////////////////
-uint8 Vector::mag() {
-	return (uint8)round(sqrt(double(x*x + y*y + z*z)));
+uint12 Vector::mag() {
+	return (uint12)round(hls::sqrt(double(x*x + y*y + z*z)));
 }
 
-void Vector::setMag(uint8 mag) {
+void Vector::setMag(uint12 mag) {
 	normalise();
 	mul(mag);
 }
 
 void Vector::normalise() {
-	uint8 m = mag();
+	uint12 m = mag();
 	div(m);
 }
 
-void Vector::limit(uint8 max) {
+void Vector::limit(uint12 max) {
 	if(mag() > max) {
 		normalise();
 		mul(max);
 	}
 }
 
-void Vector::bound(uint8 n) {
+void Vector::bound(uint12 n) {
 	// TODO: The is technically not binding the speed, which is the magnitude
 	if(x > n) x = n;
 	if(y > n) y = n;

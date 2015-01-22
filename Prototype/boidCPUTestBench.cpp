@@ -17,6 +17,9 @@ uint32 coords[EDGE_COUNT];
 void testPing();
 void testSimulationSetup();
 void testNeighbourSearch();
+void testCalcNextBoidPos();
+void testLoadBalance();
+void testMoveBoids();
 void testDrawBoids();
 
 void processPingResponse();
@@ -32,13 +35,16 @@ int main() {
 	hls::stream<uint32> to_hw, from_hw;
 
 	// Test BoidCPU input ------------------------------------------------------
-	testPing();
-//	testSimulationSetup();
-//	testNeighbourSearch();
-//	testCalcNextBoidPos();
+//	testPing();
+	testSimulationSetup();
+
+	testDrawBoids();
+
+	testNeighbourSearch();
+	testCalcNextBoidPos();
 //	testLoadBalance();
-//	testMoveBoids();
-//	testDrawBoids();
+	testMoveBoids();
+	testDrawBoids();
 
 	// Send data ---------------------------------------------------------------
 	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -140,8 +146,8 @@ void testSimulationSetup() {
 	uint32 initialBoidCount = 10;
 	coords[0] = 0;
 	coords[1] = 0;
-	coords[2] = 50;
-	coords[3] = 50;
+	coords[2] = 40;
+	coords[3] = 40;
 	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
 
 	data[0] = newID;
@@ -159,7 +165,7 @@ void testSimulationSetup() {
 	// If the value is not 0 then the BoidCPU is able to progress itself until
 	// it reaches the time step equal to the supplied value - it does not need
 	// to wait for the controller to supply synchronisation steps
-	data[18] = 100;
+	data[18] = 0;
 	dataLength += 1;
 
 	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
@@ -170,6 +176,24 @@ void testNeighbourSearch() {
 	dataLength = 0;
 	to = CMD_BROADCAST;
 	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
+}
+
+void testCalcNextBoidPos() {
+	dataLength = 0;
+	to = CMD_BROADCAST;
+	createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
+}
+
+void testLoadBalance() {
+	dataLength = 0;
+	to = CMD_BROADCAST;
+	createCommand(dataLength, to, from, CMD_LOAD_BAL, data);
+}
+
+void testMoveBoids() {
+	dataLength = 0;
+	to = CMD_BROADCAST;
+	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
 }
 
 void testDrawBoids() {
@@ -358,6 +382,9 @@ void tbPrintCommand(bool send, uint32 *data) {
 			break;
 		case MODE_TRAN_BOIDS:
 			std::cout << "transfer boids";
+			break;
+		case CMD_BOID:
+			std::cout << "boid";
 			break;
 		case MODE_DRAW:
 			std::cout << "send boids to BoidGPU";

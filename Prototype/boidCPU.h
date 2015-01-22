@@ -6,6 +6,7 @@
 #include <ap_int.h>					// For arbitrary precision types
 #include <ap_fixed.h>				// For fixed point data types
 #include <hls_stream.h>
+#include "hls_math.h"				// For sqrt
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN			4	// The length of the command header
@@ -33,15 +34,16 @@
 #define MODE_POS_BOIDS			9	//
 #define CMD_LOAD_BAL			10	// TODO: Decide on implementation
 #define MODE_TRAN_BOIDS			11	//
-#define MODE_DRAW				12	// TODO: Perhaps not needed?
-#define CMD_DRAW_INFO			14	// BoidCPU -> BoidGPU
-#define CMD_KILL				15	// Controller -> All
+#define CMD_BOID				12	// BoidCPU -> BoidCPU
+#define MODE_DRAW				14	// TODO: Perhaps not needed?
+#define CMD_DRAW_INFO			15	// BoidCPU -> BoidGPU
+#define CMD_KILL				16	// Controller -> All
 
 // Boid definitions ------------------------------------------------------------
 #define MAX_BOIDS				30	// The maximum number of boids for a BoidCPU
-#define MAX_VELOCITY			10
+#define MAX_VELOCITY			5
 #define MAX_FORCE				1	// Determines how quickly a boid can turn
-#define VISION_RADIUS			50	// How far a boid can see
+#define VISION_RADIUS			20	// How far a boid can see
 #define MAX_NEIGHBOURING_BOIDS	90	// TODO: Decide on appropriate value?
 
 // BoidCPU definitions ---------------------------------------------------------
@@ -88,16 +90,16 @@ class Vector {
 
 		void add(Vector v);
 		void sub(Vector v);
-		void mul(uint8 n);
-		void div(uint8 n);
+		void mul(uint12 n);
+		void div(uint12 n);
 
-		uint8 mag();
+		uint12 mag();
 		void normalise();
-		void bound(uint8 n);
+		void bound(uint12 n);
 		bool empty();
 
-		void setMag(uint8 mag);
-		void limit(uint8 max);
+		void setMag(uint12 mag);
+		void limit(uint12 max);
 
 		static Vector add(Vector v1, Vector v2);
 		static Vector sub(Vector v1, Vector v2);
@@ -112,12 +114,12 @@ class Boid {
 	public:
 		Vector position;                    // The current pixel position of the boid
 		Vector velocity;                   	// The current velocity of the boid
-		uint8 id;
+		uint16 id;
 
 		Boid();
-		Boid(int _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
+		Boid(uint16 _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
 
-		void calculateNeighbours(Boid *possibleNeighbours, int possibleNeighbourCount);  // Calculate the neighbours for the boid
+		void calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbourCount);  // Calculate the neighbours for the boid
 		void update(); 						// Calculate the new position of the boid
 		void draw();						// Draw the boid
 
