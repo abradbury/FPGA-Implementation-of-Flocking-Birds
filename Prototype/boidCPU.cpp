@@ -17,6 +17,7 @@ void transmitBoid(Boid boid, uint8 recipientID);
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 void printCommand(bool send, uint32 *data);
+void printStateOfBoidCPUBoids();
 
 int getRandom(int min, int max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
@@ -384,52 +385,36 @@ void moveBoids() {
 	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
 		recipientBoidCPU = 0;
 
-		if (neighbouringBoidCPUs[0] != 0) {
-			if ((boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[0];
-			}
-		} else if (neighbouringBoidCPUs[2] != 0) {
-			if ((boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[2];
-			}
-		} else if (neighbouringBoidCPUs[4] != 0) {
-			if ((boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[4];
-			}
-		} else if (neighbouringBoidCPUs[6] != 0) {
-			if ((boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[6];
-			}
-		} else if (neighbouringBoidCPUs[1] != 0) {
-			if (boids[i].position.y < boidCPUCoords[1]) {
+		if ((neighbouringBoidCPUs[0] != 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
+			boidToTransfer = boids[i];
+			recipientBoidCPU = neighbouringBoidCPUs[0];
+		} else if ((neighbouringBoidCPUs[2] != 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
+			boidToTransfer = boids[i];
+			recipientBoidCPU = neighbouringBoidCPUs[2];
+		} else if ((neighbouringBoidCPUs[4] != 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
+			boidToTransfer = boids[i];
+			recipientBoidCPU = neighbouringBoidCPUs[4];
+		} else if ((neighbouringBoidCPUs[6] != 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
+			boidToTransfer = boids[i];
+			recipientBoidCPU = neighbouringBoidCPUs[6];
+		} else if ((neighbouringBoidCPUs[1] != 0) && (boids[i].position.y < boidCPUCoords[1])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[1];
-			}
-		} else if (neighbouringBoidCPUs[3] != 0) {
-			if (boids[i].position.x > boidCPUCoords[2]) {
+		} else if ((neighbouringBoidCPUs[3] != 0) && (boids[i].position.x > boidCPUCoords[2])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[3];
-			}
-		} else if (neighbouringBoidCPUs[5] != 0) {
-			if (boids[i].position.y > boidCPUCoords[3]) {
+		} else if ((neighbouringBoidCPUs[5] != 0) && (boids[i].position.y > boidCPUCoords[3])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[5];
-			}
-		} else if (neighbouringBoidCPUs[7] != 0) {
-			if (boids[i].position.x < boidCPUCoords[0]) {
+		} else if ((neighbouringBoidCPUs[7] != 0) && (boids[i].position.x < boidCPUCoords[0])) {
 				boidToTransfer = boids[i];
 				recipientBoidCPU = neighbouringBoidCPUs[7];
-			}
 		}
 
 		if (recipientBoidCPU > 0) {
 			transmitBoid(boidToTransfer, recipientBoidCPU);
 			std::cout << "-Transferring boid #" << boidToTransfer.id <<
-					" to boidCPU #" << recipientBoidCPU << std::endl;
+				" to boidCPU #" << recipientBoidCPU << std::endl;
 		}
 	}
 
@@ -458,13 +443,24 @@ void updateDisplay() {
 	// Increment the timestep counter
 	timeStep++;
 
+	printStateOfBoidCPUBoids();
+
 	// If testing only a single BoidCPU, continue to next stage
 	if (singleBoidCPU) {
 		// If the current time step is less than the stopping condition, continue
+//		if (boidCount > 0) {
 		if (timeStep < stopCondition) {
 			findNeighbours();
 		}
 	}
+}
+
+void printStateOfBoidCPUBoids() {
+	std::cout << "Time step " << timeStep << " (" << boidCount << ") " << std::string(20, '=') << std::endl;
+	for (int i = 0; i < boidCount; i++) {
+		std::cout << "Boid " << boids[i].id << " has position [" << boids[i].position.x << ", " << boids[i].position.y << "] and velocity [" << boids[i].velocity.x << ", " << boids[i].velocity.y << "]" << std::endl;
+	}
+	std::cout << std::string(32, '=') << std::endl;
 }
 
 //==============================================================================
@@ -679,7 +675,7 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
 // TODO: Will need to make a copy of the neighbours rather than a reference so
 //	that as the neighbours are updated, the neighbour list doesn't change
 void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbourCount) {
-	std::cout << "Calculating neighbours for boid #" << id << std::endl;
+//	std::cout << "Calculating neighbours for boid #" << id << std::endl;
 
 	uint16 distance;
 	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
@@ -691,15 +687,15 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbour
 			}
 		}
 	}
-
-	std::cout << "Boid #" << id << " has " << neighbouringBoidsCount << " neighbours: ";
-	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		std::cout << neighbouringBoids[i]->id << ", ";
-	} std::cout << std::endl;
+//
+//	std::cout << "Boid #" << id << " has " << neighbouringBoidsCount << " neighbours: ";
+//	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
+//		std::cout << neighbouringBoids[i]->id << ", ";
+//	} std::cout << std::endl;
 }
 
 void Boid::update(void) {
-	std::cout << "Updating boid #" << id << std::endl;
+//	std::cout << "Updating boid #" << id << std::endl;
 
 	if(neighbouringBoidsCount > 0) {
 		acceleration.add(separate());
@@ -808,10 +804,10 @@ void Boid::contain() {
 //}
 
 void Boid::printBoidInfo() {
-	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
-	std::cout << "Boid Position: [" << position.x << " " << position.y << " " << position.z << "]" << std::endl;
-	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << " " << velocity.z << "]" << std::endl;
-	std::cout << "===================================" << std::endl;
+//	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
+//	std::cout << "Boid Position: [" << position.x << " " << position.y << " " << position.z << "]" << std::endl;
+//	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << " " << velocity.z << "]" << std::endl;
+//	std::cout << "===================================" << std::endl;
 }
 
 //==============================================================================
