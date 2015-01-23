@@ -157,6 +157,7 @@ class Simulation:
 
         # Setup the graphs
         self.boidGPU.setupGraphs(self.boidCPUCount)
+        self.setupGraphData(4)
 
         # Print out the state of the boids in the simulation
         # self.saveState()
@@ -210,6 +211,16 @@ class Simulation:
                 boidCPU.y2Data.append(boidCPU.boidCount)
 
 
+    def setupGraphData(self, noOfDataTypes):
+        self.graphData = [[[] for a in range(0, noOfDataTypes)] for b in range(0, self.boidCPUCount)]
+
+    # def newGraphData(self, bcpuid, dtype):
+        # self.graphData[bcpuid][dtype]
+
+    def updateGraphData(self, bcpuid, dtype, data):
+        self.graphData[bcpuid][dtype].append(data);
+
+
     def calcStep(self):
         self.logger.debug("=" + str(self.timeStepCounter) + "="*65)
 
@@ -222,8 +233,10 @@ class Simulation:
             endTime = time.clock()
 
             # Store the timing information for later plotting
+            data = (endTime - startTime) * 1000
             boidCPU.xData.append(self.timeStepCounter)
-            boidCPU.yData.append((endTime - startTime) * 1000)
+            boidCPU.yData.append(data)
+            self.updateGraphData(boidCPU.BOIDCPU_ID - 1, 0, data)
 
         # Update each boid
         for boidCPU in self.boidCPUs:
@@ -236,7 +249,9 @@ class Simulation:
             endTime = time.clock()
 
             # Store the timing information for later plotting
-            boidCPU.yData[self.timeStepCounter] += ((endTime - startTime) * 1000)
+            data = (endTime - startTime) * 1000
+            boidCPU.yData[self.timeStepCounter] += (data)
+            self.updateGraphData(boidCPU.BOIDCPU_ID - 1, 1, data)
 
             # If the boidCPU is exceeding the threshold, increment counter
             if boidCPU.boidCount > self.config['BOID_THRESHOLD']:
@@ -259,7 +274,9 @@ class Simulation:
                 endTime = time.clock()
 
                 # Store the timing information for later plotting
-                boidCPU.yData[self.timeStepCounter] += ((endTime - startTime) * 1000)
+                data = (endTime - startTime) * 1000
+                boidCPU.yData[self.timeStepCounter] += (data)
+                self.updateGraphData(boidCPU.BOIDCPU_ID - 1, 2, data)
 
 
     # Determine if the new positions of the boids are outside their BoidCPU, if they are, transfere 
@@ -273,7 +290,9 @@ class Simulation:
                 endTime = time.clock()
 
                 # Store the timing information for later plotting
-                boidCPU.yData[self.timeStepCounter] += ((endTime - startTime) * 1000)
+                data = (endTime - startTime) * 1000
+                boidCPU.yData[self.timeStepCounter] += (data)
+                self.updateGraphData(boidCPU.BOIDCPU_ID - 1, 3, data)
 
 
     # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a 

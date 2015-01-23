@@ -499,15 +499,87 @@ class BoidGPU:
 
     def setupOtherGraphs(self, boidCPUCount):
 
-        fnx = lambda : np.random.randint(5, 50, 10)
-        y = np.row_stack((fnx(), fnx(), fnx()))
-        x = np.arange(10)
+
+
+        # fnx = lambda : np.random.randint(5, 50, 10)
+        # y = np.row_stack((fnx(), fnx(), fnx()))
+        # x = np.arange(10)
 
         fig = Figure()
-        ax = fig.add_subplot(111)
+        # ax = fig.add_subplot(111)
 
-        ax.stackplot(x, y)
+        yData = []
+        self.olines = []
+        self.olines2 = []
+        # thresholdLines = []
+        # andallLines = []
+        self.oaxes = []
+        self.oaxes2 = []
+
+        for i in range(0, boidCPUCount):
+            # Create the subplots and sync the axes
+            if i != 0:
+                axis = fig.add_subplot(3, 3, i + 1, sharex = self.oaxes[0], sharey = self.oaxes[0])
+            else:
+                axis = fig.add_subplot(3, 3, i + 1)
+
+            axis.set_title("BoidCPU #%d" % (i + 1))
+            axis.grid(True)
+            
+            # Setup the first y axis
+            for tl in axis.get_yticklabels():
+                tl.set_color('b')
+    
+            # Setup the second y axis
+            axis2 = axis.twinx()
+            for tl in axis2.get_yticklabels():
+                tl.set_color('r')
+            axis2.set_ylim([0, self.config['boidCount']])
+
+            # Plot each line, returns a list of lines - the comma is needed
+            # If the x data set is not specified, it is assumed to be the number 
+            # of element contained in the y data set - which is fine here.
+            line1, = axis.plot(yData, color = 'b')
+            line2, = axis2.plot(yData, color = 'r')
+
+            # Add the Andall(sp?) and max boid threshold lines
+            # thresholdLine, = axis2.plot([], [], color = 'm')
+            # andallLine, = axis2.plot([], [], color = 'g')
+            
+            # Customise the suplot grid so that axes don't overlap
+            if (i % 3) != 0:
+                plt.setp(axis.get_yticklabels(), visible = False)
+            else:
+                axis.set_ylabel("Computation time, ms", color = 'b')
+
+            if (i % 3) != (3 - 1):
+                plt.setp(axis2.get_yticklabels(), visible = False)
+            else:
+                axis2.set_ylabel("Number of boids", color = 'r')
+
+            if int(np.floor(i / 3)) != 2:
+                plt.setp(axis.get_xticklabels(), visible = False)
+            else:
+                axis.set_xlabel("Number of timesteps")
+
+            # Add the lines to the line lists
+            self.olines.append(line1)
+            self.olines2.append(line2)
+            # andallLines.append(andallLine)
+            # thresholdLines.append(thresholdLine)
+
+            # Add the axes to the axes lists
+            self.oaxes.append(axis)
+            self.oaxes2.append(axis2)
+
+        # Show the subplots in interactive mode (doesn't block)
+        plt.ion()
         plt.show()
+
+
+
+        # ax.stackplot(x, y)
+        # plt.show()
 
         canvas = FigureCanvasTkAgg(fig, master = self.graph3Frame)
         canvas.show()
@@ -586,6 +658,31 @@ class BoidGPU:
 
             # Re-draw the graphs
             self.graphFigure.canvas.draw()
+
+
+            
+            # print len(self.simulation.boidCPUs[i].xData)
+            # print len(self.simulation.graphData[i][0])
+
+            # a = np.row_stack(self.simulation.graphData[i])
+            # print len(a)
+            # print len(self.simulation.graphData[i])
+
+            # self.olines[i].set_xdata(self.simulation.boidCPUs[i].xData)
+            # self.olines[i].set_ydata(np.row_stack(self.simulation.graphData[i]))
+
+            # self.olines2[i].set_xdata(self.simulation.boidCPUs[i].xData[0:-1])
+            # self.olines2[i].set_ydata(self.simulation.boidCPUs[i].y2Data)
+
+            # # Adjust the axes accordingly
+            # self.oaxes[i].relim()
+            # self.oaxes[i].autoscale_view()
+
+            # self.oaxes2[i].relim()
+            # self.oaxes2[i].autoscale_view()
+            # y = np.row_stack(self.simulation.graphData[i])
+            # print y
+            # x = np.arange(10)
 
         # Update summary graph
         self.summaryAxis.lines[0].set_xdata(range(0, self.simulation.timeStepCounter))
