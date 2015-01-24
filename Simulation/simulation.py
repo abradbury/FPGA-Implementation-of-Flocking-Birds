@@ -62,44 +62,45 @@ class Simulation:
         # Define configuration parameters
         self.config = {}
 
-        self.config['width'] = 720              # Define window size
-        self.config['height'] = 720
-        self.config['boidCount'] = 90
-        self.config['updateInterval'] = 10      # The interval between successful update calls (ms) 
-        self.config['widthInBoidCPUs'] = 3      # The number of BoidCPUs spanning the area width
-        self.config['loggingLevel'] = logging.ERROR
+        self.config['width']            = 720       # Define window size
+        self.config['height']           = 720
+        self.config['boidCount']        = 90
+        self.config['updateInterval']   = 10        # The interval between successful update calls (ms) 
+        self.config['widthInBoidCPUs']  = 3         # The number of BoidCPUs spanning the area width
+        self.config['dataType']         = np.float_ # Whether integers or floating points are used
+        self.config['loggingLevel']     = logging.ERROR
 
         # Debugging parameters
-        self.config['colourCode'] = False       # True to colour boids based on their BoidCPU
-        self.config['trackBoid'] = False         # True to track the specified boid and neighbours
-        self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
+        self.config['colourCode']       = False     # True to colour boids based on their BoidCPU
+        self.config['trackBoid']        = False     # True to track the specified boid and neighbours
+        self.config['boidToTrack']      = 2         # The ID of the boid to track, 0 for all boids
         
         # Load balancing parameters
-        self.config['loadBalance'] = False       # True to enable load balancing
-        self.config['loadBalanceType'] = 2      # See notes at top of file
-        self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
-        self.config['stepSize'] = 20            # The step size to change the boundaries
+        self.config['loadBalance']      = False     # True to enable load balancing
+        self.config['loadBalanceType']  = 2         # See notes at top of file
+        self.config['BOID_THRESHOLD']   = 30        # The maximum boids a BoidCPU should contain
+        self.config['stepSize']         = 20        # The step size to change the boundaries
 
         self.config['percentageToRemove'] = 0.15
         self.config['boidsToRelease'] = self.config['BOID_THRESHOLD'] - (np.floor(self.config['BOID_THRESHOLD'] * (1 - self.config["percentageToRemove"])))
 
         # Boid movement parameters
-        self.config['MAX_VELOCITY'] = 10
-        self.config['MAX_FORCE'] = 1             # Determines how sharply a boid can turn
-        self.config['VISION_RADIUS'] = 80      # Currently set to the width of a BoidGPU
+        self.config['MAX_VELOCITY']     = 10
+        self.config['MAX_FORCE']        = 1         # Determines how sharply a boid can turn
+        self.config['VISION_RADIUS']    = 80        # Currently set to the width of a BoidGPU
 
         self.config['ALIGNMENT_WEIGHT'] = 1
-        self.config['COHESION_WEIGHT'] = 1
+        self.config['COHESION_WEIGHT']  = 1
         self.config['REPULSION_WEIGHT'] = 1
 
-        self.config['minBoidCPUSize'] = self.config['VISION_RADIUS']
+        self.config['minBoidCPUSize']   = self.config['VISION_RADIUS']
 
         # Define the testing state
-        self.config['useTestingSetup'] = True   # True to use a known initial setup
-        self.config['testingStopPoint'] = 500  # The timestep to stop the simulation for tests
+        self.config['useTestingSetup']  = True      # True to use a known initial setup
+        self.config['testingStopPoint'] = 500       # The timestep to stop the simulation for tests
         if self.config['useTestingSetup']:
-            self.configureKnownInitialSetup()   # Makes the known initial setup available
-        self.config["showBoidIds"] = False       # To show the boid and BoidCPU IDs
+            self.configureKnownInitialSetup()       # Makes the known initial setup available
+        self.config["showBoidIds"]      = False     # To show the boid and BoidCPU IDs
 
         # Setup logging
         self.setupLogging()

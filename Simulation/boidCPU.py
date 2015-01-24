@@ -64,12 +64,12 @@ class BoidCPU:
                 # Randomly position the boid on initialisation
                 posX = random.randint(self.boidCPUCoords[0], self.boidCPUCoords[2]);
                 posY = random.randint(self.boidCPUCoords[1], self.boidCPUCoords[3]);
-                position = np.array([posX, posY], dtype = np.int_)
+                position = np.array([posX, posY], dtype = self.config['dataType'])
 
                 # Randomly generate the boid's initial velocity
                 velX = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
                 velY = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
-                velocity = np.array([velX, velY], dtype = np.int_)
+                velocity = np.array([velX, velY], dtype = self.config['dataType'])
 
                 # Specify the boid's ID
                 BOID_ID = ((self.BOIDCPU_ID - 1) * self.boidCount) + i + 1

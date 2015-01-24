@@ -25,7 +25,7 @@ class Boid:
         # Define the initial movement parameters
         self.position = initPosition[:]
         self.velocity = initVelocity[:]
-        self.acceleration = np.array([0, 0], dtype = np.int_)
+        self.acceleration = np.array([0, 0], dtype = self.config['dataType'])
 
         # Create the boid
         self.BOID_ID = _BOID_ID        
@@ -135,7 +135,7 @@ class Boid:
 
     # A boid will align itself with the average orientation of its neighbours
     def align(self):
-        total = np.array([0, 0], dtype = np.int_)
+        total = np.array([0, 0], dtype = self.config['dataType'])
 
         for boid in self.neighbouringBoids:
             total += boid.velocity
@@ -153,7 +153,7 @@ class Boid:
     #
     # TODO: Scale it depending on how close the boid is
     def separate(self):
-        total = np.array([0, 0], dtype = np.int_)
+        total = np.array([0, 0], dtype = self.config['dataType'])
 
         for boid in self.neighbouringBoids:
             diff = self.position - boid.position        #  TODO: Check subtraction is right
@@ -170,7 +170,7 @@ class Boid:
 
     # A boid will move towards the centre of mass of its neighbourhood
     def cohesion(self):
-        total = np.array([0, 0], dtype = np.int_)
+        total = np.array([0, 0], dtype = self.config['dataType'])
 
         for boid in self.neighbouringBoids:
             total += boid.position
@@ -274,21 +274,23 @@ class Boid:
     # -1. To ensure the same behaviour, the vector components are cast as a float here in python 
     # and the result of the division is cast back to an integer. 
     # 
+    # TODO: Verify that float operation matches C++ behaviour
+    # 
     # http://stackoverflow.com/a/3602857/1433614
     # http://stackoverflow.com/a/19919450/1433614
     def vectorDivide(self, vector, n):
-        return np.array([int(float(i) / n) for i in vector], dtype = np.int_)
+        if self.config['dataType'] == np.int_:
+            return np.array([int(float(i) / n) for i in vector], dtype = np.int_)
+        elif self.config['dataType'] == np.float_:
+            return vector / n
 
 
     # Calculate the magnetude or absolute value of the given vector
-    # TODO: Adjust to handle any length vector
     def absolute(self, vector):
-        if len(vector) == 2:
-            magnetude = int(round(math.sqrt((vector[0] ** 2) + (vector[1] ** 2))))
-        elif len(vector) == 3:
-            magnetude = int(round(math.sqrt((vector[0] ** 2) + (vector[1] ** 2) + (vector[2] ** 2))))
-
-        return magnetude
+        if self.config['dataType'] == np.int_:
+            return int(round(math.sqrt(sum([i ** 2 for i in vector]))))
+        elif self.config['dataType'] == np.float_:
+            return round(math.sqrt(sum([i ** 2 for i in vector])))
 
 
     # Set the magnetude of a vector to the given value
