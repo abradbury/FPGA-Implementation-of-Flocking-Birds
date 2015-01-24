@@ -65,9 +65,8 @@ bool outputAvailable = false;		// True if there is output ready to send
  * 	typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
  */
 
-Boid *neighbouringBoids[MAX_BOIDCPU_NEIGHBOURS];
-
 /**
+ * FIXME: When specifying stop at time step 100, it stops at time step 104...
  * TODO: Random generator needs random seeds - FPGA clock?
  * TODO: Try and programmatically calculate the length of the commands
  */
@@ -236,35 +235,35 @@ void simulationSetup() {
 	} std::cout << "]" << std::endl;
 
 	// Create the boids (actual implementation)
-	uint16 boidID;
-	boidCreationLoop: for(int i = 0; i < boidCount; i++) {
-		Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
-		Vector position = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
-
-		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-
-		Boid boid = Boid(boidID, position, velocity);
-		boids[i] = boid;
-	}
-
-	// Create the boids (testing implementation)
-//	int testBoidCount = 10;
-//	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
-//			{Vector(594, 404, 0), Vector(-10, -1, 0)},
-//			{Vector(550, 350, 0), Vector(-10, -3, 0)},
-//			{Vector(661, 446, 0), Vector(-6, -4, 0)},
-//			{Vector(539, 283, 0), Vector(-8, -2, 0)},
-//			{Vector(551, 256, 0), Vector(-5, 7, 0)},
-//			{Vector(644, 342, 0), Vector(-1, -7, 0)},
-//			{Vector(592, 399, 0), Vector(-9, 6, 0)},
-//			{Vector(644, 252, 0), Vector(-5, -8, 0)},
-//			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
+//	uint16 boidID;
+//	boidCreationLoop: for(int i = 0; i < boidCount; i++) {
+//		Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
+//		Vector position = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
 //
-//	testBoidCreationLoop: for(int i = 0; i < testBoidCount; i++) {
-//		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-//		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
+//		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+//
+//		Boid boid = Boid(boidID, position, velocity);
 //		boids[i] = boid;
 //	}
+
+	// Create the boids (testing implementation)
+	int testBoidCount = 10;
+	Vector knownSetup[10][2] = {{Vector(12, 11, 0), Vector(5, 0, 0)},
+			{Vector(19, 35, 0), Vector(-5, 1, 0)},
+			{Vector(12, 31, 0), Vector(-4, -2, 0)},
+			{Vector(35, 22, 0), Vector(0, -3, 0)},
+			{Vector(4, 9, 0), Vector(-1, 0, 0)},
+			{Vector(19, 18, 0), Vector(2, -3, 0)},
+			{Vector(38, 19, 0), Vector(4, -4, 0)},
+			{Vector(18, 5, 0), Vector(-1, 2, 0)},
+			{Vector(15, 33, 0), Vector(2, -2, 0)},
+			{Vector(3, 8, 0), Vector(-2, 0, 0)}};
+
+	testBoidCreationLoop: for(int i = 0; i < testBoidCount; i++) {
+		uint16 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
+		boids[i] = boid;
+	}
 }
 
 void findNeighbours() {
@@ -376,7 +375,6 @@ void loadBalance() {
 }
 
 void moveBoids() {
-	//TODO: This does not work 'Transferring boid #0 to boidCPU #0'
 	std::cout << "-Transferring boids..." << std::endl;
 
 	Boid boidToTransfer;
@@ -448,7 +446,6 @@ void updateDisplay() {
 	// If testing only a single BoidCPU, continue to next stage
 	if (singleBoidCPU) {
 		// If the current time step is less than the stopping condition, continue
-//		if (boidCount > 0) {
 		if (timeStep < stopCondition) {
 			findNeighbours();
 		}
@@ -677,6 +674,12 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
 void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbourCount) {
 //	std::cout << "Calculating neighbours for boid #" << id << std::endl;
 
+	// TODO: Could just clear up to the current boid count
+//	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+//		delete neighbouringBoids[i];
+//	}
+	neighbouringBoidsCount = 0;
+
 	uint16 distance;
 	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
 		if (possibleNeighbours[i].id != id) {
@@ -687,11 +690,11 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbour
 			}
 		}
 	}
-//
-//	std::cout << "Boid #" << id << " has " << neighbouringBoidsCount << " neighbours: ";
-//	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-//		std::cout << neighbouringBoids[i]->id << ", ";
-//	} std::cout << std::endl;
+
+	std::cout << "Boid " << id << " has " << neighbouringBoidsCount << " neighbours: ";
+	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
+		std::cout << neighbouringBoids[i]->id << ", ";
+	} std::cout << std::endl;
 }
 
 void Boid::update(void) {
@@ -739,7 +742,6 @@ Vector Boid::separate(void) {
 
 	total.div(neighbouringBoidsCount);
 	total.setMag(MAX_VELOCITY);
-
 	Vector steer = Vector::sub(total, velocity);
 	steer.limit(MAX_FORCE);
 
@@ -756,6 +758,7 @@ Vector Boid::cohesion(void) {
 
 	total.div(neighbouringBoidsCount);
 	steer = seek(total);
+
 	return steer;
 }
 
@@ -840,13 +843,13 @@ void Vector::sub(Vector v) {
 	z = z - v.z;
 }
 
-void Vector::mul(uint12 n) {
+void Vector::mul(int12 n) {
 	x = x * n;
 	y = y * n;
 	z = z * n;
 }
 
-void Vector::div(uint12 n) {
+void Vector::div(int12 n) {
 	if (n != 0) {
 		x = x / n;
 		y = y / n;
@@ -887,28 +890,35 @@ bool Vector::equal(Vector v1, Vector v2) {
 }
 
 // Advanced Operations /////////////////////////////////////////////////////////
-uint12 Vector::mag() {
+int12 Vector::mag() {
 	return (uint12)round(hls::sqrt(double(x*x + y*y + z*z)));
 }
 
-void Vector::setMag(uint12 mag) {
+void Vector::setMag(int12 mag) {
 	normalise();
 	mul(mag);
 }
 
 void Vector::normalise() {
-	uint12 m = mag();
-	div(m);
+	int12 m = mag();
+
+	if (m != 0) {
+		div(m);
+	} else {
+		x = 0;
+		y = 0;
+		z = 0;
+	}
 }
 
-void Vector::limit(uint12 max) {
+void Vector::limit(int12 max) {
 	if(mag() > max) {
 		normalise();
 		mul(max);
 	}
 }
 
-void Vector::bound(uint12 n) {
+void Vector::bound(int12 n) {
 	// TODO: The is technically not binding the speed, which is the magnitude
 	if(x > n) x = n;
 	if(y > n) y = n;

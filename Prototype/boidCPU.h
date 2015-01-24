@@ -90,16 +90,16 @@ class Vector {
 
 		void add(Vector v);
 		void sub(Vector v);
-		void mul(uint12 n);
-		void div(uint12 n);
+		void mul(int12 n);
+		void div(int12 n);
 
-		uint12 mag();
+		int12 mag();
 		void normalise();
-		void bound(uint12 n);
+		void bound(int12 n);
 		bool empty();
 
-		void setMag(uint12 mag);
-		void limit(uint12 max);
+		void setMag(int12 mag);
+		void limit(int12 max);
 
 		static Vector add(Vector v1, Vector v2);
 		static Vector sub(Vector v1, Vector v2);
@@ -115,6 +115,8 @@ class Boid {
 		Vector position;                    // The current pixel position of the boid
 		Vector velocity;                   	// The current velocity of the boid
 		uint16 id;
+
+		Boid *neighbouringBoids[MAX_NEIGHBOURING_BOIDS];
 
 		Boid();
 		Boid(uint16 _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
@@ -134,7 +136,7 @@ class Boid {
 	private:
 		Vector acceleration;
 		uint8 neighbouringBoidsCount;
-//		Boid *neighbouringBoids[MAX_BOIDCPU_NEIGHBOURS];
+//		Boid *neighbouringBoids[MAX_NEIGHBOURING_BOIDS];
 
 		Vector align();						// Calculate the alignment force
 		Vector separate();					// Calculate the separation force
