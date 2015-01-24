@@ -24,11 +24,13 @@ import time                         # Used to time stuff
 
 ## MAY DOs =========================================================================================
 # TODO: Add keybinding to capture return key and simulate button press
-# TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding
+# TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding (and for 1 BoidCPU)
 
 # TODO: Only allow boids to see in front of them when looking at neighbours
 # TODO: Change simulation size to 1080p
 # TODO: Experiment with rectangular BoidCPUs
+# TODO: Parameterise numpy type
+# TODO: No need to transfer boids if there is only one BoidCPU
 
 
 # Load Balancing Types ==============================================================================
@@ -73,7 +75,7 @@ class Simulation:
         self.config['boidToTrack'] = 2          # The ID of the boid to track, 0 for all boids
         
         # Load balancing parameters
-        self.config['loadBalance'] = True       # True to enable load balancing
+        self.config['loadBalance'] = False       # True to enable load balancing
         self.config['loadBalanceType'] = 2      # See notes at top of file
         self.config['BOID_THRESHOLD'] = 30      # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20            # The step size to change the boundaries
@@ -87,7 +89,7 @@ class Simulation:
         self.config['VISION_RADIUS'] = 80      # Currently set to the width of a BoidGPU
 
         self.config['ALIGNMENT_WEIGHT'] = 1
-        self.config['COHESION_WEIGHT'] = 1.1
+        self.config['COHESION_WEIGHT'] = 1
         self.config['REPULSION_WEIGHT'] = 1
 
         self.config['minBoidCPUSize'] = self.config['VISION_RADIUS']
@@ -203,7 +205,7 @@ class Simulation:
             for boidCPU in self.boidCPUs:
                 self.logger.debug("Drawing boids at calculated positions for BoidCPU #" + 
                     str(boidCPU.BOIDCPU_ID) + "...")
-    
+
                 # Update the canvas with the new boid positions
                 boidCPU.draw()
 
@@ -579,6 +581,18 @@ class Simulation:
 
     # Makes the known test state available in the configuration list
     def configureKnownInitialSetup(self):
+
+        # Single BoidCPU with 10 boids
+        # self.config['testState'] = ([[[51, [12, 11], [5, 0]], 
+        #     [52, [19, 35], [-5, 1]], 
+        #     [53, [12, 31], [-4, -2]], 
+        #     [54, [35, 22], [0, -3]],
+        #     [55, [4, 9], [-1, 0]],
+        #     [56, [19, 18], [2, -3]],
+        #     [57, [38, 19], [4, -4]],
+        #     [58, [18, 5], [-1, 2]],
+        #     [59, [15, 33], [2, -2]],
+        #     [60, [3, 8], [-2, 0]]]])
 
         # self.config['testState'] = ([[[1, [106.0, 5.0], [2.0, -5.0]]], 
         #     [[2, [406.0, 193.0], [8.0, -3.0]]], 

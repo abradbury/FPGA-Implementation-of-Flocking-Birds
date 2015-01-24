@@ -25,7 +25,7 @@ class Boid:
         # Define the initial movement parameters
         self.position = initPosition[:]
         self.velocity = initVelocity[:]
-        self.acceleration = np.array([0, 0], dtype = np.float_)
+        self.acceleration = np.array([0, 0], dtype = np.int_)
 
         # Create the boid
         self.BOID_ID = _BOID_ID        
@@ -66,10 +66,6 @@ class Boid:
             if self.config['trackBoid'] and (self.BOID_ID == self.config['boidToTrack']): 
                 for boid in self.neighbouringBoids:
                     self.boidGPU.highlightBoid(True, boid.BOID_ID)
-
-            # self.logger.debug("Updating boid #" + str(self.BOID_ID) + " (from BoidCPU #" + str(self.boidCPU.BOIDCPU_ID) + ")")
-            # for boid in self.neighbouringBoids:
-            #     self.logger.debug("  - Boid #" + str(self.BOID_ID) + " neighbour (Boid #" + str(boid.BOID_ID) + ") has position: " + str(boid.position))
 
             # If the boids has neighbours, calculate its next position 
             if len(self.neighbouringBoids) > 0:
@@ -139,12 +135,12 @@ class Boid:
 
     # A boid will align itself with the average orientation of its neighbours
     def align(self):
-        total = np.array([0, 0], dtype = np.float_)
+        total = np.array([0, 0], dtype = np.int_)
 
         for boid in self.neighbouringBoids:
             total += boid.velocity
 
-        total /= len(self.neighbouringBoids)
+        total = self.vectorDivide(total, len(self.neighbouringBoids))
         total = self.setMag(total, self.config['MAX_VELOCITY'])
 
         steer = total - self.velocity
@@ -157,14 +153,14 @@ class Boid:
     #
     # TODO: Scale it depending on how close the boid is
     def separate(self):
-        total = np.array([0, 0], dtype = np.float_)
+        total = np.array([0, 0], dtype = np.int_)
 
         for boid in self.neighbouringBoids:
             diff = self.position - boid.position        #  TODO: Check subtraction is right
             diff = self.normalise(diff)
             total += diff
 
-        total /= len(self.neighbouringBoids)
+        total = self.vectorDivide(total, len(self.neighbouringBoids))
         total = self.setMag(total, self.config['MAX_VELOCITY'])
 
         steer = total - self.velocity
@@ -174,12 +170,12 @@ class Boid:
 
     # A boid will move towards the centre of mass of its neighbourhood
     def cohesion(self):
-        total = 0
+        total = np.array([0, 0], dtype = np.int_)
 
         for boid in self.neighbouringBoids:
             total += boid.position
 
-        total /= len(self.neighbouringBoids)
+        total = self.vectorDivide(total, len(self.neighbouringBoids))
         steer = self.seek(total)
 
         return steer
@@ -267,19 +263,30 @@ class Boid:
         magnetude = self.absolute(vector)
 
         if magnetude:
-            result = vector / magnetude
+            result = self.vectorDivide(vector, magnetude)
         else:
             result = 0
 
         return result 
 
 
+    # Integer division in C++ truncates towards 0, so -7/10 = 0 whereas in Python, this would equal 
+    # -1. To ensure the same behaviour, the vector components are cast as a float here in python 
+    # and the result of the division is cast back to an integer. 
+    # 
+    # http://stackoverflow.com/a/3602857/1433614
+    # http://stackoverflow.com/a/19919450/1433614
+    def vectorDivide(self, vector, n):
+        return np.array([int(float(i) / n) for i in vector], dtype = np.int_)
+
+
     # Calculate the magnetude or absolute value of the given vector
+    # TODO: Adjust to handle any length vector
     def absolute(self, vector):
         if len(vector) == 2:
-            magnetude = math.sqrt((vector[0] ** 2) + (vector[1] ** 2))
+            magnetude = int(round(math.sqrt((vector[0] ** 2) + (vector[1] ** 2))))
         elif len(vector) == 3:
-            magnetude = math.sqrt((vector[0] ** 2) + (vector[1] ** 2) + (vector[2] ** 2))
+            magnetude = int(round(math.sqrt((vector[0] ** 2) + (vector[1] ** 2) + (vector[2] ** 2))))
 
         return magnetude
 
@@ -298,6 +305,7 @@ class Boid:
         return vector
 
 
+    # TODO: Adjust to handle any length vector
     def distanceBetweenTwoPoints(self, u, v):
         if len(u) == 2:
             result = math.sqrt(((u[0] - v[0]) ** 2) + ((u[1] - v[1]) ** 2))
