@@ -105,10 +105,31 @@ class Vector {
 		static Vector sub(Vector v1, Vector v2);
 		static double distanceBetween(Vector v1, Vector v2);
 		static bool equal(Vector v1, Vector v2);
-
-		// TODO: Is this needed?
-//		friend std::ostream& operator<<(std::ostream& os, const Vector& v);
 };
+
+/**
+ * A boid cannot contain a list of neighbouring boids as there is an issue
+ * synthesising such a list. An alternative was to have another class or struct
+ * that just contained the position, velocity and id of the neighbouring boids.
+ * This synthesises, but leads to huge increases in utilisation.
+ *
+ * Could have a list of neighbouring BoidIDs and then get the boid info from
+ * the possible neighbour list of the BoidCPU.. but this would be O(n^2)...
+ *
+ * Could recalculate the neighbours every time (3 times)...
+ *
+ * Could have the boidCPU hold a list of neighbours for each boid...
+ * 	- This would work perhaps? No extra storage space needed, possibly more
+ * 	  communication (between the boids and the boidCPU)? If planned right, the
+ * 	  BoidCPUs could be recalculating the neighbours whilst the boids are doing
+ * 	  something else?
+ */
+//class BareBoid {
+//	public:
+//		Vector position;                    // The current pixel position of the boid
+//		Vector velocity;                   	// The current velocity of the boid
+//		uint16 id;
+//};
 
 class Boid {
 	public:
@@ -116,10 +137,10 @@ class Boid {
 		Vector velocity;                   	// The current velocity of the boid
 		uint16 id;
 
-		Boid *neighbouringBoids[MAX_NEIGHBOURING_BOIDS];
+		int index;
 
 		Boid();
-		Boid(uint16 _boidID, Vector initPosition, Vector initVelocity); // Constructor - initialise the boid
+		Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int index); // Constructor - initialise the boid
 
 		void calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbourCount);  // Calculate the neighbours for the boid
 		void update(); 						// Calculate the new position of the boid
@@ -130,6 +151,8 @@ class Boid {
 //		uint8 getID();
 //		uint8 getNeighbourCount();
 //		Boid* getNeighbours();
+
+		void setNeighbourCount(int n);
 
 		void printBoidInfo();
 

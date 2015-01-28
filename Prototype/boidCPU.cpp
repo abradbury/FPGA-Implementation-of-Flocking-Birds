@@ -27,6 +27,10 @@ uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
 int8 boidCPUID;
 int8 fpgaID;
 
+// TODO: Try with and without pointers (for synthesising)
+Boid *boidNeighbourList[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
+//Boid *neighbouringBoids[MAX_NEIGHBOURING_BOIDS];
+
 int8 boidCount;
 Boid boids[MAX_BOIDS];		// TODO: Perhaps re-implement as a LL due to deletion
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
@@ -59,6 +63,9 @@ bool outputAvailable = false;		// True if there is output ready to send
  * 	std::cout << a << std::endl;				// Gives 0
  * 	fint12 b = -345.8;
  * 	std::cout << b << std::endl;				// Gives -346
+ *
+ * 	Aleks: <0, 1>, <0, 1>, <1, 2>, <2, 1>
+ * 	Tom:   scale by 10000
  *
  * Where the types were defined in the header:
  * 	typedef ap_fixed<22,22, AP_RND, AP_SAT> fint12;
@@ -217,10 +224,10 @@ void simulationSetup() {
 	// If the value is not 0 then the BoidCPU is able to progress itself until
 	// it reaches the time step equal to the supplied value - it does not need
 	// to wait for the controller to supply synchronisation steps
-	if (inputData[18] > 0) {
-		singleBoidCPU = true;
-		stopCondition = inputData[18];
-	}
+//	if (inputData[18] > 0) {
+////		singleBoidCPU = true;
+//		stopCondition = inputData[18];
+//	}
 
 	// Print out BoidCPU parameters
 	std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" << boidCPUID << std::endl;
@@ -242,7 +249,7 @@ void simulationSetup() {
 //
 //		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 //
-//		Boid boid = Boid(boidID, position, velocity);
+//		Boid boid = Boid(boidID, position, velocity, i);
 //		boids[i] = boid;
 //	}
 
@@ -261,7 +268,7 @@ void simulationSetup() {
 
 	testBoidCreationLoop: for(int i = 0; i < testBoidCount; i++) {
 		uint16 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
+		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1], i);
 		boids[i] = boid;
 	}
 }
@@ -313,27 +320,47 @@ void findNeighbours() {
 	// Calculate the neighbours for each boid
 	// TODO: This could be done when calculating each boid's positions as C/C++
 	//	seems to be pass by value - unlike Python
-	calcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
-		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
+//	calcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
+//		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
+//
+//		calculateNeighbours(boids[i], )
+//	}
+
+	// Have the boidCPU calculate and store the neighbours for each of the
+	// boids that it manages
+
+
+
+	ll: for (int i = 0; i < boidCount; i++) {
+
+		// TODO: Try moving these outside the loop to see what happens
+		int neighbouringBoidsCount = 0;
+		uint16 distance;
+
+		calcBoidNbrsLoopNew: for (int i = 0; i < possibleNeighbourCount; i++) {
+			if (possibleNeighbouringBoids[i].id != boids[i].id) {
+				distance = Vector::distanceBetween(boids[i].position, possibleNeighbouringBoids[i].position);
+				if (distance < VISION_RADIUS) {
+					boidNeighbourList[i][neighbouringBoidsCount] = &possibleNeighbouringBoids[i];
+					neighbouringBoidsCount++;
+				}
+			}
+		}
+
+		boids[i].setNeighbourCount(neighbouringBoidsCount);
+
+
 	}
 
-//	// A list of the known neighbours for the boids at time step 1 (from Python)
-//	// Sat 10th Jan: HLS is correct
-//	int knownSetupNeighbours [10][5] = {{59},
-//			 {53, 54, 57, 58},
-//			 {52, 55, 56, 57, 58},
-//			 {52, 58, 60},
-//			 {53, 56},
-//			 {53, 55, 59},
-//			 {52, 53, 58, 59},
-//			 {52, 53, 54, 57},
-//			 {51, 56, 57},
-//			 {54}};
+
+
+
+
 
 	// If testing only a single BoidCPU, continue to next stage
-	if (singleBoidCPU) {
-		calcNextBoidPositions();
-	}
+//	if (singleBoidCPU) {
+//		calcNextBoidPositions();
+//	}
 }
 
 void calcNextBoidPositions() {
@@ -417,9 +444,9 @@ void moveBoids() {
 	}
 
 	// If testing only a single BoidCPU, continue to next stage
-	if (singleBoidCPU) {
-		updateDisplay();
-	}
+//	if (singleBoidCPU) {
+//		updateDisplay();
+//	}
 }
 
 void updateDisplay() {
@@ -443,21 +470,22 @@ void updateDisplay() {
 
 	printStateOfBoidCPUBoids();
 
-	// If testing only a single BoidCPU, continue to next stage
-	if (singleBoidCPU) {
-		// If the current time step is less than the stopping condition, continue
-		if (timeStep < stopCondition) {
-			findNeighbours();
-		}
-	}
+//	// If testing only a single BoidCPU, continue to next stage
+//	if (singleBoidCPU) {
+//		// If the current time step is less than the stopping condition, continue
+////		if (boidCount > 0)
+//		if (timeStep < stopCondition) {
+//			findNeighbours();
+//		}
+//	}
 }
 
 void printStateOfBoidCPUBoids() {
-	std::cout << "Time step " << timeStep << " (" << boidCount << ") " << std::string(20, '=') << std::endl;
+//	std::cout << "Time step " << timeStep << " (" << boidCount << ") " << std::string(20, '=') << std::endl;
 	for (int i = 0; i < boidCount; i++) {
 		std::cout << "Boid " << boids[i].id << " has position [" << boids[i].position.x << ", " << boids[i].position.y << "] and velocity [" << boids[i].velocity.x << ", " << boids[i].velocity.y << "]" << std::endl;
 	}
-	std::cout << std::string(32, '=') << std::endl;
+//	std::cout << std::string(32, '=') << std::endl;
 }
 
 //==============================================================================
@@ -509,7 +537,7 @@ void acceptBoid(uint32 *boidData) {
 	int boidID = 12;
 	Vector boidPosition = Vector(12, 100, 0);
 	Vector boidVelocity = Vector(10, -2, 0);
-	Boid b = Boid(boidID, boidPosition, boidVelocity);
+	Boid b = Boid(boidID, boidPosition, boidVelocity, boidCount);
 
 	boids[boidCount] = b;
 	boidCount++;
@@ -650,6 +678,7 @@ uint16 shiftLSFR(uint16 *lfsr, uint16 mask) {
 
 Boid::Boid() {
 	id = 0;
+	index = 0;
 
 	position = Vector(0, 0, 0);
 	velocity = Vector(0, 0, 0);
@@ -657,8 +686,9 @@ Boid::Boid() {
 	neighbouringBoidsCount = 0;
 }
 
-Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
+Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int _index) {
 	id = _boidID;
+	index = _index;
 
 	position = initPosition;
 	velocity = initVelocity;
@@ -678,23 +708,23 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbour
 //	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 //		delete neighbouringBoids[i];
 //	}
-	neighbouringBoidsCount = 0;
-
-	uint16 distance;
-	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
-		if (possibleNeighbours[i].id != id) {
-			distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
-			if (distance < VISION_RADIUS) {
-				neighbouringBoids[neighbouringBoidsCount] = &possibleNeighbours[i];
-				neighbouringBoidsCount++;
-			}
-		}
-	}
-
-	std::cout << "Boid " << id << " has " << neighbouringBoidsCount << " neighbours: ";
-	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		std::cout << neighbouringBoids[i]->id << ", ";
-	} std::cout << std::endl;
+//	neighbouringBoidsCount = 0;
+//
+//	uint16 distance;
+//	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
+//		if (possibleNeighbours[i].id != id) {
+//			distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
+//			if (distance < VISION_RADIUS) {
+//				boidNeighbourList[index][neighbouringBoidsCount] = &possibleNeighbours[i];
+//				neighbouringBoidsCount++;
+//			}
+//		}
+//	}
+//
+//	std::cout << "Boid " << id << " has " << neighbouringBoidsCount << " neighbours: ";
+//	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
+//		std::cout << boidNeighbourList[index][i]->id << ", ";
+//	} std::cout << std::endl;
 }
 
 void Boid::update(void) {
@@ -718,7 +748,7 @@ Vector Boid::align(void) {
 	Vector total;
 
 	alignBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		total.add(neighbouringBoids[i]->velocity);
+		total.add(boidNeighbourList[index][i]->velocity);
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -735,7 +765,7 @@ Vector Boid::separate(void) {
 	Vector diff;
 
 	separateBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		diff = Vector::sub(position, neighbouringBoids[i]->position);
+		diff = Vector::sub(position, boidNeighbourList[index][i]->position);
 		diff.normalise();
 		total.add(diff);
 	}
@@ -753,7 +783,7 @@ Vector Boid::cohesion(void) {
 	Vector steer;
 
 	coheseBoidLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-		total.add(neighbouringBoids[i]->position);
+		total.add(boidNeighbourList[index][i]->position);
 	}
 
 	total.div(neighbouringBoidsCount);
@@ -784,6 +814,10 @@ void Boid::contain() {
 	} else if(position.y < 0) {
 		position.y = AREA_HEIGHT;
 	}
+}
+
+void Boid::setNeighbourCount(int n) {
+	neighbouringBoidsCount = (uint8)n;
 }
 
 //Vector Boid::getVelocity() {
@@ -934,9 +968,3 @@ bool Vector::empty() {
 
 	return result;
 }
-
-// Other ///////////////////////////////////////////////////////////////////////
-//std::ostream& operator <<(std::ostream& os, const Vector& v) {
-//	os << "[" << v.x << ", " << v.y << ", " << v.z << "]";
-//	return os;
-//}
