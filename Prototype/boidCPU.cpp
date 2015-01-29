@@ -1,7 +1,7 @@
 #include "boidCPU.h"
 
 #include <iostream>		// cout
-#include <math.h>       // sqrt
+#include <math.h>       // sqrt, floor
 
 // Function headers
 static void initialisation (void);
@@ -14,6 +14,9 @@ static void moveBoids (void);
 static void updateDisplay (void);
 
 void transmitBoid(Boid boid, uint8 recipientID);
+
+void sendBoidsToNeighbours(void);
+void processNeighbouringBoids(void);
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 void printCommand(bool send, uint32 *data);
@@ -76,6 +79,8 @@ bool outputAvailable = false;		// True if there is output ready to send
  * FIXME: When specifying stop at time step 100, it stops at time step 104...
  * TODO: Random generator needs random seeds - FPGA clock?
  * TODO: Try and programmatically calculate the length of the commands
+ *
+ * TODO: Split data that is too long over multiple packets
  */
 
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
@@ -124,13 +129,13 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 					simulationSetup();
 					break;
 				case MODE_CALC_NBRS:
-					findNeighbours();
+					sendBoidsToNeighbours();
 					break;
 				case CMD_NBR_REQUEST:
 		//				sendBoidsToNeighbour();
 					break;
 				case CMD_NBR_REPLY:
-		//				processNeighbouringBoids();
+					processNeighbouringBoids();
 					break;
 				case MODE_POS_BOIDS:
 					calcNextBoidPositions();
@@ -273,6 +278,56 @@ void simulationSetup() {
 	}
 }
 
+/**
+ * Send this BoidCPU's boids to its neighbouring BoidCPUs so they can use them
+ * in calculating neighbours for their boids. Splits the data to be sent into
+ * multiple messages if it exceeds the maximum command data size.
+ */
+void sendBoidsToNeighbours() {
+	std::cout << "-Sending boids to neighbouring BoidCPUs..." << std::endl;
+
+	// First, calculate how many messages need to be sent
+	// '+1' needed due to integer division rounding towards zero
+	int noOfMsgs = ((boidCount * BOID_DATA_LENGTH) / MAX_CMD_BODY_LEN) + 1;
+
+	// Then calculate the number of boids that can be sent per message
+	int boidsPerMsg = MAX_CMD_BODY_LEN / BOID_DATA_LENGTH;
+
+	// Next, send a message for each group of boids
+	for (int i = 0; i < noOfMsgs; i++) {
+		// Determine the boid indexes for this message
+		int startBoidIndex 	= i * boidsPerMsg;
+		int endBoidIndex 	= startBoidIndex + boidsPerMsg;
+
+		// Limit the end index if the message won't be full
+		if (endBoidIndex > boidCount) {
+			endBoidIndex = boidCount;
+		}
+
+		// The next step is to create the message data
+		for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
+			outputBody[(k * BOID_DATA_LENGTH) + 0] = boids[j].id;
+			outputBody[(k * BOID_DATA_LENGTH) + 1] = boids[j].position.x;
+			outputBody[(k * BOID_DATA_LENGTH) + 2] = boids[j].position.y;
+			outputBody[(k * BOID_DATA_LENGTH) + 3] = boids[j].position.z;
+			outputBody[(k * BOID_DATA_LENGTH) + 4] = boids[j].velocity.x;
+			outputBody[(k * BOID_DATA_LENGTH) + 5] = boids[j].velocity.y;
+			outputBody[(k * BOID_DATA_LENGTH) + 6] = boids[j].velocity.z;
+		}
+
+		// Finally send the message to each neighbour
+		// TODO: Buffer the messages
+		for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+			int dataLength = ((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH;
+			generateOutput(dataLength, neighbouringBoidCPUs[i], CMD_NBR_REPLY, outputBody);
+		}
+	}
+}
+
+void processNeighbouringBoids() {
+
+}
+
 void findNeighbours() {
 	std::cout << "-Finding neighbouring boids..." << std::endl;
 
@@ -308,13 +363,18 @@ void findNeighbours() {
 		possibleNeighbourCount++;
 	}
 
-	// Add the boids from the neighbouring BoidCPUs to the possible neighbour list
+	// Ask the neighbouring
 	getOthersAsNbrsLoop: for (int i = boidCount; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-//		if (neighbouringBoidCPUs[i] != 0) {
+		if (neighbouringBoidCPUs[i] != 0) {
 			// TODO: Get boids from neighbouring BoidCPUs
+
+
+			generateOutput(0, neighbouringBoidCPUs[i], CMD_NBR_REQUEST, outputBody);
+			// 4, [neighbourID], [RANDOM ID], 7 ||
+
 			// possibleNeighbouringBoids[] =
 			// possibleNeighbourCount++;
-//		}
+		}
 	}
 
 	// Calculate the neighbours for each boid
@@ -438,8 +498,6 @@ void moveBoids() {
 
 		if (recipientBoidCPU > 0) {
 			transmitBoid(boidToTransfer, recipientBoidCPU);
-			std::cout << "-Transferring boid #" << boidToTransfer.id <<
-				" to boidCPU #" << recipientBoidCPU << std::endl;
 		}
 	}
 
@@ -506,7 +564,6 @@ void receive() {
 
 // Take a copy of the boid, not the actual one
 void transmitBoid(Boid boid, uint8 recipientID) {
-
 	// TODO: Perhaps move this to the boid class?
 	outputBody[0] = boid.id;
 	outputBody[1] = boid.position.x;
@@ -530,6 +587,9 @@ void transmitBoid(Boid boid, uint8 recipientID) {
 		}
 	}
 	boidCount--;
+
+	std::cout << "-Transferring boid #" << boid.id << " to boidCPU #" <<
+		recipientID << std::endl;
 }
 
 void acceptBoid(uint32 *boidData) {
@@ -563,16 +623,16 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
  */
 void printCommand(bool send, uint32 *data) {
 	if(send) {
-		if(data[CMD_TO] == CMD_BROADCAST) {
+		if(data[CMD_TO] == CONTROLLER_ID) {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
 		} else {
-			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << outputData[CMD_TO] << ": ";
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << data[CMD_TO] << ": ";
 		}
 	} else {
-		if(data[CMD_TO] == CMD_BROADCAST) {
+		if(data[CMD_FROM] == CONTROLLER_ID) {
 			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from controller: ";
 		} else {
-			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << outputData[CMD_FROM] << ": ";
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << data[CMD_FROM] << ": ";
 		}
 	}
 
@@ -620,7 +680,7 @@ void printCommand(bool send, uint32 *data) {
 			std::cout << "send boids to BoidGPU";
 			break;
 		case CMD_DRAW_INFO:
-			std::cout << "boid info heading to BoidCPU";
+			std::cout << "boid info heading to BoidGPU";
 			break;
 		case CMD_KILL:
 			std::cout << "kill simulation";
@@ -696,7 +756,7 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int _index)
 	neighbouringBoidsCount = 0;
 
 	std::cout << "Created boid #" << id << std::endl;
-	printBoidInfo();
+//	printBoidInfo();
 }
 
 // TODO: Will need to make a copy of the neighbours rather than a reference so
@@ -841,10 +901,10 @@ void Boid::setNeighbourCount(int n) {
 //}
 
 void Boid::printBoidInfo() {
-//	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
-//	std::cout << "Boid Position: [" << position.x << " " << position.y << " " << position.z << "]" << std::endl;
-//	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << " " << velocity.z << "]" << std::endl;
-//	std::cout << "===================================" << std::endl;
+	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
+	std::cout << "Boid Position: [" << position.x << " " << position.y << " " << position.z << "]" << std::endl;
+	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << " " << velocity.z << "]" << std::endl;
+	std::cout << "===================================" << std::endl;
 }
 
 //==============================================================================
