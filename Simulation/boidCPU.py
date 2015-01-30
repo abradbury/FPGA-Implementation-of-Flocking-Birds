@@ -72,10 +72,10 @@ class BoidCPU:
                 velocity = np.array([velX, velY], dtype = self.config['dataType'])
 
                 # Specify the boid's ID
-                BOID_ID = ((self.BOIDCPU_ID - 1) * self.boidCount) + i + 1
+                boid_id = ((self.BOIDCPU_ID - 1) * self.boidCount) + i + 1
 
                 # Create the boid and add to boid list
-                boid = Boid(self.boidGPU, self, BOID_ID, position, velocity, self.colour, False)
+                boid = Boid(self.boidGPU, self, boid_id, position, velocity, self.colour, False)
                 self.boids.append(boid)
 
         self.logger.info("Created BoidCPU #" + str(self.BOIDCPU_ID) + " with " + 
@@ -119,7 +119,7 @@ class BoidCPU:
 
         # Calculate the neighbouring boids for each boid
         for boid in self.boids:
-            boid.calculateNeighbours(self.possibleNeighbouringBoids)
+            boid.calculate_neighbours(self.possibleNeighbouringBoids)
 
 
     # Used to return the state of the initial setup of the boids for testing purposes
@@ -127,7 +127,7 @@ class BoidCPU:
         self.savedState = []
 
         for boid in self.boids:
-            boidState = [boid.BOID_ID, boid.position.tolist(), boid.velocity.tolist()]
+            boidState = [boid.boid_id, boid.position.tolist(), boid.velocity.tolist()]
             self.savedState.append(boidState)
 
         # print self.savedState
@@ -141,49 +141,49 @@ class BoidCPU:
     def determineBoidTransfer(self, boid):
         # If the boidCPU has a neighbour to the NORTHWEST and the boid is beyond its northern AND western boundaries
         if (self.neighbouringBoidCPUs[0] != 0) and (boid.position[1] < self.boidCPUCoords[1]) and (boid.position[0] < self.boidCPUCoords[0]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the NORTH and WESTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[0])
 
         # If the boidCPU has a neighbour to the NORTHEAST and the boid is beyond its northern AND eastern boundaries
         elif (self.neighbouringBoidCPUs[2] != 0) and (boid.position[1] < self.boidCPUCoords[1]) and (boid.position[0] > self.boidCPUCoords[2]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the NORTH and EASTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[2])
 
         # If the boidCPU has a neighbour to the SOUTHEAST and the boid is beyond its southern AND eastern boundaries
         elif (self.neighbouringBoidCPUs[4] != 0) and (boid.position[1] > self.boidCPUCoords[3]) and (boid.position[0] > self.boidCPUCoords[2]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the SOUTHERN and EASTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[4])
 
         # If the boidCPU has a neighbour to the SOUTHWEST and the boid is beyond its southern AND western boundaries
         elif (self.neighbouringBoidCPUs[6] != 0) and (boid.position[1] > self.boidCPUCoords[3]) and (boid.position[0] < self.boidCPUCoords[0]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the SOUTHERN and WESTERN boundaries of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[6])
 
         # If the boidCPU has a neighbour to the NORTH and the boid is beyond its northern boundary
         elif (self.neighbouringBoidCPUs[1] != 0) and (boid.position[1] < self.boidCPUCoords[1]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the NORTH boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[1])
 
         # If the boidCPU has a neighbour to the EAST and the boid is beyond its eastern boundary
         elif (self.neighbouringBoidCPUs[3] != 0) and (boid.position[0] > self.boidCPUCoords[2]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the EAST boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[3])  
             
         # If the boidCPU has a neighbour to the SOUTH and the boid is beyond its southern boundary
         elif (self.neighbouringBoidCPUs[5] != 0) and (boid.position[1] > self.boidCPUCoords[3]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the SOUTH boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[5])
 
         # If the boidCPU has a neighbour to the WEST and the boid is beyond its western boundary
         elif (self.neighbouringBoidCPUs[7] != 0) and (boid.position[0] < self.boidCPUCoords[0]):
-            self.logger.debug("\tBoid " + str(boid.BOID_ID) + 
+            self.logger.debug("\tBoid " + str(boid.boid_id) + 
                 " is beyond the WEST boundary of boidCPU " + str(self.BOIDCPU_ID))
             self.transferBoid(boid, self.neighbouringBoidCPUs[7])
 
@@ -195,19 +195,19 @@ class BoidCPU:
         self.boids.append(boid)
         self.boidCount += 1
 
-        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " accepted boid " + str(boid.BOID_ID) 
+        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " accepted boid " + str(boid.boid_id) 
             + " from boidCPU " + str(fromID) + " and now has " + str(self.boidCount) + " boids")
 
 
     # Transfer a boid from this boidCPU to another boidCPU
     def transferBoid(self, boid, toID):
-        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " sent boid " + str(boid.BOID_ID) + 
+        self.logger.debug("\tBoidCPU " + str(self.BOIDCPU_ID) + " sent boid " + str(boid.boid_id) + 
             " to boidCPU " + str(toID) + " and now has " + str(self.boidCount - 1) + " boids")
 
         self.simulation.transferBoid(boid, toID, self.BOIDCPU_ID)
 
         # Remove the transfered boid from the current BoidCPUs boid list
-        self.boids[:] = [b for b in self.boids if b.BOID_ID != boid.BOID_ID]
+        self.boids[:] = [b for b in self.boids if b.boid_id != boid.boid_id]
         self.boidCount -= 1
 
 

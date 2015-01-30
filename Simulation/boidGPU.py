@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+# To ignore numpy errors and docstrings:
+#     pylint: disable=E1101
+#     pylint: disable=C0111
 
 from Tkinter import *               # Used to draw shapes for the simulation
 import ttk                          # Used for the tabs
@@ -13,7 +16,7 @@ import matplotlib.pyplot as plt     # Used to plot the graphs
 from matplotlib.figure import Figure
 
 # Handles all the simulation's graphic components and output
-class BoidGPU:
+class BoidGPU(object):
 
     def __init__(self, _simulation):
         # Link back to simulation
@@ -27,151 +30,154 @@ class BoidGPU:
         self.root.wm_title("Boid Simulation")
 
         # Row counter
-        r = 1
+        row = 1
 
         # Create the master frame for the window
-        master = Frame(self.root, name = "master")
-        master.pack(fill = BOTH)
+        master = Frame(self.root, name="master")
+        master.pack(fill=BOTH)
 
         # Notebook tabs ---------------------------------------------------------------------------#
         # Create the tabs/notebook
-        self.notebook = ttk.Notebook(master, name = "notebook")
+        self.notebook = ttk.Notebook(master, name="notebook")
         # self.notebook.enable_traversal()
-        self.notebook.pack(fill = BOTH)
+        self.notebook.pack(fill=BOTH)
 
         # Add the simulation frame to the notebook
-        frame = Frame(self.notebook, name = 'simulation')
-        frame.grid(row = r, rowspan = 20, column = 3)
-        self.notebook.add(frame, text = "Simulation")
+        frame = Frame(self.notebook, name='simulation')
+        frame.grid(row=row, rowspan=20, column=3)
+        self.notebook.add(frame, text="Simulation")
 
         # Add the graph frame to the notebook
-        self.graphFrame = Frame(self.notebook, name = 'graphs')
-        self.notebook.add(self.graphFrame, text = "BoidCPU Timing")
+        self.graph_frame = Frame(self.notebook, name='graphs')
+        self.notebook.add(self.graph_frame, text="BoidCPU Timing")
 
         # Add the graph frame to the notebook
-        self.graph2Frame = Frame(self.notebook, name = 'graphs2')
-        self.notebook.add(self.graph2Frame, text = "Overloaded BoidCPUs")
+        self.graph_frame_b = Frame(self.notebook, name='graphs2')
+        self.notebook.add(self.graph_frame_b, text="Overloaded BoidCPUs")
 
         # Add the graph frame to the notebook
-        self.graph3Frame = Frame(self.notebook, name = 'graphs3')
-        self.notebook.add(self.graph3Frame, text = "Timings")
+        self.graph_frame_c = Frame(self.notebook, name='graphs3')
+        self.notebook.add(self.graph_frame_c, text="Timings")
 
         # Setup the simulation area ---------------------------------------------------------------#
-        self.canvas = Canvas(frame, bg = "black", width = self.config['width'], 
-        height = self.config['height'])
-        self.canvas.grid(row = r, rowspan = 20, column = 3);
-        
+        self.canvas = Canvas(frame, bg="black", width=self.config['width'], \
+            height=self.config['height'])
+        self.canvas.grid(row=row, rowspan=20, column=3)
+
         # Place the title
-        self.title = Label(frame, text = "Flocking Boid Simulator", font = "Helvetica 16 bold underline")
-        self.title.grid(row = r, column = 1, columnspan = 2)
+        self.title = Label(frame, text="Flocking Boid Simulator", \
+            font="Helvetica 16 bold underline")
+        self.title.grid(row=row, column=1, columnspan=2)
 
         # Simulation buttons ----------------------------------------------------------------------#
-        r += 1
-        self.timeButton = Button(frame, text = "Next Time Step", 
-            command = self.simulation.nextStepButton)
-        self.timeButton.grid(row = r, column = 1, columnspan = 2)
+        row += 1
+        self.time_button = Button(frame, text="Next Time Step", \
+            command=self.simulation.nextStepButton)
+        self.time_button.grid(row=row, column=1, columnspan=2)
 
-        r += 1
-        self.pauseButton = Button(frame, text = "Begin Simulation", command = self.simulation.pause)
-        self.pauseButton.grid(row = r, column = 1, columnspan = 2)
+        row += 1
+        self.pause_button = Button(frame, text="Begin Simulation", command=self.simulation.pause)
+        self.pause_button.grid(row=row, column=1, columnspan=2)
 
-        r += 1
-        self.graphButton = Button(frame, text = "Update Graphs", 
-            command = self.updateGraphs)
-        self.graphButton.grid(row = r, column  = 1, columnspan = 2)
+        row += 1
+        self.graph_button = Button(frame, text="Update Graphs", command=self.updateGraphs)
+        self.graph_button.grid(row=row, column=1, columnspan=2)
 
         # Boid sliders ----------------------------------------------------------------------------#
         # Create the boid rule weighting sliders
-        r += 1
-        self.heading1 = Label(frame, text = "Boid Rule Weightings", font = "Helvetica 14 bold underline")
-        self.heading1.grid(row = r, column = 1, columnspan = 2)
+        row += 1
+        self.heading1 = Label(frame, text="Boid Rule Weightings", \
+            font="Helvetica 14 bold underline")
+        self.heading1.grid(row=row, column=1, columnspan=2)
 
-        minRuleValue = 1
-        maxRuleValue = 5
+        min_rule_val = 1
+        max_rule_val = 5
         resolution = 0.1
 
-        r += 1
-        self.alignmentLabel = Label(frame, text = "Alignment: ")
-        self.alignmentLabel.grid(row = r, column = 1, sticky = E)
-        self.alignmentScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
-            HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidAlignment)
-        self.alignmentScale.grid(row = r, column = 2, sticky = W)
-        self.alignmentScale.set(self.config['ALIGNMENT_WEIGHT'])
+        row += 1
+        self.alignment_label = Label(frame, text="Alignment: ")
+        self.alignment_label.grid(row=row, column=1, sticky=E)
+        self.alignment_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
+            HORIZONTAL, resolution=resolution, command=self.simulation.changeBoidAlignment)
+        self.alignment_scale.grid(row=row, column=2, sticky=W)
+        self.alignment_scale.set(self.config['ALIGNMENT_WEIGHT'])
 
-        r += 1
-        self.cohesionLabel = Label(frame, text = "Cohesion: ")
-        self.cohesionLabel.grid(row = r, column = 1, sticky = E)
-        self.cohesionScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
-            HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidCohesion)
-        self.cohesionScale.grid(row = r, column = 2, sticky = W)
-        self.cohesionScale.set(self.config['COHESION_WEIGHT'])
+        row += 1
+        self.cohesion_label = Label(frame, text="Cohesion: ")
+        self.cohesion_label.grid(row=row, column=1, sticky=E)
+        self.cohesion_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
+            HORIZONTAL, resolution=resolution, command=self.simulation.changeBoidCohesion)
+        self.cohesion_scale.grid(row=row, column=2, sticky=W)
+        self.cohesion_scale.set(self.config['COHESION_WEIGHT'])
 
-        r += 1
-        self.separationLabel = Label(frame, text = "Separation: ")
-        self.separationLabel.grid(row = r, column = 1, sticky = E)
-        self.separationScale = Scale(frame, from_ = minRuleValue, to = maxRuleValue, orient = 
-            HORIZONTAL, resolution = resolution, command = self.simulation.changeBoidSeparation)
-        self.separationScale.grid(row = r, column = 2, sticky = W)
-        self.separationScale.set(self.config['REPULSION_WEIGHT'])
+        row += 1
+        self.separation_label = Label(frame, text="Separation: ")
+        self.separation_label.grid(row=row, column=1, sticky=E)
+        self.separation_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
+            HORIZONTAL, resolution=resolution, command=self.simulation.changeBoidSeparation)
+        self.separation_scale.grid(row=row, column=2, sticky=W)
+        self.separation_scale.set(self.config['REPULSION_WEIGHT'])
 
         # Other boid parameters -------------------------------------------------------------------#
-        r += 1
-        self.heading1 = Label(frame, text = "Other Boid Parameters", font = "Helvetica 14 bold underline")
-        self.heading1.grid(row = r, column = 1, columnspan = 2)
+        row += 1
+        self.heading1 = Label(frame, text="Other Boid Parameters", \
+            font="Helvetica 14 bold underline")
+        self.heading1.grid(row=row, column=1, columnspan=2)
 
-        r += 1
-        minVisionRadius = 10
-        maxVisionRadius = 200
+        row += 1
+        min_vision_radius = 10
+        max_vision_radius = 200
         resolution = self.config['stepSize']
-        self.visionRadiusLabel = Label(frame, text = "Vision Radius: ")
-        self.visionRadiusLabel.grid(row = r, column = 1, sticky = E)
-        self.visionRadius = Scale(frame, from_ = minVisionRadius, to = maxVisionRadius, orient = 
-            HORIZONTAL, resolution = resolution, command = self.simulation.changeVisionRadius)
-        self.visionRadius.grid(row = r, column = 2, sticky = W)
-        self.visionRadius.set(self.config['VISION_RADIUS'])
+        self.vision_radius_label = Label(frame, text="Vision Radius: ")
+        self.vision_radius_label.grid(row=row, column=1, sticky=E)
+        self.vision_radius = Scale(frame, from_=min_vision_radius, to=max_vision_radius, orient=\
+            HORIZONTAL, resolution=resolution, command=self.simulation.changeVisionRadius)
+        self.vision_radius.grid(row=row, column=2, sticky=W)
+        self.vision_radius.set(self.config['VISION_RADIUS'])
 
-        r += 1
-        minVelocity = 1
-        maxVelocity = 100
-        self.maxVelocityLabel = Label(frame, text = "Max Velocity: ")
-        self.maxVelocityLabel.grid(row = r, column = 1, sticky = E)
-        self.maxVelocityScale = Scale(frame, from_ = minVelocity, to = maxVelocity, orient = 
-            HORIZONTAL, command = self.simulation.changeMaxVelocity)
-        self.maxVelocityScale.grid(row = r, column = 2, sticky = W)
-        self.maxVelocityScale.set(self.config['MAX_VELOCITY'])
+        row += 1
+        min_velocity = 1
+        max_velocity = 100
+        self.max_velocity_label = Label(frame, text="Max Velocity: ")
+        self.max_velocity_label.grid(row=row, column=1, sticky=E)
+        self.max_velocity_scale = Scale(frame, from_=min_velocity, to=max_velocity, orient=\
+            HORIZONTAL, command=self.simulation.changeMaxVelocity)
+        self.max_velocity_scale.grid(row=row, column=2, sticky=W)
+        self.max_velocity_scale.set(self.config['MAX_VELOCITY'])
 
-        r += 1
-        minForce = 0
-        maxForce = 2
+        row += 1
+        min_force = 0
+        max_force = 2
         resolution = 0.01
-        self.maxForceLabel = Label(frame, text = "Max Force: ")
-        self.maxForceLabel.grid(row = r, column = 1, sticky = E)
-        self.maxForceScale = Scale(frame, from_ = minForce, to = maxForce, orient = 
-            HORIZONTAL, resolution = resolution, command = self.simulation.changeMaxForce)
-        self.maxForceScale.grid(row = r, column = 2, sticky = W)
-        self.maxForceScale.set(self.config['MAX_FORCE'])
+        self.max_force_label = Label(frame, text="Max Force: ")
+        self.max_force_label.grid(row=row, column=1, sticky=E)
+        self.max_force_scale = Scale(frame, from_=min_force, to=max_force, orient=\
+            HORIZONTAL, resolution=resolution, command=self.simulation.changeMaxForce)
+        self.max_force_scale.grid(row=row, column=2, sticky=W)
+        self.max_force_scale.set(self.config['MAX_FORCE'])
 
-        r += 1
-        self.trackBoidLabel = Label(frame, text = "Track Boid: ")
-        self.trackBoidLabel.grid(row = r, column = 1, sticky = E)
-        self.trackBoidCheck = Checkbutton(frame, onvalue = True, offvalue = False, command = self.simulation.toggleTrackBoid)
-        self.trackBoidCheck.grid(row = r, column = 2, sticky = W)
+        row += 1
+        self.track_boid_label = Label(frame, text="Track Boid: ")
+        self.track_boid_label.grid(row=row, column=1, sticky=E)
+        self.track_boid_check = Checkbutton(frame, onvalue=True, offvalue=False, \
+            command=self.simulation.toggleTrackBoid)
+        self.track_boid_check.grid(row=row, column=2, sticky=W)
         if self.config['trackBoid']:
-            self.trackBoidCheck.select()
+            self.track_boid_check.select()
         else:
-            self.trackBoidCheck.deselect()
+            self.track_boid_check.deselect()
 
         # Add the time step counter
-        r += 1
-        self.counterLabel = Label(frame, text = "Time step: ")
-        self.counterLabel.grid(row = 19, column = 1, sticky = E)
-        self.counter = Label(frame, text = 0, width = 6)
-        self.counter.grid(row = 19, column = 2, sticky = W)
+        row += 1
+        self.counter_label = Label(frame, text="Time step: ")
+        self.counter_label.grid(row=19, column=1, sticky=E)
+        self.counter = Label(frame, text=0, width=6)
+        self.counter.grid(row=19, column=2, sticky=W)
 
         # And finally add the quit button
-        r += 1
-        self.quitButton = Button(frame, text = "Quit", command = frame.quit)
-        self.quitButton.grid(row = 20, column = 1, columnspan = 2)
+        row += 1
+        self.quit_button = Button(frame, text="Quit", command=frame.quit)
+        self.quit_button.grid(row=20, column=1, columnspan=2)
 
         # Needed so that the canvas sizes can be used later
         self.root.update()
@@ -181,15 +187,15 @@ class BoidGPU:
     ## User Input Functions ----------------------------------------------------------------------##
     ################################################################################################
 
-    def updateTimeStepLabel(self, newTimeStep):
-        self.counter.config(text = newTimeStep)
+    def updateTimeStepLabel(self, new_time_step):
+        self.counter.config(text=new_time_step)
 
 
     def togglePauseButton(self, resume):
         if resume:
-            self.pauseButton.config(text = "Pause Simulation")
+            self.pause_button.config(text="Pause Simulation")
         else:
-            self.pauseButton.config(text = "Resume Simulation")
+            self.pause_button.config(text="Resume Simulation")
 
 
     ################################################################################################
@@ -202,35 +208,35 @@ class BoidGPU:
 
 
     # Creates a boidCPU object and draws on the screen
-    def drawBoidCPU(self, coords, locID, colour):
-        self.canvas.create_rectangle(coords[0], coords[1], coords[2], coords[3], outline = colour, 
-            tags = "L" + str(locID))
+    def drawBoidCPU(self, coords, boid_cpu_id, colour):
+        self.canvas.create_rectangle(coords[0], coords[1], coords[2], coords[3], outline=colour, \
+            tags="L" + str(boid_cpu_id))
 
         # Show BoidCPU IDs
         if self.config["showBoidIds"]:
-            xPos = coords[0] + ((coords[2] - coords[0]) / 2)
-            yPos = coords[1] + ((coords[3] - coords[1]) / 2)
-            self.canvas.create_text(xPos, yPos, fill = "white", text = str(locID), 
-                tags = ("TL" + str(locID)))
+            x_pos = coords[0] + ((coords[2] - coords[0]) / 2)
+            y_pos = coords[1] + ((coords[3] - coords[1]) / 2)
+            self.canvas.create_text(x_pos, y_pos, fill="white", text=str(boid_cpu_id), \
+                tags=("TL" + str(boid_cpu_id)))
 
 
     # Redraws the bounds of the boidCPU
-    def updateBoidCPU(self, locID, coords):
-        self.canvas.coords("L" + str(locID), coords[0], coords[1], coords[2], coords[3])
+    def updateBoidCPU(self, boid_cpu_id, coords):
+        self.canvas.coords("L" + str(boid_cpu_id), coords[0], coords[1], coords[2], coords[3])
 
         # Update the BoidCPU's ID
         if self.config["showBoidIds"]:
-            xPos = coords[0] + ((coords[2] - coords[0]) / 2)
-            yPos = coords[1] + ((coords[3] - coords[1]) / 2)
-            self.canvas.coords("TL" + str(locID), xPos, yPos)
+            x_pos = coords[0] + ((coords[2] - coords[0]) / 2)
+            y_pos = coords[1] + ((coords[3] - coords[1]) / 2)
+            self.canvas.coords("TL" + str(boid_cpu_id), x_pos, y_pos)
 
 
     def getWindowSize(self):
         return [self.canvas.winfo_width(), self.canvas.winfo_height()]
 
 
-    def selectTab(self, tabID):
-        self.notebook.select(tabID)
+    def selectTab(self, tab_id):
+        self.notebook.select(tab_id)
 
 
     def beginMainLoop(self):
@@ -242,28 +248,29 @@ class BoidGPU:
     ## Boid Update Functions ---------------------------------------------------------------------##
     ################################################################################################
 
-    def createBoid(self, position, velocity, _colour, BOID_ID):
+    def createBoid(self, position, velocity, _colour, boid_id):
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
         # Colour the boid based on their original boidCPU if debugging
         if self.config['colourCode']:
             colour = _colour
-            outlineColour = _colour
-            boidWidth = 2
+            outline_colour = _colour
+            boid_width = 2
         else:
             colour = "red"
-            outlineColour = "white"
-            boidWidth = 1
+            outline_colour = "white"
+            boid_width = 1
 
         # Draw the boid
-        self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], points[5], 
-            points[6], points[7], fill = colour, outline = outlineColour, width = boidWidth, 
-            tags = ("B" + str(BOID_ID)))
+        self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], \
+            points[5], points[6], points[7], fill=colour, outline=outline_colour, \
+            width=boid_width, tags=("B" + str(boid_id)))
 
         # Show boid IDs
         if self.config["showBoidIds"]:
-            self.canvas.create_text(position[0], position[1] - 15, fill = "white", text = str(BOID_ID), tags = ("T" + str(BOID_ID)))
+            self.canvas.create_text(position[0], position[1] - 15, fill="white", \
+                text=str(boid_id), tags=("T" + str(boid_id)))
 
 
     def nextSimulationStep(self, milliseconds):
@@ -272,23 +279,23 @@ class BoidGPU:
 
     # Calculate the posisitions of the boid polygon points
     def calcBoidPoints(self, position):
-        stepSize = 6
+        step_size = 6
         points = []
 
-        points.append(position[0] - stepSize)
-        points.append(position[1] - stepSize)
+        points.append(position[0] - step_size)
+        points.append(position[1] - step_size)
         points.append(position[0])
-        points.append(position[1] + stepSize)
-        points.append(position[0] + stepSize)
-        points.append(position[1] - stepSize)
+        points.append(position[1] + step_size)
+        points.append(position[0] + step_size)
+        points.append(position[1] - step_size)
         points.append(position[0])
-        points.append(position[1] - (stepSize/2))
+        points.append(position[1] - (step_size/2))
 
         return points
 
 
     # Move the boid on the screen based on the new velocity and position
-    def updateBoid(self, position, velocity, _colour, BOID_ID):
+    def updateBoid(self, position, velocity, _colour, boid_id):
         points = self.calcBoidPoints(position)
         points = self.rotateBoid(velocity, position, points)
 
@@ -299,20 +306,20 @@ class BoidGPU:
             colour = "red"
 
         # Update boid
-        self.canvas.coords("B" + str(BOID_ID), points[0], points[1], points[2], points[3], points[4], 
-            points[5], points[6], points[7])
-        self.canvas.itemconfig("B" + str(BOID_ID), fill = colour) 
+        self.canvas.coords("B" + str(boid_id), points[0], points[1], points[2], points[3], \
+            points[4], points[5], points[6], points[7])
+        self.canvas.itemconfig("B" + str(boid_id), fill=colour)
 
         # Update the boid's ID
         if self.config["showBoidIds"]:
-            self.canvas.coords("T" + str(BOID_ID), position[0], position[1] - 15)
+            self.canvas.coords("T" + str(boid_id), position[0], position[1] - 15)
 
         # Debugging method - follow a specific boid
-        if self.config['trackBoid'] and (BOID_ID == self.config['boidToTrack']):  
-            self.followBoid(position, BOID_ID)
+        if self.config['trackBoid'] and (boid_id == self.config['boidToTrack']):
+            self.followBoid(position, boid_id)
         # If boidToTrack is 0, track all boids
         elif self.config['trackBoid'] and not self.config['boidToTrack']:
-            self.followBoid(position, BOID_ID)
+            self.followBoid(position, boid_id)
 
 
     # Rotate the specified boid based on its velocity / orientation
@@ -325,14 +332,14 @@ class BoidGPU:
         self.bearing -= radians
         self.bearing = self.bearing % (2 * np.pi)
 
-        def _rot(x, y):
-            # Note: the rotation is done in the opposite fashion from for a right-handed coordinate 
+        def _rot(x_val, y_val):
+            # Note: the rotation is done in the opposite fashion from for a right-handed coordinate
             #   system due to the left-handedness of computer coordinates
-            x -= position[0]
-            y -= position[1]
-            _x = x * np.cos(radians) + y * np.sin(radians)
-            _y = -x * np.sin(radians) + y * np.cos(radians)
-            return _x + position[0], _y + position[1]
+            x_val -= position[0]
+            y_val -= position[1]
+            _x_val = x_val * np.cos(radians) + y_val * np.sin(radians)
+            _y_val = -x_val * np.sin(radians) + y_val * np.cos(radians)
+            return _x_val + position[0], _y_val + position[1]
 
         points[0], points[1] = _rot(points[0], points[1])
         points[2], points[3] = _rot(points[2], points[3])
@@ -342,53 +349,54 @@ class BoidGPU:
         return points
 
 
-    # Follows a boid as it moves around the area. The boid has its vision circle shown and is 
-    # coloured blue. Any neighbouring boid is coloured green. 
-    def followBoid(self, position, BOID_ID):
-        self.canvas.delete(("boidCircle" + str(BOID_ID)))
-        self.canvas.itemconfig("B" + str(BOID_ID), fill = "blue")
+    # Follows a boid as it moves around the area. The boid has its vision circle shown and is
+    # coloured blue. Any neighbouring boid is coloured green.
+    def followBoid(self, position, boid_id):
+        self.canvas.delete(("boidCircle" + str(boid_id)))
+        self.canvas.itemconfig("B" + str(boid_id), fill="blue")
 
-        self.canvas.create_oval(position[0] - self.config['VISION_RADIUS'], 
-            position[1] - self.config['VISION_RADIUS'], position[0] + self.config['VISION_RADIUS'], 
-            position[1] + self.config['VISION_RADIUS'], outline = "yellow", tags = ("boidCircle" + str(BOID_ID)))
+        self.canvas.create_oval(position[0] - self.config['VISION_RADIUS'], \
+            position[1] - self.config['VISION_RADIUS'], position[0] + \
+            self.config['VISION_RADIUS'], position[1] + self.config['VISION_RADIUS'], \
+            outline="yellow", tags=("boidCircle" + str(boid_id)))
 
 
-    # Highlights or de-highlights a specific boid based on the given BOID_ID
-    def highlightBoid(self, on, BOID_ID):
-        if on:
-            self.canvas.itemconfig("B" + str(BOID_ID), fill = "green")
+    # Highlights or de-highlights a specific boid based on the given boid_id
+    def highlightBoid(self, enable, boid_id):
+        if enable:
+            self.canvas.itemconfig("B" + str(boid_id), fill="green")
         else:
-            self.canvas.itemconfig("B" + str(BOID_ID), fill = "red")
+            self.canvas.itemconfig("B" + str(boid_id), fill="red")
 
 
     # Draws or updates a line on the screen, depending on if the tag can be found
-    def drawLine(self, startPoints, endPoints, tag):
+    def drawLine(self, start_points, end_points, tag):
         handle = self.canvas.find_withtag(tag)
 
         if handle:
-            self.canvas.coords(tag, startPoints[0], startPoints[1], endPoints[0], endPoints[1])
+            self.canvas.coords(tag, start_points[0], start_points[1], end_points[0], end_points[1])
         else:
-            self.canvas.create_line([startPoints[0], startPoints[1], endPoints[0], endPoints[1]], 
-                fill = "red", tags = tag)
+            self.canvas.create_line([start_points[0], start_points[1], end_points[0], \
+                end_points[1]], fill="red", tags=tag)
 
 
     def drawCircle(self, centre, radius, tag):
         self.canvas.delete(tag)
         
         self.canvas.create_oval(centre[0] - radius, centre[1] - radius, centre[0] + radius, 
-            centre[1] + radius, outline = "white", fill = "white", tags = tag)
+            centre[1] + radius, outline="white", fill="white", tags=tag)
 
 
-    def drawBoidCPUGrid(self, boidCPUCoords, segmentWidth, segmentHieght):
-        for i in range(segmentWidth):
-            x = boidCPUCoords[0] + (i * self.config['stepSize'])
-            self.canvas.create_line([x, boidCPUCoords[1], x, boidCPUCoords[3]], fill = "green", 
-                tags = "gridLines")
+    def drawBoidCPUGrid(self, boid_cpu_coords, segment_width, segment_height):
+        for i in range(segment_width):
+            x_val = boid_cpu_coords[0] + (i * self.config['stepSize'])
+            self.canvas.create_line([x_val, boid_cpu_coords[1], x_val, boid_cpu_coords[3]], \
+                fill="green", tags="gridLines")
 
-        for i in range(segmentHieght):
-            y = boidCPUCoords[1] + (i * self.config['stepSize'])
-            self.canvas.create_line([boidCPUCoords[0], y, boidCPUCoords[2], y], fill = "green", 
-                tags = "gridLines")
+        for i in range(segment_height):
+            y_val = boid_cpu_coords[1] + (i * self.config['stepSize'])
+            self.canvas.create_line([boid_cpu_coords[0], y_val, boid_cpu_coords[2], y_val], \
+                fill="green", tags="gridLines")
 
 
     def removeObject(self, tag):
@@ -399,14 +407,14 @@ class BoidGPU:
     ## Graphical Functions -----------------------------------------------------------------------##
     ################################################################################################
 
-    def setupGraphs(self, boidCPUCount):
+    def setupGraphs(self, boid_cpu_count):
 
-        self.setupTimingGraphs(boidCPUCount)
-        self.setupOverloadedGraph(boidCPUCount)
-        self.setupOtherGraphs(boidCPUCount)
+        self.setupTimingGraphs(boid_cpu_count)
+        self.setupOverloadedGraph(boid_cpu_count)
+        self.setupOtherGraphs(boid_cpu_count)
 
     # Create the graphs
-    def setupTimingGraphs(self, boidCPUCount):
+    def setupTimingGraphs(self, boid_cpu_count):
         self.yData = []
 
         # Need to hold a list of lines for each graph, surely there must be a better way to do this?
@@ -421,12 +429,12 @@ class BoidGPU:
         self.graphFigure = Figure()
 
         # Add the graph to the UI tab
-        canvas = FigureCanvasTkAgg(self.graphFigure, master = self.graphFrame)
+        canvas = FigureCanvasTkAgg(self.graphFigure, master=self.graph_frame)
         canvas.show()
-        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
+        canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
         # Add the toolbar
-        toolbar = NavigationToolbar2TkAgg(canvas, self.graphFrame)
+        toolbar = NavigationToolbar2TkAgg(canvas, self.graph_frame)
         toolbar.update()
         canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
 
@@ -435,50 +443,50 @@ class BoidGPU:
 
         canvas.mpl_connect('key_press_event', on_key_event)
 
-        for i in range(0, boidCPUCount):
+        for i in range(0, boid_cpu_count):
             # Create the subplots and sync the axes
             if i != 0:
-                axis = self.graphFigure.add_subplot(3, 3, i + 1, sharex = self.axes[0], 
-                    sharey = self.axes[0])
+                axis = self.graphFigure.add_subplot(3, 3, i + 1, sharex=self.axes[0], \
+                    sharey=self.axes[0])
             else:
                 axis = self.graphFigure.add_subplot(3, 3, i + 1)
 
             axis.set_title("BoidCPU #%d" % (i + 1))
             axis.grid(True)
-            
+
             # Setup the first y axis
-            for tl in axis.get_yticklabels():
-                tl.set_color('b')
-    
+            for tick_label in axis.get_yticklabels():
+                tick_label.set_color('b')
+
             # Setup the second y axis
             axis2 = axis.twinx()
-            for tl in axis2.get_yticklabels():
-                tl.set_color('r')
+            for tick_label in axis2.get_yticklabels():
+                tick_label.set_color('r')
             axis2.set_ylim([0, self.config['boidCount']])
 
             # Plot each line, returns a list of lines - the comma is needed
-            # If the x data set is not specified, it is assumed to be the number 
+            # If the x data set is not specified, it is assumed to be the number
             # of element contained in the y data set - which is fine here.
-            line1, = axis.plot(self.yData, color = 'b')
-            line2, = axis2.plot(self.yData, color = 'r')
+            line1, = axis.plot(self.yData, color='b')
+            line2, = axis2.plot(self.yData, color='r')
 
             # Add the Andall(sp?) and max boid threshold lines
-            thresholdLine, = axis2.plot([], [], color = 'm')
-            andallLine, = axis2.plot([], [], color = 'g')
-            
+            thresholdLine, = axis2.plot([], [], color='m')
+            andallLine, = axis2.plot([], [], color='g')
+
             # Customise the suplot grid so that axes don't overlap
             if (i % 3) != 0:
-                plt.setp(axis.get_yticklabels(), visible = False)
+                plt.setp(axis.get_yticklabels(), visible=False)
             else:
-                axis.set_ylabel("Computation time, ms", color = 'b')
+                axis.set_ylabel("Computation time, ms", color='b')
 
             if (i % 3) != (3 - 1):
-                plt.setp(axis2.get_yticklabels(), visible = False)
+                plt.setp(axis2.get_yticklabels(), visible=False)
             else:
-                axis2.set_ylabel("Number of boids", color = 'r')
+                axis2.set_ylabel("Number of boids", color='r')
 
             if int(np.floor(i / 3)) != 2:
-                plt.setp(axis.get_xticklabels(), visible = False)
+                plt.setp(axis.get_xticklabels(), visible=False)
             else:
                 axis.set_xlabel("Number of timesteps")
 
@@ -495,9 +503,9 @@ class BoidGPU:
         # Show the subplots in interactive mode (doesn't block)
         plt.ion()
         plt.show()
-        
 
-    def setupOtherGraphs(self, boidCPUCount):
+
+    def setupOtherGraphs(self, boid_cpu_count):
 
 
 
@@ -516,49 +524,49 @@ class BoidGPU:
         self.oaxes = []
         self.oaxes2 = []
 
-        for i in range(0, boidCPUCount):
+        for i in range(0, boid_cpu_count):
             # Create the subplots and sync the axes
             if i != 0:
-                axis = fig.add_subplot(3, 3, i + 1, sharex = self.oaxes[0], sharey = self.oaxes[0])
+                axis = fig.add_subplot(3, 3, i + 1, sharex=self.oaxes[0], sharey=self.oaxes[0])
             else:
                 axis = fig.add_subplot(3, 3, i + 1)
 
             axis.set_title("BoidCPU #%d" % (i + 1))
             axis.grid(True)
-            
+
             # Setup the first y axis
-            for tl in axis.get_yticklabels():
-                tl.set_color('b')
-    
+            for tick_label in axis.get_yticklabels():
+                tick_label.set_color('b')
+
             # Setup the second y axis
             axis2 = axis.twinx()
-            for tl in axis2.get_yticklabels():
-                tl.set_color('r')
+            for tick_label in axis2.get_yticklabels():
+                tick_label.set_color('r')
             axis2.set_ylim([0, self.config['boidCount']])
 
             # Plot each line, returns a list of lines - the comma is needed
-            # If the x data set is not specified, it is assumed to be the number 
+            # If the x data set is not specified, it is assumed to be the number
             # of element contained in the y data set - which is fine here.
-            line1, = axis.plot(yData, color = 'b')
-            line2, = axis2.plot(yData, color = 'r')
+            line1, = axis.plot(yData, color='b')
+            line2, = axis2.plot(yData, color='r')
 
             # Add the Andall(sp?) and max boid threshold lines
-            # thresholdLine, = axis2.plot([], [], color = 'm')
-            # andallLine, = axis2.plot([], [], color = 'g')
-            
+            # thresholdLine, = axis2.plot([], [], color='m')
+            # andallLine, = axis2.plot([], [], color='g')
+
             # Customise the suplot grid so that axes don't overlap
             if (i % 3) != 0:
-                plt.setp(axis.get_yticklabels(), visible = False)
+                plt.setp(axis.get_yticklabels(), visible=False)
             else:
-                axis.set_ylabel("Computation time, ms", color = 'b')
+                axis.set_ylabel("Computation time, ms", color='b')
 
             if (i % 3) != (3 - 1):
-                plt.setp(axis2.get_yticklabels(), visible = False)
+                plt.setp(axis2.get_yticklabels(), visible=False)
             else:
-                axis2.set_ylabel("Number of boids", color = 'r')
+                axis2.set_ylabel("Number of boids", color='r')
 
             if int(np.floor(i / 3)) != 2:
-                plt.setp(axis.get_xticklabels(), visible = False)
+                plt.setp(axis.get_xticklabels(), visible=False)
             else:
                 axis.set_xlabel("Number of timesteps")
 
@@ -581,18 +589,18 @@ class BoidGPU:
         # ax.stackplot(x, y)
         # plt.show()
 
-        canvas = FigureCanvasTkAgg(fig, master = self.graph3Frame)
+        canvas = FigureCanvasTkAgg(fig, master=self.graph_frame_c)
         canvas.show()
-        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
+        canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
         # Add the toolbar
-        toolbar = NavigationToolbar2TkAgg(canvas, self.graph3Frame)
+        toolbar = NavigationToolbar2TkAgg(canvas, self.graph_frame_c)
         toolbar.update()
         canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
 
 
     # Create a sumary graph showing the number of boidCPUs exceeding the boid threshold over time
-    def setupOverloadedGraph(self, boidCPUCount):
+    def setupOverloadedGraph(self, boid_cpu_count):
         plt.ion()
 
         self.summaryFigure = Figure()
@@ -601,12 +609,12 @@ class BoidGPU:
         self.summaryAxis.plot([], [])
         self.summaryAxis.fill_between([], 0, [])
 
-        canvas = FigureCanvasTkAgg(self.summaryFigure, master = self.graph2Frame)
+        canvas = FigureCanvasTkAgg(self.summaryFigure, master=self.graph_frame_b)
         canvas.show()
-        canvas.get_tk_widget().pack(side = TOP, fill = BOTH, expand=1)
+        canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
         # Add the toolbar
-        toolbar = NavigationToolbar2TkAgg(canvas, self.graph2Frame)
+        toolbar = NavigationToolbar2TkAgg(canvas, self.graph_frame_b)
         toolbar.update()
         canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
 
@@ -615,8 +623,8 @@ class BoidGPU:
 
         canvas.mpl_connect('key_press_event', on_key_event)
 
-        self.summaryAxis.set_ylim([0, boidCPUCount])
-        
+        self.summaryAxis.set_ylim([0, boid_cpu_count])
+
         self.summaryAxis.set_title("Graph showing number of boidCPUs exceeding the boid threshold")
         self.summaryAxis.grid(True)
 
@@ -626,7 +634,7 @@ class BoidGPU:
         plt.show()
 
 
-    # For each boidCPU, get the graph lines and set the data to the current data  
+    # For each boidCPU, get the graph lines and set the data to the current data
     # plus the new data. Then reformat both axes to accommodate the new data.
     def updateGraphs(self):
 
@@ -635,19 +643,21 @@ class BoidGPU:
             self.lines[i].set_xdata(self.simulation.boidCPUs[i].xData)
             self.lines[i].set_ydata(self.simulation.boidCPUs[i].yData)
 
-            # Update the boidCPU boid count lines. Because the draw routine is called first, but 
-            # not on time step 1, it has one less data element in than the values for the update 
+            # Update the boidCPU boid count lines. Because the draw routine is called first, but
+            # not on time step 1, it has one less data element in than the values for the update
             # stage. Therefore, [0:-1] is used to ignore the last x value.
             self.lines2[i].set_xdata(self.simulation.boidCPUs[i].xData[0:-1])
             self.lines2[i].set_ydata(self.simulation.boidCPUs[i].y2Data)
 
             # Update the Andall (sp?) lines
             self.andallLines[i].set_xdata([0, len(self.simulation.boidCPUs[i].xData)])
-            self.andallLines[i].set_ydata([self.simulation.initialBoidCount, self.simulation.initialBoidCount])
+            self.andallLines[i].set_ydata([self.simulation.initialBoidCount, \
+                self.simulation.initialBoidCount])
 
             # Update the max boid threshold lines
             self.thresholdLines[i].set_xdata([0, len(self.simulation.boidCPUs[i].xData)])
-            self.thresholdLines[i].set_ydata([self.config['BOID_THRESHOLD'], self.config['BOID_THRESHOLD']])
+            self.thresholdLines[i].set_ydata([self.config['BOID_THRESHOLD'], \
+                self.config['BOID_THRESHOLD']])
 
             # Adjust the axes accordingly
             self.axes[i].relim()
@@ -660,7 +670,7 @@ class BoidGPU:
             self.graphFigure.canvas.draw()
 
 
-            
+
             # print len(self.simulation.boidCPUs[i].xData)
             # print len(self.simulation.graphData[i][0])
 
@@ -687,7 +697,8 @@ class BoidGPU:
         # Update summary graph
         self.summaryAxis.lines[0].set_xdata(range(0, self.simulation.timeStepCounter))
         self.summaryAxis.lines[0].set_ydata(self.simulation.violationList)
-        self.summaryAxis.fill_between(range(0, self.simulation.timeStepCounter), 0, self.simulation.violationList)
+        self.summaryAxis.fill_between(range(0, self.simulation.timeStepCounter), 0, \
+            self.simulation.violationList)
 
         self.summaryAxis.relim()
         self.summaryAxis.autoscale_view()
