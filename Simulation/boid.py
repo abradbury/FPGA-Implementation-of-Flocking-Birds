@@ -37,7 +37,7 @@ class Boid(object):
             self.logger.debug("Created boid with ID " + str(self.boid_id))
 
             # Draw the boid
-            self.boid_gpu.createBoid(self.position, self.velocity, _colour, self.boid_id)
+            self.boid_gpu.create_boid(self.position, self.velocity, _colour, self.boid_id)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and
@@ -66,7 +66,7 @@ class Boid(object):
             # If tracking a boid, highlight its neighbouring boids
             if self.config['trackBoid'] and (self.boid_id == self.config['boidToTrack']):
                 for boid in self.neighbouring_boids:
-                    self.boid_gpu.highlightBoid(True, boid.boid_id)
+                    self.boid_gpu.highlight_boid(True, boid.boid_id)
 
             # If the boids has neighbours, calculate its next position
             if len(self.neighbouring_boids) > 0:
@@ -124,7 +124,7 @@ class Boid(object):
 
     # Move the boid to the calculated positon
     def draw(self, colour):
-        self.boid_gpu.updateBoid(self.position, self.velocity, colour, self.boid_id)
+        self.boid_gpu.update_boid(self.position, self.velocity, colour, self.boid_id)
 
         self.processed = False  # Reset the processed flag for the next simulation step
 
@@ -167,6 +167,7 @@ class Boid(object):
         steer = self.limit(steer, self.config['MAX_FORCE'])
 
         return steer
+
 
     # A boid will move towards the centre of mass of its neighbourhood
     def cohesion(self):
@@ -232,28 +233,28 @@ class Boid(object):
         # The closer it is the stronger the repulsion
         # This works much better but when the boids approach head on, the change is quite sudden
         # What about, the smaller the gap between the boid x and ahead x, the greater the x push?
-        # repulsionFactor = 3000
+        # repulsion_factor = 3000
         # if self.position[1] < 0 + self.config['VISION_RADIUS']:
         #     d = self.distance_from_point_to_line([0, 0], [self.config['width'], 0], self.position)
-        #     repulsionForce = repulsionFactor / (d ** 2)
-        #     self.velocity[1] += repulsionForce
+        #     repulsion_force = repulsion_factor / (d ** 2)
+        #     self.velocity[1] += repulsion_force
         # # Bottom edge
         # elif self.position[1] > self.config['width'] - self.config['VISION_RADIUS']:
         #     d = (self.distance_from_point_to_line([0, self.config['width']], \
         #       [self.config['width'], self.config['width']], self.position))
-        #     repulsionForce = repulsionFactor / (d ** 2)
-        #     self.velocity[1] -= repulsionForce
+        #     repulsion_force = repulsion_factor / (d ** 2)
+        #     self.velocity[1] -= repulsion_force
         # # Left edge
         # elif self.position[0] < 0 + self.config['VISION_RADIUS']:
         #     d = self.distance_from_point_to_line([0, 0], [0, self.config['width']], self.position)
-        #     repulsionForce = repulsionFactor / (d ** 2)
-        #     self.velocity[0] += repulsionForce
+        #     repulsion_force = repulsion_factor / (d ** 2)
+        #     self.velocity[0] += repulsion_force
         # # Right edge
         # elif self.position[0] > self.config['width'] - self.config['VISION_RADIUS']:
         #     d = self.distance_from_point_to_line([self.config['width'], 0], \
         #       self.config['width']], self.position)
-        #     repulsionForce = repulsionFactor / (d ** 2)
-        #     self.velocity[0] -= repulsionForce
+        #     repulsion_force = repulsion_factor / (d ** 2)
+        #     self.velocity[0] -= repulsion_force
 
 
     ################################################################################################
