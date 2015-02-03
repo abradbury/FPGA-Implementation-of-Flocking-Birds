@@ -3,56 +3,69 @@
 #include <iostream>		// cout
 #include <math.h>       // sqrt, floor
 
-// Function headers
+// Function headers ============================================================
+// Key function headers --------------------------------------------------------
 static void initialisation (void);
 static void identify (void);
 static void simulationSetup (void);
-static void findNeighbours (void);
 static void calcNextBoidPositions (void);
 static void loadBalance (void);
 static void moveBoids (void);
 static void updateDisplay (void);
 
-void transmitBoid(Boid boid, uint8 recipientID);
-
 void sendBoidsToNeighbours(void);
 void processNeighbouringBoids(void);
 
+// Supporting function headers -------------------------------------------------
+void transmitBoid(Boid boid, uint8 recipientID);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
-void printCommand(bool send, uint32 *data);
-void printStateOfBoidCPUBoids();
 
 int getRandom(int min, int max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
 
-// Define variables
-// TODO: Should these really be global?
+// Debugging function headers --------------------------------------------------
+void printCommand(bool send, uint32 *data);
+void printStateOfBoidCPUBoids();
+
+
+// Global variables ============================================================
+// TODO: Determine which variables should really be global
+// BoidCPU variables ---------------------------------------------------------------
 int8 boidCPUID;
 int8 fpgaID;
-
-// TODO: Try with and without pointers (for synthesising)
-Boid *boidNeighbourList[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
-//Boid *neighbouringBoids[MAX_NEIGHBOURING_BOIDS];
-
-int8 boidCount;
-Boid boids[MAX_BOIDS];		// TODO: Perhaps re-implement as a LL due to deletion
-uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 int12 boidCPUCoords[4];
+
+uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 
 uint32 inputData[MAX_CMD_LEN];
 uint32 outputData[MAX_CMD_LEN];
 uint32 outputBody[30];
+bool outputAvailable = false;		// True if there is output ready to send
 
-// LSFR seed values
-uint16 lfsr16 = 0xF429;	// 16 bit binary (62505)
-uint16 lfsr15 = 0x51D1;	// 15 bit binary (20945)
+// Boid variables --------------------------------------------------------------
+int8 boidCount;
+Boid boids[MAX_BOIDS];		// TODO: Perhaps re-implement as a LL due to deletion
 
+// TODO: Try with and without pointers (for synthesising)
+Boid *boidNeighbourList[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
+
+// A list of possible neighbouring boids for the BoidCPU
+Boid possibleNeighbouringBoids[MAX_NEIGHBOURING_BOIDS];
+uint8 possibleNeighbourCount = 0;
+// True when this BoidCPU has received a boid list from neighbouring BoidCPUs
+bool receivedBoidCPUNbrList[MAX_BOIDCPU_NEIGHBOURS] = { false };
+
+// Supporting variables --------------------------------------------------------
+uint16 lfsr16 = 0xF429;	// LSFR seed - 16 bit binary (62505)
+uint16 lfsr15 = 0x51D1;	// LSFR seed - 15 bit binary (20945)
+
+// Debugging variables ---------------------------------------------------------
 bool singleBoidCPU = false;
 uint16 stopCondition;
 uint16 timeStep = 0;
 
 bool continueOperation = true;
-bool outputAvailable = false;		// True if there is output ready to send
+
 
 /**
  * Fixed-point arithmetic attempt (failed)
@@ -78,8 +91,7 @@ bool outputAvailable = false;		// True if there is output ready to send
 /**
  * FIXME: When specifying stop at time step 100, it stops at time step 104...
  * TODO: Random generator needs random seeds - FPGA clock?
- * TODO: Try and programmatically calculate the length of the commands
- *
+ * TODO: Programmatically calculate the length of the commands
  * TODO: Split data that is too long over multiple packets
  */
 
@@ -117,7 +129,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 		// STATE CHANGE --------------------------------------------------------
 		// TODO: Replace '83' with 'boidCPUID' when deploying
-		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] == boidCPUID) || (inputData[CMD_TO] == 83)) {
+		if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] ==
+				boidCPUID) || (inputData[CMD_TO] == 83)) {
 			switch(inputData[CMD_TYPE]) {
 				case MODE_INIT:
 					initialisation();
@@ -130,9 +143,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 					break;
 				case MODE_CALC_NBRS:
 					sendBoidsToNeighbours();
-					break;
-				case CMD_NBR_REQUEST:
-		//				sendBoidsToNeighbour();
 					break;
 				case CMD_NBR_REPLY:
 					processNeighbouringBoids();
@@ -171,6 +181,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// TODO: Remove when deployed
 		continueOperation = input.read_nb(inputData[0]);
 	}
+	std::cout << "======BoidCPU has finished======" << std::endl;
 }
 
 //==============================================================================
@@ -322,105 +333,75 @@ void sendBoidsToNeighbours() {
 			generateOutput(dataLength, neighbouringBoidCPUs[i], CMD_NBR_REPLY, outputBody);
 		}
 	}
-}
 
-void processNeighbouringBoids() {
-
-}
-
-void findNeighbours() {
-	std::cout << "-Finding neighbouring boids..." << std::endl;
-
-	//--------------------------------------------------------------------------
-	// TODO: Remove this when deployed
-//	boidCount = 10;
-//	boidCPUID = 6;
-//	Vector knownSetup[10][2] = {{Vector(695, 252, 0), Vector(-5, -9, 0)},
-//			{Vector(594, 404, 0), Vector(-10, -1, 0)},
-//			{Vector(550, 350, 0), Vector(-10, -3, 0)},
-//			{Vector(661, 446, 0), Vector(-6, -4, 0)},
-//			{Vector(539, 283, 0), Vector(-8, -2, 0)},
-//			{Vector(551, 256, 0), Vector(-5, 7, 0)},
-//			{Vector(644, 342, 0), Vector(-1, -7, 0)},
-//			{Vector(592, 399, 0), Vector(-9, 6, 0)},
-//			{Vector(644, 252, 0), Vector(-5, -8, 0)},
-//			{Vector(687, 478, 0), Vector(-9, 9, 0)}};
-//
-//	tmpBoidCreationLoop: for(int i = 0; i < boidCount; i++) {
-//		uint8 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-//		Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
-//		boids[i] = boid;
-//	}
-	//--------------------------------------------------------------------------
-
-	// Generate a list of possible neighbouring boids
-	Boid possibleNeighbouringBoids[MAX_NEIGHBOURING_BOIDS];
-	uint8 possibleNeighbourCount = 0;
-
-	// Add the boids of the current BoidCPU to the possible neighbour list
+	// Now, add the BoidCPU's own boids to the possible neighbouring boids list
 	addOwnAsNbrsLoops: for (int i = 0; i < boidCount; i++) {
 		possibleNeighbouringBoids[i] = boids[i];
 		possibleNeighbourCount++;
 	}
+}
 
-	// Ask the neighbouring
-	getOthersAsNbrsLoop: for (int i = boidCount; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-		if (neighbouringBoidCPUs[i] != 0) {
-			// TODO: Get boids from neighbouring BoidCPUs
+/**
+ * When boids are received from neighbouring BoidCPUs, process them and add
+ * them to a list of possible neighbouring boids. These are used to calculate
+ * the neighbours of boids contained within this BoidCPU.
+ */
+void processNeighbouringBoids() {
+	// First, get the number of boids that the message contains
+	int count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
 
+	std::cout << "-BoidCPU #" << boidCPUID << " received " << count <<
+		" boids from BoidCPU #" << inputData[CMD_FROM] << std::endl;
 
-			generateOutput(0, neighbouringBoidCPUs[i], CMD_NBR_REQUEST, outputBody);
-			// 4, [neighbourID], [RANDOM ID], 7 ||
+	// Then, create a boid object for each listed boid and add to the list of
+	// possible neighbouring boids for this BoidCPU
+	for (int i = 0; i < count; i++) {
+		Vector p = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1],
+				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2],
+				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3]);
 
-			// possibleNeighbouringBoids[] =
-			// possibleNeighbourCount++;
-		}
+		Vector v = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4],
+				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 5],
+				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 6]);
+
+		Boid b = Boid((uint16)inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0], p, v, i);
+		possibleNeighbouringBoids[possibleNeighbourCount] = b;
+		possibleNeighbourCount++;
 	}
 
-	// Calculate the neighbours for each boid
-	// TODO: This could be done when calculating each boid's positions as C/C++
-	//	seems to be pass by value - unlike Python
-//	calcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
-//		boids[i].calculateNeighbours(possibleNeighbouringBoids, possibleNeighbourCount);
-//
-//		calculateNeighbours(boids[i], )
-//	}
+	// Then mark the neighbouring BoidCPU as having sent its boids
+	receivedBoidCPUNbrList[inputData[CMD_FROM]] = true;
 
-	// Have the boidCPU calculate and store the neighbours for each of the
-	// boids that it manages
+	// Set a flag if all the neighbouring BoidCPUs have sent their boids
+	// TODO: Could use a counter instead
+	bool allNeighboursReceived = false;
+	for (int i = 0; i < MAX_NEIGHBOURING_BOIDS; i++) {
+		allNeighboursReceived = (allNeighboursReceived && receivedBoidCPUNbrList[i]);
+	}
 
+	// If the flag is true, calculate the neighbours for all the boids
+	// TODO: Try moving the variables outside the loop to see what happens
+	if (allNeighboursReceived) {
+		boidCPUCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
+			int neighbouringBoidsCount = 0;
+			uint16 distance;
 
+			calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
+				if (possibleNeighbouringBoids[i].id != boids[i].id) {
+					distance = Vector::distanceBetween(boids[i].position,
+						possibleNeighbouringBoids[i].position);
 
-	ll: for (int i = 0; i < boidCount; i++) {
-
-		// TODO: Try moving these outside the loop to see what happens
-		int neighbouringBoidsCount = 0;
-		uint16 distance;
-
-		calcBoidNbrsLoopNew: for (int i = 0; i < possibleNeighbourCount; i++) {
-			if (possibleNeighbouringBoids[i].id != boids[i].id) {
-				distance = Vector::distanceBetween(boids[i].position, possibleNeighbouringBoids[i].position);
-				if (distance < VISION_RADIUS) {
-					boidNeighbourList[i][neighbouringBoidsCount] = &possibleNeighbouringBoids[i];
-					neighbouringBoidsCount++;
+					if (distance < VISION_RADIUS) {
+						boidNeighbourList[i][neighbouringBoidsCount] =
+							&possibleNeighbouringBoids[i];
+						neighbouringBoidsCount++;
+					}
 				}
 			}
+
+			boids[i].setNeighbourCount(neighbouringBoidsCount);
 		}
-
-		boids[i].setNeighbourCount(neighbouringBoidsCount);
-
-
 	}
-
-
-
-
-
-
-	// If testing only a single BoidCPU, continue to next stage
-//	if (singleBoidCPU) {
-//		calcNextBoidPositions();
-//	}
 }
 
 void calcNextBoidPositions() {
@@ -430,31 +411,10 @@ void calcNextBoidPositions() {
 		boids[i].update();
 	}
 
-//	// The next positions of the boids, rounded to ints from floats, from Python
-//	Vector knownSetupNextPos[10][2] = {{Vector(691, 244, 0), Vector(-4, -8, 0)},
-//			{Vector(586, 403, 0), Vector(-8, -2, 0)},
-//			{Vector(541, 349, 0), Vector(-9, -2, 0)},
-//			{Vector(655, 444, 0), Vector(-6, -2, 0)},
-//			{Vector(532, 283, 0), Vector(-7, -2, 0)},
-//			{Vector(547, 261, 0), Vector(-4, 5, 0)},
-//			{Vector(642, 337, 0), Vector(-2, -5, 0)},
-//			{Vector(584, 403, 0), Vector(-8, 4, 0)},
-//			{Vector(639, 245, 0), Vector(-5, -7, 0)},
-//			{Vector(680, 485, 0), Vector(-7, 7, 0)}};
-//
-//	for (int i = 0; i < boidCount; i++) {
-//		if (!Vector::equal(boids[i].position, knownSetupNextPos[i][0])) {
-//			std::cout << "Boid #" << boids[i].id << " position differs" << std::endl;
-//			std::cout << "   " << boids[i].position << " vs " << knownSetupNextPos[i][0] << std::endl;
-//		} else {
-//			std::cout << "Boid #" << boids[i].id << " position same" << std::endl;
-//		}
-//	}
-
 	// If testing only a single BoidCPU, continue to next stage
-	if (singleBoidCPU) {
-		moveBoids();
-	}
+//	if (singleBoidCPU) {
+//		moveBoids();
+//	}
 }
 
 void loadBalance() {
@@ -658,9 +618,6 @@ void printCommand(bool send, uint32 *data) {
 		case MODE_CALC_NBRS:
 			std::cout << "calculate neighbours";
 			break;
-		case CMD_NBR_REQUEST:
-			std::cout << "supply boids to neighbour";
-			break;
 		case CMD_NBR_REPLY:
 			std::cout << "neighbouring boids from neighbour";
 			break;
@@ -788,7 +745,7 @@ void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbour
 }
 
 void Boid::update(void) {
-//	std::cout << "Updating boid #" << id << std::endl;
+	std::cout << "Updating boid #" << id << std::endl;
 
 	if(neighbouringBoidsCount > 0) {
 		acceleration.add(separate());

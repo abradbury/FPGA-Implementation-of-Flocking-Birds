@@ -32,7 +32,6 @@
 #define CMD_USER_INFO			4	// Controller -> BoidGPU
 #define CMD_SIM_SETUP			5	// Controller -> Boid[CG]PU
 #define MODE_CALC_NBRS			6	//
-#define CMD_NBR_REQUEST			7	// BoidCPU -> BoidCPU
 #define CMD_NBR_REPLY			8	// BoidCPU -> BoidCPU
 #define MODE_POS_BOIDS			9	//
 #define CMD_LOAD_BAL			10	// TODO: Decide on implementation
