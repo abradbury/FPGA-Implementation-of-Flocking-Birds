@@ -209,8 +209,8 @@ void initialisation() {
 void identify() {
 	outputBody[0] = boidCPUID;
 	outputBody[1] = fpgaID;
-	generateOutput(2, 0, CMD_PING_REPLY, outputBody);
-	// 6, 0, [RANDOM ID], 3 || [RANDOM ID], 123
+	generateOutput(2, CONTROLLER_ID, CMD_PING_REPLY, outputBody);
+	// 6, 1, [RANDOM ID], 3 || [RANDOM ID], 123
 
 	std::cout << "-Responded to ping" << std::endl;
 }
@@ -480,10 +480,10 @@ void updateDisplay() {
 		outputBody[(3 * i) + 2] = boids[i].position.y;
 	}
 
-	generateOutput((3 * boidCount), 0, CMD_DRAW_INFO, outputBody);
-	// [4 + (3 * boidCount)], 0, 6, 13 || [boid information]
+	generateOutput((3 * boidCount), BOIDGPU_ID, CMD_DRAW_INFO, outputBody);
+	// [4 + (3 * boidCount)], 2, 6, 13 || [boid information]
 
-	// Increment the timestep counter
+	// Increment the time step counter
 	timeStep++;
 
 	printStateOfBoidCPUBoids();
@@ -585,13 +585,18 @@ void printCommand(bool send, uint32 *data) {
 	if(send) {
 		if(data[CMD_TO] == CONTROLLER_ID) {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
+		} else if(data[CMD_TO] == BOIDGPU_ID) {
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to BoidGPU: ";
 		} else {
 			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << data[CMD_TO] << ": ";
 		}
 	} else {
 		if(data[CMD_FROM] == CONTROLLER_ID) {
-			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received broadcast from controller: ";
-		} else {
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from controller: ";
+		} else if(data[CMD_FROM] == BOIDGPU_ID) {
+			// This should never happen
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from BoidGPU: ";
+		}  else {
 			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << data[CMD_FROM] << ": ";
 		}
 	}

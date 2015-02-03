@@ -22,7 +22,8 @@
 #define	CMD_TYPE				3	// The index of the command type
 
 #define CMD_BROADCAST			0	// The number for a broadcast command
-#define CONTROLLER_ID			0	// The ID of the controller
+#define CONTROLLER_ID			1	// The ID of the controller
+#define BOIDGPU_ID				2	// The ID of the BoidGPU
 
 #define BOID_DATA_LENGTH		7	// The number of bits to send for a boid
 

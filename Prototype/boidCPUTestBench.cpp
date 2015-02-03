@@ -8,7 +8,7 @@ uint32 tbInputCount = 0;
 
 uint32 data[MAX_CMD_BODY_LEN];
 uint32 to;
-uint32 from = 0;
+uint32 from = CONTROLLER_ID;
 uint32 dataLength = 0;
 
 uint32 coords[EDGE_COUNT];
@@ -139,7 +139,7 @@ int main() {
 
 void testPing() {
 	// Test ping response ----------------------------------------------------//
-	// 4, 0, 0, 2 ||
+	// 4, 0, 1, 2 ||
 	to = CMD_BROADCAST;
 	dataLength = 0;
 	createCommand(dataLength, to, from, CMD_PING, data);
@@ -148,17 +148,17 @@ void testPing() {
 // TODO: Need to send to broadcast during actual testing as random ID unknown
 void testSimulationSetup() {
 	// Test simulation setup ---------------------------------------------------
-	// 18, 83, 0, 5 || 6, 10, 0, 0, 40, 40, 1, 2, 3, 6, 9, 8, 7, 4, [100]
+	// 18, 83, 1, 5 || 7, 10, 0, 0, 40, 40, 3, 4, 5, 8, 11, 10, 9, 6, [100]
 	dataLength = 14;
 	to = 83;			// The current random ID of the test BoidCPU
 
-	uint32 newID = 6;
+	uint32 newID = 7;
 	uint32 initialBoidCount = 10;
 	coords[0] = 0;
 	coords[1] = 0;
 	coords[2] = 40;
 	coords[3] = 40;
-	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {1, 2, 3, 6, 9, 8, 7, 4};
+	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {3, 4, 5, 8, 11, 10, 9, 6};
 
 	data[0] = newID;
 	data[1] = initialBoidCount;
@@ -182,35 +182,35 @@ void testSimulationSetup() {
 }
 
 void testNeighbourSearch() {
-	// 4 0 0 6 ||
+	// 4 0 1 6 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
 	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
 }
 
 void testCalcNextBoidPos() {
-	// 4 0 0 9 ||
+	// 4 0 1 9 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
 	createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
 }
 
 void testLoadBalance() {
-	// 4 0 0 10 ||
+	// 4 0 1 10 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
 	createCommand(dataLength, to, from, CMD_LOAD_BAL, data);
 }
 
 void testMoveBoids() {
-	// 4 0 0 11 ||
+	// 4 0 1 11 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
 	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
 }
 
 void testDrawBoids() {
-	// 4 0 0 14 ||
+	// 4 0 1 14 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
 	createCommand(dataLength, to, from, MODE_DRAW, data);
@@ -326,7 +326,6 @@ void processDrawInfo() {
 
 					std::cout << boidAtPos << std::string(digits, space);
 
-	//				std::cout << boidAtPos;
 					boidAtPos = 0;
 				} else {
 					std::cout << std::string(idDigits + 1, space);
@@ -376,12 +375,18 @@ void tbPrintCommand(bool send, uint32 *data) {
 	if(send) {
 		if(data[CMD_TO] == CMD_BROADCAST) {
 			std::cout << "-> TX, Controller sent broadcast: ";
+		} else if(data[CMD_TO] == BOIDGPU_ID) {
+			std::cout << "-> TX, Controller sent command to BoidGPU: ";
 		} else {
 			std::cout << "-> TX, Controller sent command to " << data[CMD_TO] << ": ";
 		}
 	} else {
 		if(data[CMD_TO] == CMD_BROADCAST) {
+			// This should never happen - BoidCPUs should not be able to broadcast
 			std::cout << "<- RX, Controller received broadcast from " << data[CMD_FROM] << ": ";
+		} else if(data[CMD_FROM] == BOIDGPU_ID) {
+			// This should never happen
+			std::cout << "<- RX, Controller received command from BoidGPU: ";
 		} else {
 			std::cout << "<- RX, Controller received command from " << data[CMD_FROM] << ": ";
 		}
