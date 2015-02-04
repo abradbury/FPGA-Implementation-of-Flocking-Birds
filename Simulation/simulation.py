@@ -32,6 +32,7 @@ import decimal as dec
 # TODO: Change simulation size to 1080p
 # TODO: Experiment with rectangular BoidCPUs
 # TODO: No need to transfer boids if there is only one BoidCPU
+# TODO: Move original graph routines to use new graph_data structure
 
 
 # Load Balancing Types =============================================================================
@@ -78,14 +79,14 @@ class Simulation(object):
         self.config['boidToTrack'] = 2              # The ID of the boid to track, 0 for all boids
 
         # Load balancing parameters
-        self.config['loadBalance'] = False          # True to enable load balancing
-        self.config['loadBalanceType'] = 1          # See notes at top of file
+        self.config['loadBalance'] = True          # True to enable load balancing
+        self.config['loadBalanceType'] = 3          # See notes at top of file
         self.config['BOID_THRESHOLD'] = 30          # The maximum boids a BoidCPU should contain
         self.config['stepSize'] = 20                # The step size to change the boundaries
 
         self.config['percentageToRemove'] = 0.15
         self.config['boidsToRelease'] = self.config['BOID_THRESHOLD'] - \
-        (np.floor(self.config['BOID_THRESHOLD'] * (1 - self.config["percentageToRemove"])))
+            (np.floor(self.config['BOID_THRESHOLD'] * (1 - self.config["percentageToRemove"])))
 
         # Boid movement parameters
         self.config['MAX_VELOCITY'] = 10
@@ -164,8 +165,8 @@ class Simulation(object):
         self.logger.info("Press the 'Begin' button to start the simulation")
 
         # Setup the graphs
-        self.boidgpu.setup_graphs(self.boidcpu_count)
         self.setup_graph_data(4)
+        self.boidgpu.setup_graphs(self.boidcpu_count)
 
         # Print out the state of the boids in the simulation
         # self.save_state()
@@ -222,8 +223,6 @@ class Simulation(object):
         self.graph_data = [[[] for a in range(0, no_of_data_types)] for b in \
             range(0, self.boidcpu_count)]
 
-    # def new_graph_dta(self, bcpuid, dtype):
-        # self.graph_data[bcpuid][dtype]
 
     def update_graph_data(self, bcpuid, dtype, data):
         self.graph_data[bcpuid][dtype].append(data)
@@ -284,21 +283,26 @@ class Simulation(object):
                 data = (end_time - start_time) * 1000
                 boidcpu.y_data[self.time_step_counter] += (data)
                 self.update_graph_data(boidcpu.boidcpu_id - 1, 2, data)
+        else:
+            for boidcpu in self.boidcpus:
+                self.update_graph_data(boidcpu.boidcpu_id - 1, 2, 0)
 
 
     # Determine if the new positions of the boids are outside their BoidCPU, if they are, transfer
     # the boids to neighbouring BoidCPUs
     def transfer_step(self):
         for boidcpu in self.boidcpus:
-            for boid in boidcpu.boids:
-                start_time = time.clock()
-                boidcpu.determine_boid_transfer(boid)
-                end_time = time.clock()
+            start_time = time.clock()
 
-                # Store the timing information for later plotting
-                data = (end_time - start_time) * 1000
-                boidcpu.y_data[self.time_step_counter] += (data)
-                self.update_graph_data(boidcpu.boidcpu_id - 1, 3, data)
+            for boid in boidcpu.boids:
+                boidcpu.determine_boid_transfer(boid)
+
+            end_time = time.clock()
+
+            # Store the timing information for later plotting
+            data = (end_time - start_time) * 1000
+            boidcpu.y_data[self.time_step_counter] += (data)
+            self.update_graph_data(boidcpu.boidcpu_id - 1, 3, data)
 
 
     # Get the neighbouring boidCPUs of the specified boidCPU. Currently, this simply returns a
