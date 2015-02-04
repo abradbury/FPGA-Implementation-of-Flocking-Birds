@@ -7,6 +7,7 @@
 
 import numpy as np                  # Used in various mathematical operations
 import math                         # Used to calculate the square root for normalisation
+import decimal as dec
 
 # A class representing an individual boid. Based on the model presented by Craig Reynolds in 1986
 # (http://www.red3d.com/cwr/boids/) and 'The Nature of Code' by Daniel Shiffman.
@@ -26,7 +27,12 @@ class Boid(object):
         self.position = init_pos[:]
         self.velocity = init_vel[:]
 
-        self.acceleration = np.array([0, 0], dtype=self.config['dataType'])
+        if self.config['dataType'] == np.object_:
+            init_acceleration = [dec.Decimal(0), dec.Decimal(0)]
+        else:
+            init_acceleration = [0, 0]
+
+        self.acceleration = np.array(init_acceleration, dtype=self.config['dataType'])
 
         # Create the boid
         self.boid_id = _boid_id
@@ -135,7 +141,10 @@ class Boid(object):
 
     # A boid will align itself with the average orientation of its neighbours
     def align(self):
-        total = np.array([0, 0], dtype=self.config['dataType'])
+        if self.config['dataType'] == np.object_:
+            total = np.array([dec.Decimal(0), dec.Decimal(0)], dtype=self.config['dataType'])
+        else:
+            total = np.array([0, 0], dtype=self.config['dataType'])
 
         for boid in self.neighbouring_boids:
             total += boid.velocity
@@ -153,7 +162,10 @@ class Boid(object):
     #
     # TODO: Scale it depending on how close the boid is
     def separate(self):
-        total = np.array([0, 0], dtype=self.config['dataType'])
+        if self.config['dataType'] == np.object_:
+            total = np.array([dec.Decimal(0), dec.Decimal(0)], dtype=self.config['dataType'])
+        else:
+            total = np.array([0, 0], dtype=self.config['dataType'])
 
         for boid in self.neighbouring_boids:
             diff = self.position - boid.position        #  TODO: Check subtraction is right
@@ -171,7 +183,10 @@ class Boid(object):
 
     # A boid will move towards the centre of mass of its neighbourhood
     def cohesion(self):
-        total = np.array([0, 0], dtype=self.config['dataType'])
+        if self.config['dataType'] == np.object_:
+            total = np.array([dec.Decimal(0), dec.Decimal(0)], dtype=self.config['dataType'])
+        else:
+            total = np.array([0, 0], dtype=self.config['dataType'])
 
         for boid in self.neighbouring_boids:
             total += boid.position
@@ -283,18 +298,23 @@ class Boid(object):
     # http://stackoverflow.com/a/19919450/1433614
     def vector_divide(self, vector, divisor):
         if self.config['dataType'] == np.int_:
-            return np.array([int(float(i) / divisor) for i in vector], dtype=np.int_)
+            result = np.array([int(float(i) / divisor) for i in vector], dtype=np.int_)
         elif self.config['dataType'] == np.float_:
-            return vector / divisor
+            result = vector / divisor
+        elif self.config['dataType'] == np.object_:
+            result = vector / dec.Decimal(str(divisor))
+
+        return result
 
 
     # Calculate the magnetude or absolute value of the given vector
     def absolute(self, vector):
         if self.config['dataType'] == np.int_:
-            return int(round(math.sqrt(sum([i ** 2 for i in vector]))))
-        elif self.config['dataType'] == np.float_:
-            return round(math.sqrt(sum([i ** 2 for i in vector])))
+            result = int(round(math.sqrt(sum([i ** 2 for i in vector]))))
+        elif (self.config['dataType'] == np.float_) or (self.config['dataType'] == np.object_):
+            result = round(math.sqrt(sum([i ** 2 for i in vector])))
 
+        return result
 
     # Set the magnetude of a vector to the given value
     def set_mag(self, vector, value):
@@ -306,7 +326,11 @@ class Boid(object):
     # Limit a vector to the maximum allowed
     def limit(self, vector, maximum):
         if self.absolute(vector) > maximum:
-            vector = self.normalise(vector) * maximum
+            if self.config['dataType'] == np.object_:
+                vector = self.normalise(vector) * dec.Decimal(str(maximum))
+            else:
+                vector = self.normalise(vector) * maximum
+
         return vector
 
 

@@ -11,6 +11,7 @@ from boidGPU import BoidGPU         # Import the BoidGPU class
 import logging                      # Used to handle the textual output
 import numpy as np                  # Used in various mathematical operations
 import time                         # Used to time stuff
+import decimal as dec
 
 
 ## MUST DOs ========================================================================================
@@ -18,6 +19,7 @@ import time                         # Used to time stuff
 # FIXME: Now that the boidCPUs resize, a boid's vision radius could cover a boidCPU that is not a
 #         direct neighbour of the current boidCPU which the boid resides in - affecting the result.
 
+# TODO: Speed up performance when usign fixed point arithmetic
 # TODO: Modify code to handle different load balancing protocols
 # TODO: Enhance load balancing algorithm 1 so that BoidCPUs can be queried on proposed change
 # TODO: Implement load balancing algorithm 2 - distribution already exists
@@ -29,7 +31,6 @@ import time                         # Used to time stuff
 # TODO: Only allow boids to see in front of them when looking at neighbours
 # TODO: Change simulation size to 1080p
 # TODO: Experiment with rectangular BoidCPUs
-# TODO: Parameterise numpy type
 # TODO: No need to transfer boids if there is only one BoidCPU
 
 
@@ -67,7 +68,8 @@ class Simulation(object):
         self.config['boidCount'] = 90
         self.config['updateInterval'] = 10          # The interval between update calls (ms)
         self.config['widthInBoidCPUs'] = 3          # The number of BoidCPUs spanning the area width
-        self.config['dataType'] = np.float_         # Whether integers or floating points are used
+        self.config['dataType'] = np.float_         # Integers, floating points or fixed points
+        self.config['fixed_point_precision'] = 28   # The number of digits after the decimal point
         self.config['loggingLevel'] = logging.ERROR
 
         # Debugging parameters
@@ -105,6 +107,10 @@ class Simulation(object):
 
         # Setup logging
         self.setup_logging()
+
+        # Setup the fixed point precision, if using fixed point
+        if self.config['dataType'] == np.object_:
+            dec.getcontext().prec = self.config['fixed_point_precision']
 
         # Instantiate the BoidGPU
         self.boidgpu = BoidGPU(self)
@@ -370,21 +376,30 @@ class Simulation(object):
             self.simulation_step()
 
 
-    # Change the boid aligment weighting
+    # Change the boid aligment weighting, value is of type string
     def change_boid_alignment(self, value):
-        self.config['ALIGNMENT_WEIGHT'] = float(value)
+        if self.config['dataType'] == np.object_:
+            self.config['ALIGNMENT_WEIGHT'] = dec.Decimal(value)
+        else:
+            self.config['ALIGNMENT_WEIGHT'] = float(value)
         self.logger.debug("Boid alignment changed to " + str(value))
 
 
     # Change the boid cohesion weighting
     def change_boid_cohesion(self, value):
-        self.config['COHESION_WEIGHT'] = float(value)
+        if self.config['dataType'] == np.object_:
+            self.config['COHESION_WEIGHT'] = dec.Decimal(value)
+        else:
+            self.config['COHESION_WEIGHT'] = float(value)
         self.logger.debug("Boid cohesion changed to " + str(value))
 
 
     # Change the boid separation weighting
     def change_boid_separation(self, value):
-        self.config['REPULSION_WEIGHT'] = float(value)
+        if self.config['dataType'] == np.object_:
+            self.config['REPULSION_WEIGHT'] = dec.Decimal(value)
+        else:
+            self.config['REPULSION_WEIGHT'] = float(value)
         self.logger.debug("Boid separation changed to " + str(value))
 
 

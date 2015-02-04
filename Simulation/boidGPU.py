@@ -10,6 +10,7 @@ from Tkinter import Tk, TOP, E, W, HORIZONTAL, BOTH
 
 import ttk                          # Used for the tabs
 import numpy as np                  # Used in various mathematical operations
+import decimal as dec
 import matplotlib
 matplotlib.use('TkAgg')
 
@@ -324,7 +325,10 @@ class BoidGPU(object):
     # Rotate the specified boid based on its velocity / orientation
     # Rotation definition based on an answer from StackOverflow: http://stackoverflow.com/a/3409039
     def rotate_boid(self, velocity, position, points):
-        radians = np.arctan2(velocity[0], velocity[1])
+        if self.config['dataType'] == np.object_:
+            radians = np.arctan2(float(velocity[0]), float(velocity[1]))
+        else:
+            radians = np.arctan2(velocity[0], velocity[1])
 
         # Convert to radians for trig functions
         # radians = degrees * np.pi / 180
@@ -336,8 +340,16 @@ class BoidGPU(object):
             #   system due to the left-handedness of computer coordinates
             x_val -= position[0]
             y_val -= position[1]
-            _x_val = x_val * np.cos(radians) + y_val * np.sin(radians)
-            _y_val = -x_val * np.sin(radians) + y_val * np.cos(radians)
+
+            if self.config['dataType'] == np.object_:
+                _x_val = x_val * dec.Decimal(str(np.cos(radians))) + y_val * \
+                    dec.Decimal(str(np.sin(radians)))
+                _y_val = -x_val * dec.Decimal(str(np.sin(radians))) + y_val * \
+                    dec.Decimal(str(np.cos(radians)))
+            else:
+                _x_val = x_val * np.cos(radians) + y_val * np.sin(radians)
+                _y_val = -x_val * np.sin(radians) + y_val * np.cos(radians)
+
             return _x_val + position[0], _y_val + position[1]
 
         points[0], points[1] = _rot(points[0], points[1])

@@ -10,6 +10,7 @@ from boid import Boid               # Import the Boid class
 import numpy as np                  # Used in various mathematical operations
 import random                       # Used to randomly position the boids on initialisation
 import copy                         # Used to copy lists to avoid passing by reference
+import decimal as dec
 
 
 # A class representing a BoidCPU. A BoidCPU is an entity that controls all the
@@ -56,8 +57,15 @@ class BoidCPU(object):
         if self.config['useTestingSetup']:
             # Get the boid details from the test state
             for boid_info in self.config['testState'][self.boidcpu_id - 1]:
-                pos = np.array(boid_info[1])
-                vel = np.array(boid_info[2])
+                if self.config['dataType'] == np.object_:
+                    dec_pos = [dec.Decimal(str(i)) for i in boid_info[1]]
+                    dec_vel = [dec.Decimal(str(i)) for i in boid_info[2]]
+
+                    pos = np.array(dec_pos, dtype=self.config['dataType'])
+                    vel = np.array(dec_vel, dtype=self.config['dataType'])
+                else:
+                    pos = np.array(boid_info[1], dtype=self.config['dataType'])
+                    vel = np.array(boid_info[2], dtype=self.config['dataType'])
 
                 # Create the boid and add to list
                 boid = Boid(self.boidgpu, self, boid_info[0], pos, vel, self.colour, False)
@@ -67,11 +75,18 @@ class BoidCPU(object):
                 # Randomly position the boid on initialisation
                 pos_x = random.randint(self.boidcpu_coords[0], self.boidcpu_coords[2])
                 pos_y = random.randint(self.boidcpu_coords[1], self.boidcpu_coords[3])
-                position = np.array([pos_x, pos_y], dtype=self.config['dataType'])
 
                 # Randomly generate the boid's initial velocity
                 vel_x = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
                 vel_y = random.randint(-self.config['MAX_VELOCITY'], self.config['MAX_VELOCITY'])
+
+                if self.config['dataType'] == np.object_:
+                    pos_x = dec.Decimal(pos_x)
+                    pos_y = dec.Decimal(pos_y)
+                    vel_x = dec.Decimal(vel_x)
+                    vel_y = dec.Decimal(vel_y)
+
+                position = np.array([pos_x, pos_y], dtype=self.config['dataType'])
                 velocity = np.array([vel_x, vel_y], dtype=self.config['dataType'])
 
                 # Specify the boid's ID
