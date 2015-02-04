@@ -8,14 +8,16 @@
 from Tkinter import Frame, Canvas, Label, Button, Checkbutton, Scale
 from Tkinter import Tk, TOP, E, W, HORIZONTAL, BOTH
 
-import ttk                          # Used for the tabs
-import numpy as np                  # Used in various mathematical operations
+import ttk                              # Used for the tabs
+import numpy as np                      # Used in various mathematical operations
 import decimal as dec
 import matplotlib
 matplotlib.use('TkAgg')
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
-import matplotlib.pyplot as plt     # Used to plot the graphs
+import matplotlib.pyplot as plt         # Used to plot the graphs
+import matplotlib.patches as mpatches   # Used to draw the legend
+from matplotlib.patches import Rectangle
 from matplotlib.figure import Figure
 
 # Handles all the simulation's graphic components and output
@@ -516,15 +518,15 @@ class BoidGPU(object):
 
 
     def setup_other_graphs(self, boid_cpu_count):
-        fig = Figure()
+        self.fig = Figure()
         self.oaxes = []
 
         for i in range(0, boid_cpu_count):
             # Create the subplots and sync the axes
             if i != 0:
-                axis = fig.add_subplot(3, 3, i + 1, sharex=self.oaxes[0], sharey=self.oaxes[0])
+                axis = self.fig.add_subplot(3, 3, i + 1, sharex=self.oaxes[0], sharey=self.oaxes[0])
             else:
-                axis = fig.add_subplot(3, 3, i + 1)
+                axis = self.fig.add_subplot(3, 3, i + 1)
 
             axis.set_title("BoidCPU #%d" % (i + 1))
             axis.grid(True)
@@ -554,7 +556,7 @@ class BoidGPU(object):
         plt.ion()
         plt.show()
 
-        canvas = FigureCanvasTkAgg(fig, master=self.graph_frame_c)
+        canvas = FigureCanvasTkAgg(self.fig, master=self.graph_frame_c)
         canvas.show()
         canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
@@ -634,7 +636,17 @@ class BoidGPU(object):
             self.graph_figure.canvas.draw()
 
             # Redraw the stackplots of the time breakdown
-            self.oaxes[i].stackplot(range(0, len(self.simulation.graph_data[i][0])), self.simulation.graph_data[i])
+            stack_coll = self.oaxes[i].stackplot(range(0, len(self.simulation.graph_data[i][0])), \
+                self.simulation.graph_data[i])
+
+        # Draw legend on main graph
+        self.graph_figure.legend((self.lines[0], self.lines2[0], self.threshold_lines[0], \
+            self.andall_lines[0]), ('Computation Time', 'Boid Count', 'Boid Threshold', 'Andall Line'), ncol=4, loc='upper center')
+
+        # Draw a legend, from: http://stackoverflow.com/a/20337349
+        label_list = ['Neighbour Search', 'Position Calculation', 'Load Balancing', 'Boid Transfer']
+        proxy_rects = [Rectangle((0, 0), 1, 1, fc=pc.get_facecolor()[0]) for pc in stack_coll]
+        self.fig.legend(proxy_rects, label_list, ncol=4, loc='upper center')
 
         # Update summary graph
         self.summary_axis.lines[0].set_xdata(range(0, self.simulation.time_step_counter))
