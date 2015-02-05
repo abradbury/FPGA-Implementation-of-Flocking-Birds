@@ -609,10 +609,8 @@ class BoidGPU(object):
             self.lines[i].set_xdata(self.simulation.boidcpus[i].x_data)
             self.lines[i].set_ydata(self.simulation.boidcpus[i].y_data)
 
-            # Update the boidCPU boid count lines. Because the draw routine is called first, but
-            # not on time step 1, it has one less data element in than the values for the update
-            # stage. Therefore, [0:-1] is used to ignore the last x value.
-            self.lines2[i].set_xdata(self.simulation.boidcpus[i].x_data[0:-1])
+            # Update the boidCPU boid count lines
+            self.lines2[i].set_xdata(self.simulation.boidcpus[i].x_data)
             self.lines2[i].set_ydata(self.simulation.boidcpus[i].y2_data)
 
             # Update the Andall (sp?) lines
@@ -641,12 +639,14 @@ class BoidGPU(object):
 
         # Draw legend on main graph
         self.graph_figure.legend((self.lines[0], self.lines2[0], self.threshold_lines[0], \
-            self.andall_lines[0]), ('Computation Time', 'Boid Count', 'Boid Threshold', 'Andall Line'), ncol=4, loc='upper center')
+            self.andall_lines[0]), ('Computation Time', 'Boid Count', 'Boid Threshold', \
+            'Andall Line'), ncol=4, loc='upper center', prop={'size':14})
 
         # Draw a legend, from: http://stackoverflow.com/a/20337349
-        label_list = ['Neighbour Search', 'Position Calculation', 'Load Balancing', 'Boid Transfer']
+        label_list = ['Neighbour Search', 'Position Calculation', 'Load Balancing', \
+            'Boid Transfer', 'Draw']
         proxy_rects = [Rectangle((0, 0), 1, 1, fc=pc.get_facecolor()[0]) for pc in stack_coll]
-        self.fig.legend(proxy_rects, label_list, ncol=4, loc='upper center')
+        self.fig.legend(proxy_rects, label_list, ncol=5, loc='upper center', prop={'size':14})
 
         # Update summary graph
         self.summary_axis.lines[0].set_xdata(range(0, self.simulation.time_step_counter))

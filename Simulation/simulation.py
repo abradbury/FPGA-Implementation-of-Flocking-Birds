@@ -26,13 +26,16 @@ import decimal as dec
 
 ## MAY DOs =========================================================================================
 # TODO: Add keybinding to capture return key and simulate button press
-# TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding (and for 1 BoidCPU)
+# TODO: Calculate a boidCPUs neighbours programmatically - rather than hardcoding (and for 1 BCPU)
 
 # TODO: Only allow boids to see in front of them when looking at neighbours
 # TODO: Change simulation size to 1080p
 # TODO: Experiment with rectangular BoidCPUs
 # TODO: No need to transfer boids if there is only one BoidCPU
 # TODO: Move original graph routines to use new graph_data structure
+# TODO: As the draw routine is called first, no need to draw in GUI setup
+# TODO: Draw the legends on initialising the graphs
+# TODO: Don't redraw the stackplots every time step, try to update the data sources
 
 
 # Load Balancing Types =============================================================================
@@ -165,7 +168,7 @@ class Simulation(object):
         self.logger.info("Press the 'Begin' button to start the simulation")
 
         # Setup the graphs
-        self.setup_graph_data(4)
+        self.setup_graph_data(5)
         self.boidgpu.setup_graphs(self.boidcpu_count)
 
         # Print out the state of the boids in the simulation
@@ -205,18 +208,21 @@ class Simulation(object):
     # when a boid is being followed (during debugging). As no new boid positions have been
     # calculated, the draw function isn't called on the first time step.
     def draw_step(self):
-        if self.time_step_counter != 0:
-            self.logger.debug("-"*70)
+        self.logger.debug("-"*70)
 
-            for boidcpu in self.boidcpus:
-                self.logger.debug("Drawing boids at calculated positions for BoidCPU #" + \
-                    str(boidcpu.boidcpu_id) + "...")
+        for boidcpu in self.boidcpus:
+            self.logger.debug("Drawing boids at calculated positions for BoidCPU #" + \
+                str(boidcpu.boidcpu_id) + "...")
 
-                # Update the canvas with the new boid positions
-                boidcpu.draw()
+            # Update the canvas with the new boid positions
+            start_time = time.clock()
+            boidcpu.draw()
+            end_time = time.clock()
 
-                # Store the number of boids for later plotting
-                boidcpu.y2_data.append(boidcpu.boid_count)
+            # Store the number of boids for later plotting
+            boidcpu.y2_data.append(boidcpu.boid_count)
+            data = (end_time - start_time) * 1000
+            self.update_graph_data(boidcpu.boidcpu_id - 1, 4, data)
 
 
     def setup_graph_data(self, no_of_data_types):
