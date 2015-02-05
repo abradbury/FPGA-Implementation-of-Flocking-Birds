@@ -311,8 +311,10 @@ class Boid(object):
     def absolute(self, vector):
         if self.config['dataType'] == np.int_:
             result = int(round(math.sqrt(sum([i ** 2 for i in vector]))))
-        elif (self.config['dataType'] == np.float_) or (self.config['dataType'] == np.object_):
+        elif self.config['dataType'] == np.float_:
             result = round(math.sqrt(sum([i ** 2 for i in vector])))
+        elif self.config['dataType'] == np.object_:
+            result = round((sum([i ** 2 for i in vector])).sqrt())
 
         return result
 
@@ -335,13 +337,25 @@ class Boid(object):
 
 
     # TODO: Adjust to handle any length vector
-    @classmethod
-    def distance_between_two_points(cls, point_a, point_b):
-        if len(point_a) == 2:
-            result = math.sqrt(((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2))
-        elif len(point_a) == 3:
-            result = math.sqrt(((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2) \
-                + ((point_a[2] - point_b[2]) ** 2))
+    # @classmethod
+    def distance_between_two_points(self, point_a, point_b):
+
+        # print type(point_a[0])
+
+        if self.config['dataType'] == np.object_:
+            if len(point_a) == 2:
+                result = (((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2)).sqrt()
+            elif len(point_a) == 3:
+                result = (((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2) \
+                    + ((point_a[2] - point_b[2]) ** 2)).sqrt()
+
+        else:
+            if len(point_a) == 2:
+                result = math.sqrt(((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2))
+            elif len(point_a) == 3:
+                result = math.sqrt(((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2) \
+                    + ((point_a[2] - point_b[2]) ** 2))
+
         return result
 
 
