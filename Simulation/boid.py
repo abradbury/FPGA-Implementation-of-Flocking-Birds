@@ -8,6 +8,7 @@
 import numpy as np                  # Used in various mathematical operations
 import math                         # Used to calculate the square root for normalisation
 import decimal as dec
+import time
 
 # A class representing an individual boid. Based on the model presented by Craig Reynolds in 1986
 # (http://www.red3d.com/cwr/boids/) and 'The Nature of Code' by Daniel Shiffman.
@@ -44,6 +45,15 @@ class Boid(object):
 
             # Draw the boid
             self.boidgpu.draw_boid(self.position, self.velocity, _colour, self.boid_id, False)
+
+
+    # @classmethod
+    # def trimf(cls, number):
+
+    #     if type(number) is float:
+    #         return float("{0:.28f}".format(float(number)))
+    #     else:
+    #         return np.array([float("{0:.28f}".format(float(i))) for i in number], dtype=np.float_)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and
@@ -155,6 +165,8 @@ class Boid(object):
         steer = total - self.velocity
         steer = self.limit(steer, self.config['MAX_FORCE'])
 
+        # steer = self.trimf(steer)
+
         return steer
 
 
@@ -178,6 +190,8 @@ class Boid(object):
         steer = total - self.velocity
         steer = self.limit(steer, self.config['MAX_FORCE'])
 
+        # steer = self.trimf(steer)
+
         return steer
 
 
@@ -193,6 +207,8 @@ class Boid(object):
 
         total = self.vector_divide(total, len(self.neighbouring_boids))
         steer = self.seek(total)
+
+        # steer = self.trimf(steer)
 
         return steer
 
@@ -304,6 +320,8 @@ class Boid(object):
         elif self.config['dataType'] == np.object_:
             result = vector / dec.Decimal(str(divisor))
 
+        # result = self.trimf(result)
+
         return result
 
 
@@ -315,6 +333,8 @@ class Boid(object):
             result = round(math.sqrt(sum([i ** 2 for i in vector])))
         elif self.config['dataType'] == np.object_:
             result = round((sum([i ** 2 for i in vector])).sqrt())
+
+        # result = self.trimf(result)
 
         return result
 
@@ -333,28 +353,28 @@ class Boid(object):
             else:
                 vector = self.normalise(vector) * maximum
 
+        # vector = self.trimf(vector)
+
         return vector
 
 
     # TODO: Adjust to handle any length vector
     # @classmethod
     def distance_between_two_points(self, point_a, point_b):
-
-        # print type(point_a[0])
-
         if self.config['dataType'] == np.object_:
-            if len(point_a) == 2:
-                result = (((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2)).sqrt()
-            elif len(point_a) == 3:
-                result = (((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2) \
-                    + ((point_a[2] - point_b[2]) ** 2)).sqrt()
+            float_point_a = [float(i) for i in point_a]
+            float_point_b = [float(i) for i in point_b]
+
+            result = math.sqrt(sum([((float_point_a[i] - float_point_b[i]) ** 2) for i in \
+                range(len(point_a))]))
+
+            result = dec.Decimal(str(result))
 
         else:
-            if len(point_a) == 2:
-                result = math.sqrt(((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2))
-            elif len(point_a) == 3:
-                result = math.sqrt(((point_a[0] - point_b[0]) ** 2) + ((point_a[1] - point_b[1]) ** 2) \
-                    + ((point_a[2] - point_b[2]) ** 2))
+            result = math.sqrt(sum([((float_point_a[i] - float_point_b[i]) ** 2) for i in \
+                range(len(point_a))]))
+
+            # result = self.trimf(result)
 
         return result
 
