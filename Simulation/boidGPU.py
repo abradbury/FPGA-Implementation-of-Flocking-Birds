@@ -249,7 +249,12 @@ class BoidGPU(object):
     ## Boid Update Functions ---------------------------------------------------------------------##
     ################################################################################################
 
-    def create_boid(self, position, velocity, _colour, boid_id):
+    def next_simulation_step(self, milliseconds):
+        self.canvas.after(milliseconds, self.simulation.simulation_step)
+
+
+    # Creates a new boid on the screen and updates the boid with a new position and velocity
+    def draw_boid(self, position, velocity, _colour, boid_id, update):
         points = self.calc_boid_points(position)
         points = self.rotate_boid(velocity, position, points)
 
@@ -263,19 +268,32 @@ class BoidGPU(object):
             outline_colour = "white"
             boid_width = 1
 
-        # Draw the boid
-        self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], \
-            points[5], points[6], points[7], fill=colour, outline=outline_colour, \
+        if update:
+            # Update the boid
+            self.canvas.coords("B" + str(boid_id), points[0], points[1], points[2], points[3], \
+                points[4], points[5], points[6], points[7])
+            self.canvas.itemconfig("B" + str(boid_id), fill=colour)
+
+            # Update the boid's ID
+            if self.config["showBoidIds"]:
+                self.canvas.coords("T" + str(boid_id), position[0], position[1] - 15)
+        else:
+            # Create the boid
+            self.canvas.create_polygon(points[0], points[1], points[2], points[3], points[4], \
+                points[5], points[6], points[7], fill=colour, outline=outline_colour, \
             width=boid_width, tags=("B" + str(boid_id)))
 
-        # Show boid IDs
-        if self.config["showBoidIds"]:
-            self.canvas.create_text(position[0], position[1] - 15, fill="white", \
-                text=str(boid_id), tags=("T" + str(boid_id)))
+            # Draw the boid IDs
+            if self.config["showBoidIds"]:
+                self.canvas.create_text(position[0], position[1] - 15, fill="white", \
+                    text=str(boid_id), tags=("T" + str(boid_id)))
 
-
-    def next_simulation_step(self, milliseconds):
-        self.canvas.after(milliseconds, self.simulation.simulation_step)
+        # Debugging method - follow a specific boid
+        if self.config['trackBoid'] and (boid_id == self.config['boidToTrack']):
+            self.follow_boid(position, boid_id)
+        # If boidToTrack is 0, track all boids
+        elif self.config['trackBoid'] and not self.config['boidToTrack']:
+            self.follow_boid(position, boid_id)
 
 
     # Calculate the posisitions of the boid polygon points
@@ -294,34 +312,6 @@ class BoidGPU(object):
         points.append(position[1] - (step_size / 2))
 
         return points
-
-
-    # Move the boid on the screen based on the new velocity and position
-    def update_boid(self, position, velocity, _colour, boid_id):
-        points = self.calc_boid_points(position)
-        points = self.rotate_boid(velocity, position, points)
-
-        # Specify the boid fill colour based on the debug flag
-        if self.config['colourCode']:
-            colour = _colour
-        else:
-            colour = "red"
-
-        # Update boid
-        self.canvas.coords("B" + str(boid_id), points[0], points[1], points[2], points[3], \
-            points[4], points[5], points[6], points[7])
-        self.canvas.itemconfig("B" + str(boid_id), fill=colour)
-
-        # Update the boid's ID
-        if self.config["showBoidIds"]:
-            self.canvas.coords("T" + str(boid_id), position[0], position[1] - 15)
-
-        # Debugging method - follow a specific boid
-        if self.config['trackBoid'] and (boid_id == self.config['boidToTrack']):
-            self.follow_boid(position, boid_id)
-        # If boidToTrack is 0, track all boids
-        elif self.config['trackBoid'] and not self.config['boidToTrack']:
-            self.follow_boid(position, boid_id)
 
 
     # Rotate the specified boid based on its velocity / orientation

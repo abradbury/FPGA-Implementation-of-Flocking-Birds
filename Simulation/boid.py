@@ -13,9 +13,9 @@ import decimal as dec
 # (http://www.red3d.com/cwr/boids/) and 'The Nature of Code' by Daniel Shiffman.
 class Boid(object):
 
-    def __init__(self, _boid_gpu, _boid_cpu, _boid_id, init_pos, init_vel, _colour, copied):
+    def __init__(self, _boidgpu, _boid_cpu, _boid_id, init_pos, init_vel, _colour, copied):
         self.boid_cpu = _boid_cpu
-        self.boid_gpu = _boid_gpu
+        self.boidgpu = _boidgpu
 
         self.config = self.boid_cpu.config
         self.logger = self.boid_cpu.logger
@@ -43,7 +43,7 @@ class Boid(object):
             self.logger.debug("Created boid with ID " + str(self.boid_id))
 
             # Draw the boid
-            self.boid_gpu.create_boid(self.position, self.velocity, _colour, self.boid_id)
+            self.boidgpu.draw_boid(self.position, self.velocity, _colour, self.boid_id, False)
 
 
     # Calculate the neighbouring boids based on the Euclidean distance between the current boid and
@@ -72,7 +72,7 @@ class Boid(object):
             # If tracking a boid, highlight its neighbouring boids
             if self.config['trackBoid'] and (self.boid_id == self.config['boidToTrack']):
                 for boid in self.neighbouring_boids:
-                    self.boid_gpu.highlight_boid(True, boid.boid_id)
+                    self.boidgpu.highlight_boid(True, boid.boid_id)
 
             # If the boids has neighbours, calculate its next position
             if len(self.neighbouring_boids) > 0:
@@ -105,7 +105,7 @@ class Boid(object):
         pos_copy = np.copy(self.position)
         vel_copy = np.copy(self.velocity)
 
-        boid_copy = Boid(self.boid_gpu, self.boid_cpu, self.boid_id, pos_copy, vel_copy, None, True)
+        boid_copy = Boid(self.boidgpu, self.boid_cpu, self.boid_id, pos_copy, vel_copy, None, True)
         return boid_copy
 
 
@@ -130,7 +130,7 @@ class Boid(object):
 
     # Move the boid to the calculated positon
     def draw(self, colour):
-        self.boid_gpu.update_boid(self.position, self.velocity, colour, self.boid_id)
+        self.boidgpu.draw_boid(self.position, self.velocity, colour, self.boid_id, True)
 
         self.processed = False  # Reset the processed flag for the next simulation step
 
