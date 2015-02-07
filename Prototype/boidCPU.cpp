@@ -321,11 +321,23 @@ void sendBoidsToNeighbours() {
 
 		// The next step is to create the message data
 		for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
-			outputBody[(k * BOID_DATA_LENGTH) + 0] = boids[j].id;
-			outputBody[(k * BOID_DATA_LENGTH) + 1] = boids[j].position.x;
-			outputBody[(k * BOID_DATA_LENGTH) + 2] = boids[j].position.y;
-			outputBody[(k * BOID_DATA_LENGTH) + 3] = boids[j].velocity.x;
-			outputBody[(k * BOID_DATA_LENGTH) + 4] = boids[j].velocity.y;
+//			outputBody[(k * BOID_DATA_LENGTH) + 0] = boids[j].id;
+//			outputBody[(k * BOID_DATA_LENGTH) + 1] = boids[j].position.x;
+//			outputBody[(k * BOID_DATA_LENGTH) + 2] = boids[j].position.y;
+//			outputBody[(k * BOID_DATA_LENGTH) + 3] = boids[j].velocity.x;
+//			outputBody[(k * BOID_DATA_LENGTH) + 4] = boids[j].velocity.y;
+
+			uint32 position = 0;
+			uint32 velocity = 0;
+
+			position |= (uint32(boids[j].position.x) << 20);
+			position |= (uint32(boids[j].position.y) << 8);
+			velocity |= (uint32(boids[j].velocity.x) << 20);
+			velocity |= (uint32(boids[j].velocity.y) << 8);
+
+			outputBody[(k * BOID_DATA_LENGTH) + 0] = position;
+			outputBody[(k * BOID_DATA_LENGTH) + 1] = velocity;
+			outputBody[(k * BOID_DATA_LENGTH) + 2] = boids[j].id;
 		}
 
 		// Finally send the message to each neighbour
@@ -358,13 +370,16 @@ void processNeighbouringBoids() {
 	// Then, create a boid object for each listed boid and add to the list of
 	// possible neighbouring boids for this BoidCPU
 	for (int i = 0; i < count; i++) {
-		Vector p = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1],
-				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2]);
+		uint32 position = inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
+		uint32 velocity = inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
 
-		Vector v = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3],
-				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4]);
+		Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
+				(int12)((position & (uint32)0xFFF00) >> 8));
 
-		Boid b = Boid((uint16)inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0], p, v, i);
+		Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
+				(int12)((velocity & (uint32)0xFFF00) >> 8));
+
+		Boid b = Boid((uint16)inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v, i);
 		possibleNeighbouringBoids[possibleNeighbourCount] = b;
 		possibleNeighbourCount++;
 	}

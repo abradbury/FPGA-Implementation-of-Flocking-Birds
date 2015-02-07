@@ -25,7 +25,7 @@
 #define CONTROLLER_ID			1	// The ID of the controller
 #define BOIDGPU_ID				2	// The ID of the BoidGPU
 
-#define BOID_DATA_LENGTH		5	// The number of bits to send for a boid
+#define BOID_DATA_LENGTH		3	// The number of bits to send for a boid
 
 #define MODE_INIT 				1	//
 #define	CMD_PING				2	// Controller -> BoidCPU

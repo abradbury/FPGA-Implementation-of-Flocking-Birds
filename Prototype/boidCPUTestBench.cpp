@@ -37,6 +37,140 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
 int main() {
 	hls::stream<uint32> to_hw, from_hw;
 
+
+//	uint16 id = 42;
+//	int12 posX = 345;
+//	int12 posY = 720;
+//	int12 velX = -5;
+//	int12 velY = 1;
+//
+//	uint32 intA = 0;
+//	uint32 intB = 0;
+//	uint32 intC = 0;
+//
+//	std::cout << "Boid ID:    " << id.to_string(2) << std::endl;	// 0b0000000000101010
+//	std::cout << "X Position: " << posX.to_string(2) << std::endl;	// 0b000101011001
+//	std::cout << "Y Position: " << posY.to_string(2) << std::endl;	// 0b001011010000
+//	std::cout << "X Velocity: " << velX.to_string(2) << std::endl;	// 0b111111111011
+//	std::cout << "Y Velocity: " << velY.to_string(2) << std::endl;	// 0b000000000001
+//
+//	std::cout << intA.to_string(2) << std::endl;	// 0b[0000000000000000000000000000000]0
+//	std::cout << intB.to_string(2) << std::endl;	// 0b[0000000000000000000000000000000]0
+//
+//	/**
+//	 *  result: 		0b0000 0000 0000 0000 0000 0000 0000 0000
+//	 *  posX:			0b						   0001 0101 1001
+//	 *  posY:			0b					  	   0010 1101 0000
+//	 *
+//	 *  posX << 20:		0b0001 0101 1001 | 0000 0000 0000 | 0000 0000
+//	 *  result | posX:	0b0001 0101 1001 | 0000 0000 0000 | 0000 0000
+//	 *
+//	 *  posY << 8:		0b0000 0000 0000 | 0010 1101 0000 | 0000 0000
+//	 *  result | posY:	0b0001 0101 1001 | 0010 1101 0000 | 0000 0000
+//	 */
+//
+//	std::cout << "Part 1" << std::endl;
+//
+//	// Shift the x position 20 places
+//	std::cout << (uint32(posX) << 20).to_string(2) << std::endl;
+//	intA = intA | (uint32(posX) << 20);
+//	std::cout << intA.to_string(2) << std::endl;
+//
+//	// Shift the y position 8 places
+//	std::cout << (uint32(posY) << 8).to_string(2) << std::endl;
+//	intA = intA | (uint32(posY) << 8);
+//	std::cout << "Position: " << intA.to_string(2) << std::endl;
+//
+//	/**
+//	 * result:			0b0000 0000 0000  0000 0000 0000 0000 0000
+//	 * velX:			0b 						    1111 1111 1011
+//	 * velY:			0b						    0000 0000 0001
+//	 *
+//	 * velX << 20:		0b1111 1111 1011 | 0000 0000 0000 | 0000 0000
+//	 * result | velX:	0b1111 1111 1011 | 0000 0000 0000 | 0000 0000
+//	 *
+//	 * velY << 8:		0b0000 0000 0000 | 0000 0000 0001 | 0000 0000
+//	 * result | velY:	0b1111 1111 1011 | 0000 0000 0001 | 0000 0000
+//	 */
+//
+//	std::cout << "Part 2" << std::endl;
+//
+//	// Shift the x velocity 20 places
+// 	std::cout << (uint32(velX) << 20).to_string(2) << std::endl;
+//	intB = intB | (uint32(velX) << 20);
+//	std::cout << intB.to_string(2) << std::endl;
+//
+//	// Shift the y velocity 8 places
+//	std::cout << (uint32(velY) << 8).to_string(2) << std::endl;
+//	intB = intB | (uint32(velY) << 8);
+//	std::cout << "Velocity: " << intB.to_string(2) << std::endl;
+//
+//	/**
+//	 * velocity:0b 1111 1111 1011 | 0000 0000 0001 | 0000 0000
+//	 * velX:	0b 1111 1111 1011
+//	 * velY:	0b				    0000 0000 0001
+//	 * decoded:	0b 1111 1111 1011
+//	 * decoded:	0b 					0000 0000 0001
+//	 *
+//	 * position:0b 0001 0101 1001 | 0010 1101 0000 | 0000 0000
+//	 * posX:	0b 0001 0101 1001
+//	 * posY:	0b  		  	    0010 1101 0000
+//	 * decoded:	0b 0001 0101 1001
+//	 * decoded:	0b 					0010 1101 0000
+//	 *
+//	 * 0b0001 0101 1001 0010 1101 0000 0000 0000
+//	 *
+//	 * 0b0000 0000 0000 1111 1111 1111 0000 0000	Mask
+//	 * 0b0000 0000 0000 0010 1101 0000 0000 0000	AND mask and value
+//	 * 0b0000 0000 0000 0000 0000 0010 1101 0000	Shift to get result
+//	 */
+//
+//	// Decoding...
+//	int12 dVelX = ((intB & (~(uint32)0xFFFFF)) >> 20);
+//	std::cout << dVelX.to_string(2) << std::endl;
+//	std::cout << intB.to_string(2) << std::endl;
+//
+////	std::cout << std::endl;
+////
+////	uint32 tmp = 0;
+////	uint32 msk = 0xFFF00;
+////
+////	std::cout << msk.to_string(2) << std::endl;
+//////	msk = ~msk;
+////	std::cout << msk.to_string(2) << std::endl;
+////	tmp = intA & msk;
+////	std::cout << tmp.to_string(2) << std::endl;
+////	tmp = tmp >> 8;
+////	std::cout << tmp.to_string(2) << std::endl;
+////	std::cout << std::endl;
+//
+//	int12 dVelY = ((intB & (uint32)0xFFF00) >> 8);
+//	std::cout << dVelY.to_string(2) << std::endl;
+//
+//	int12 dPosX = ((intA & (~(uint32)0xFFFFF)) >> 20);
+//	std::cout << dPosX.to_string(2) << std::endl;
+//
+//	int12 dPosY = ((intA & (uint32)0xFFF00) >> 8);
+//	std::cout << dPosY.to_string(2) << std::endl;
+//
+//
+////	/**
+////	 *  result: 		0b0000 0000 0000 0000  0000 0000 0000 0000
+////	 *  id:				0b               	   0000 0000 0010 1010
+////	 *
+////	 *  id << 16:	 	0b0000 0000 0010 1010 | 0000 0000 0000 0000
+////	 *  result | id:	0b0000 0000	0010 1010 | 0000 0000 0000 0000
+////	 */
+////
+////	std::cout << "Part 3" << std::endl;
+////
+////	// Shift the id 16 places
+////	std::cout << (uint32(id) << 16).to_string(2) << std::endl;
+////	intC = intC | (uint32(id) << 16);
+////	std::cout << "Boid ID    : " << intC.to_string(2) << std::endl;
+//
+//	return 0;
+
 	// Test BoidCPU input ------------------------------------------------------
 	// First send the initialisation commands
 	testPing();
@@ -231,15 +365,18 @@ void processNeighbourReply() {
 	std::cout << "Dummy BoidCPU received " << count << " boids" << std::endl;
 
 	for (int i = 0; i < count; i++) {
-		Vector p = Vector(tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1],
-				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2]);
+		uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
+		uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
 
-		Vector v = Vector(tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3],
-				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4]);
+		Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
+				(int12)((position & (uint32)0xFFF00) >> 8));
 
-		Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0], p, v, i);
+		Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
+				(int12)((velocity & (uint32)0xFFF00) >> 8));
+
+		Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v, i);
 		tbBoids[i] = b;
-//		b.printBoidInfo();
+		b.printBoidInfo();
 	}
 }
 
