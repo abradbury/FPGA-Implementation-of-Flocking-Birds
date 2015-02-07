@@ -17,7 +17,7 @@ void sendBoidsToNeighbours(void);
 void processNeighbouringBoids(void);
 
 // Supporting function headers -------------------------------------------------
-void transmitBoid(Boid boid, uint8 recipientID);
+void transmitBoid(uint16 boidID, uint8 recipientID);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 
 int getRandom(int min, int max);
@@ -336,6 +336,7 @@ void sendBoidsToNeighbours() {
 	}
 
 	// Now, add the BoidCPU's own boids to the possible neighbouring boids list
+	// The boids from the current BoidCPU need to be first
 	addOwnAsNbrsLoops: for (int i = 0; i < boidCount; i++) {
 		possibleNeighbouringBoids[i] = boids[i];
 		possibleNeighbourCount++;
@@ -380,19 +381,23 @@ void processNeighbouringBoids() {
 
 	// If the flag is true, calculate the neighbours for all the boids
 	// TODO: Try moving the variables outside the loop to see what happens
+	//
+	// 'if (i != j)' relies on the possible neighbour list starting with the
+	// boids of the current BoidCPU
 	if (allNeighboursReceived) {
 		boidCPUCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
 			int neighbouringBoidsCount = 0;
 			uint16 distance;
 
-			calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
-				if (possibleNeighbouringBoids[i].id != boids[i].id) {
+			calcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
+				if (i != j) {
+//				if (possibleNeighbouringBoids[j].id != boids[i].id) {
 					distance = Vector::distanceBetween(boids[i].position,
-						possibleNeighbouringBoids[i].position);
+						possibleNeighbouringBoids[j].position);
 
 					if (distance < VISION_RADIUS) {
 						boidNeighbourList[i][neighbouringBoidsCount] =
-							&possibleNeighbouringBoids[i];
+							&possibleNeighbouringBoids[j];
 						neighbouringBoidsCount++;
 					}
 				}
@@ -423,40 +428,41 @@ void loadBalance() {
 void moveBoids() {
 	std::cout << "-Transferring boids..." << std::endl;
 
-	Boid boidToTransfer;
+	uint16 idOfBoidToTransfer;
+//	Boid boidToTransfer;
 	uint8 recipientBoidCPU;
 
 	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
 		recipientBoidCPU = 0;
 
 		if ((neighbouringBoidCPUs[0] != 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
-			boidToTransfer = boids[i];
+			idOfBoidToTransfer = i;
 			recipientBoidCPU = neighbouringBoidCPUs[0];
 		} else if ((neighbouringBoidCPUs[2] != 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
-			boidToTransfer = boids[i];
+			idOfBoidToTransfer = i;
 			recipientBoidCPU = neighbouringBoidCPUs[2];
 		} else if ((neighbouringBoidCPUs[4] != 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
-			boidToTransfer = boids[i];
+			idOfBoidToTransfer = i;
 			recipientBoidCPU = neighbouringBoidCPUs[4];
 		} else if ((neighbouringBoidCPUs[6] != 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
-			boidToTransfer = boids[i];
+			idOfBoidToTransfer = i;
 			recipientBoidCPU = neighbouringBoidCPUs[6];
 		} else if ((neighbouringBoidCPUs[1] != 0) && (boids[i].position.y < boidCPUCoords[1])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[1];
+			idOfBoidToTransfer = i;
+			recipientBoidCPU = neighbouringBoidCPUs[1];
 		} else if ((neighbouringBoidCPUs[3] != 0) && (boids[i].position.x > boidCPUCoords[2])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[3];
+			idOfBoidToTransfer = i;
+			recipientBoidCPU = neighbouringBoidCPUs[3];
 		} else if ((neighbouringBoidCPUs[5] != 0) && (boids[i].position.y > boidCPUCoords[3])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[5];
+			idOfBoidToTransfer = i;
+			recipientBoidCPU = neighbouringBoidCPUs[5];
 		} else if ((neighbouringBoidCPUs[7] != 0) && (boids[i].position.x < boidCPUCoords[0])) {
-				boidToTransfer = boids[i];
-				recipientBoidCPU = neighbouringBoidCPUs[7];
+			idOfBoidToTransfer = i;
+			recipientBoidCPU = neighbouringBoidCPUs[7];
 		}
 
 		if (recipientBoidCPU > 0) {
-			transmitBoid(boidToTransfer, recipientBoidCPU);
+			transmitBoid(idOfBoidToTransfer, recipientBoidCPU);
 		}
 	}
 
@@ -498,11 +504,12 @@ void updateDisplay() {
 }
 
 void printStateOfBoidCPUBoids() {
-//	std::cout << "Time step " << timeStep << " (" << boidCount << ") " << std::string(20, '=') << std::endl;
 	for (int i = 0; i < boidCount; i++) {
-		std::cout << "Boid " << boids[i].id << " has position [" << boids[i].position.x << ", " << boids[i].position.y << "] and velocity [" << boids[i].velocity.x << ", " << boids[i].velocity.y << "]" << std::endl;
+		std::cout << "Boid " << boids[i].id << " has position [" <<
+			boids[i].position.x << ", " << boids[i].position.y <<
+			"] and velocity [" << boids[i].velocity.x << ", " <<
+			boids[i].velocity.y << "]" << std::endl;
 	}
-//	std::cout << std::string(32, '=') << std::endl;
 }
 
 //==============================================================================
@@ -522,20 +529,20 @@ void receive() {
 }
 
 // Take a copy of the boid, not the actual one
-void transmitBoid(Boid boid, uint8 recipientID) {
+void transmitBoid(uint16 boidID, uint8 recipientID) {
 	// TODO: Perhaps move this to the boid class?
-	outputBody[0] = boid.id;
-	outputBody[1] = boid.position.x;
-	outputBody[2] = boid.position.y;
-	outputBody[3] = boid.velocity.x;
-	outputBody[4] = boid.velocity.y;
+	outputBody[0] = boids[boidID].id;
+	outputBody[1] = boids[boidID].position.x;
+	outputBody[2] = boids[boidID].position.y;
+	outputBody[3] = boids[boidID].velocity.x;
+	outputBody[4] = boids[boidID].velocity.y;
 
 	generateOutput(7, recipientID, CMD_BOID, outputBody);
 
 	// Remove boid from own list
 	bool boidFound = false;
 	for (int i = 0; i < boidCount - 1; i++) {
-		if (boids[i].id == boid.id) {
+		if (i == boidID) {
 			boidFound = true;
 		}
 
@@ -545,8 +552,8 @@ void transmitBoid(Boid boid, uint8 recipientID) {
 	}
 	boidCount--;
 
-	std::cout << "-Transferring boid #" << boid.id << " to boidCPU #" <<
-		recipientID << std::endl;
+	std::cout << "-Transferring boid #" << boids[boidID].id << " to boidCPU #"
+		<< recipientID << std::endl;
 }
 
 void acceptBoid(uint32 *boidData) {
@@ -724,34 +731,6 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int _index)
 //	printBoidInfo();
 }
 
-// TODO: Will need to make a copy of the neighbours rather than a reference so
-//	that as the neighbours are updated, the neighbour list doesn't change
-void Boid::calculateNeighbours(Boid *possibleNeighbours, uint8 possibleNeighbourCount) {
-//	std::cout << "Calculating neighbours for boid #" << id << std::endl;
-
-	// TODO: Could just clear up to the current boid count
-//	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-//		delete neighbouringBoids[i];
-//	}
-//	neighbouringBoidsCount = 0;
-//
-//	uint16 distance;
-//	calcBoidNbrsLoop: for (int i = 0; i < possibleNeighbourCount; i++) {
-//		if (possibleNeighbours[i].id != id) {
-//			distance = Vector::distanceBetween(position, possibleNeighbours[i].position);
-//			if (distance < VISION_RADIUS) {
-//				boidNeighbourList[index][neighbouringBoidsCount] = &possibleNeighbours[i];
-//				neighbouringBoidsCount++;
-//			}
-//		}
-//	}
-//
-//	std::cout << "Boid " << id << " has " << neighbouringBoidsCount << " neighbours: ";
-//	printBoidNbsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-//		std::cout << boidNeighbourList[index][i]->id << ", ";
-//	} std::cout << std::endl;
-}
-
 void Boid::update(void) {
 	std::cout << "Updating boid #" << id << std::endl;
 
@@ -844,26 +823,6 @@ void Boid::contain() {
 void Boid::setNeighbourCount(int n) {
 	neighbouringBoidsCount = (uint8)n;
 }
-
-//Vector Boid::getVelocity() {
-//	return velocity;
-//}
-//
-//Vector Boid::getPosition() {
-//	return position;
-//}
-
-//uint8 Boid::getID(void) {
-//	return id;
-//}
-
-//uint8 Boid::getNeighbourCount(void) {
-//	return neighbouringBoidsCount;
-//}
-//
-//Boid* Boid::getNeighbours(void) {
-//	return &neighbouringBoids;
-//}
 
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
