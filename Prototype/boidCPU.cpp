@@ -264,8 +264,8 @@ void simulationSetup() {
 	// Create the boids (actual implementation)
 //	uint16 boidID;
 //	boidCreationLoop: for(int i = 0; i < boidCount; i++) {
-//		Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY), 0);
-//		Vector position = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]), 0);
+//		Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY), getRandom(-MAX_VELOCITY, MAX_VELOCITY));
+//		Vector position = Vector(getRandom(boidCPUCoords[X_MIN], boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN], boidCPUCoords[Y_MAX]));
 //
 //		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 //
@@ -275,16 +275,16 @@ void simulationSetup() {
 
 	// Create the boids (testing implementation)
 	int testBoidCount = 10;
-	Vector knownSetup[10][2] = {{Vector(12, 11, 0), Vector(5, 0, 0)},
-			{Vector(19, 35, 0), Vector(-5, 1, 0)},
-			{Vector(12, 31, 0), Vector(-4, -2, 0)},
-			{Vector(35, 22, 0), Vector(0, -3, 0)},
-			{Vector(4, 9, 0), Vector(-1, 0, 0)},
-			{Vector(19, 18, 0), Vector(2, -3, 0)},
-			{Vector(38, 19, 0), Vector(4, -4, 0)},
-			{Vector(18, 5, 0), Vector(-1, 2, 0)},
-			{Vector(15, 33, 0), Vector(2, -2, 0)},
-			{Vector(3, 8, 0), Vector(-2, 0, 0)}};
+	Vector knownSetup[10][2] = {{Vector(12, 11), Vector(5, 0)},
+			{Vector(19, 35), Vector(-5, 1)},
+			{Vector(12, 31), Vector(-4, -2)},
+			{Vector(35, 22), Vector(0, -3)},
+			{Vector(4, 9), Vector(-1, 0)},
+			{Vector(19, 18), Vector(2, -3)},
+			{Vector(38, 19), Vector(4, -4)},
+			{Vector(18, 5), Vector(-1, 2)},
+			{Vector(15, 33), Vector(2, -2)},
+			{Vector(3, 8), Vector(-2, 0)}};
 
 	testBoidCreationLoop: for(int i = 0; i < testBoidCount; i++) {
 		uint16 boidID = ((boidCPUID - 1) * boidCount) + i + 1;
@@ -324,14 +324,11 @@ void sendBoidsToNeighbours() {
 			outputBody[(k * BOID_DATA_LENGTH) + 0] = boids[j].id;
 			outputBody[(k * BOID_DATA_LENGTH) + 1] = boids[j].position.x;
 			outputBody[(k * BOID_DATA_LENGTH) + 2] = boids[j].position.y;
-			outputBody[(k * BOID_DATA_LENGTH) + 3] = boids[j].position.z;
-			outputBody[(k * BOID_DATA_LENGTH) + 4] = boids[j].velocity.x;
-			outputBody[(k * BOID_DATA_LENGTH) + 5] = boids[j].velocity.y;
-			outputBody[(k * BOID_DATA_LENGTH) + 6] = boids[j].velocity.z;
+			outputBody[(k * BOID_DATA_LENGTH) + 3] = boids[j].velocity.x;
+			outputBody[(k * BOID_DATA_LENGTH) + 4] = boids[j].velocity.y;
 		}
 
 		// Finally send the message to each neighbour
-		// TODO: Buffer the messages
 		for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			int dataLength = ((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH;
 			generateOutput(dataLength, neighbouringBoidCPUs[i], CMD_NBR_REPLY, outputBody);
@@ -361,12 +358,10 @@ void processNeighbouringBoids() {
 	// possible neighbouring boids for this BoidCPU
 	for (int i = 0; i < count; i++) {
 		Vector p = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1],
-				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2],
-				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3]);
+				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2]);
 
-		Vector v = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4],
-				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 5],
-				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 6]);
+		Vector v = Vector(inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3],
+				inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4]);
 
 		Boid b = Boid((uint16)inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0], p, v, i);
 		possibleNeighbouringBoids[possibleNeighbourCount] = b;
@@ -532,10 +527,8 @@ void transmitBoid(Boid boid, uint8 recipientID) {
 	outputBody[0] = boid.id;
 	outputBody[1] = boid.position.x;
 	outputBody[2] = boid.position.y;
-	outputBody[3] = boid.position.z;
-	outputBody[4] = boid.velocity.x;
-	outputBody[5] = boid.velocity.y;
-	outputBody[6] = boid.velocity.z;
+	outputBody[3] = boid.velocity.x;
+	outputBody[4] = boid.velocity.y;
 
 	generateOutput(7, recipientID, CMD_BOID, outputBody);
 
@@ -559,8 +552,8 @@ void transmitBoid(Boid boid, uint8 recipientID) {
 void acceptBoid(uint32 *boidData) {
 	// TODO: Parse the input data to create a boid object
 	int boidID = 12;
-	Vector boidPosition = Vector(12, 100, 0);
-	Vector boidVelocity = Vector(10, -2, 0);
+	Vector boidPosition = Vector(12, 100);
+	Vector boidVelocity = Vector(10, -2);
 	Boid b = Boid(boidID, boidPosition, boidVelocity, boidCount);
 
 	boids[boidCount] = b;
@@ -712,8 +705,8 @@ Boid::Boid() {
 	id = 0;
 	index = 0;
 
-	position = Vector(0, 0, 0);
-	velocity = Vector(0, 0, 0);
+	position = Vector(0, 0);
+	velocity = Vector(0, 0);
 
 	neighbouringBoidsCount = 0;
 }
@@ -874,8 +867,8 @@ void Boid::setNeighbourCount(int n) {
 
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
-	std::cout << "Boid Position: [" << position.x << " " << position.y << " " << position.z << "]" << std::endl;
-	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << " " << velocity.z << "]" << std::endl;
+	std::cout << "Boid Position: [" << position.x << " " << position.y << "]" << std::endl;
+	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << "]" << std::endl;
 	std::cout << "===================================" << std::endl;
 }
 
@@ -887,50 +880,44 @@ void Boid::printBoidInfo() {
 Vector::Vector() {
 	x = 0;
 	y = 0;
-	z = 0;
 }
 
-Vector::Vector(int12 x_, int12 y_, int12 z_) {
+Vector::Vector(int12 x_, int12 y_) {
 	x = x_;
 	y = y_;
-	z = z_;
 }
 
 // Basic Operations ////////////////////////////////////////////////////////////
 void Vector::add(Vector v) {
 	x = x + v.x;
 	y = y + v.y;
-	z = z + v.z;
 }
 
 void Vector::sub(Vector v) {
 	x = x - v.x;
 	y = y - v.y;
-	z = z - v.z;
 }
 
 void Vector::mul(int12 n) {
 	x = x * n;
 	y = y * n;
-	z = z * n;
 }
 
 void Vector::div(int12 n) {
 	if (n != 0) {
 		x = x / n;
 		y = y / n;
-		z = z / n;
 	}
 }
 
 // Static Operations /////////////////////////////////////////////////////////
 Vector Vector::add(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
+	Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y);
 	return v3;
 }
 
 Vector Vector::sub(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
+	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
 	return v3;
 }
 
@@ -938,17 +925,15 @@ Vector Vector::sub(Vector v1, Vector v2) {
 double Vector::distanceBetween(Vector v1, Vector v2) {
 	int12 xPart = v1.x - v2.x;
 	int12 yPart = v1.y - v2.y;
-	int12 zPart = v1.z - v2.z;
 
 	xPart = xPart * xPart;
 	yPart = yPart * yPart;
-	zPart = zPart * zPart;
 
-	return hls::sqrt(double(xPart + yPart + zPart));
+	return hls::sqrt(double(xPart + yPart));
 }
 
 bool Vector::equal(Vector v1, Vector v2) {
-	if ((v1.x == v2.x) && (v1.y == v2.y) && (v1.z == v2.z)) {
+	if ((v1.x == v2.x) && (v1.y == v2.y)) {
 		return true;
 	} else {
 		return false;
@@ -957,7 +942,7 @@ bool Vector::equal(Vector v1, Vector v2) {
 
 // Advanced Operations /////////////////////////////////////////////////////////
 int12 Vector::mag() {
-	return (uint12)round(hls::sqrt(double(x*x + y*y + z*z)));
+	return (uint12)round(hls::sqrt(double(x*x + y*y)));
 }
 
 void Vector::setMag(int12 mag) {
@@ -973,7 +958,6 @@ void Vector::normalise() {
 	} else {
 		x = 0;
 		y = 0;
-		z = 0;
 	}
 }
 
@@ -988,7 +972,6 @@ void Vector::bound(int12 n) {
 	// TODO: The is technically not binding the speed, which is the magnitude
 	if(x > n) x = n;
 	if(y > n) y = n;
-	if(z > n) z = n;
 }
 
 bool Vector::empty() {
@@ -996,7 +979,6 @@ bool Vector::empty() {
 
 	if(x) result = false;
 	else if(y) result = false;
-	else if(z) result = false;
 
 	return result;
 }

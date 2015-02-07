@@ -175,8 +175,8 @@ void testSimulationSetup() {
 	// If the value is not 0 then the BoidCPU is able to progress itself until
 	// it reaches the time step equal to the supplied value - it does not need
 	// to wait for the controller to supply synchronisation steps
-	data[14] = 100;
-	dataLength += 1;
+//	data[14] = 100;
+//	dataLength += 1;
 
 	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 }
@@ -232,16 +232,14 @@ void processNeighbourReply() {
 
 	for (int i = 0; i < count; i++) {
 		Vector p = Vector(tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1],
-				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2],
-				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3]);
+				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2]);
 
-		Vector v = Vector(tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4],
-				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 5],
-				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 6]);
+		Vector v = Vector(tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3],
+				tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 4]);
 
 		Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0], p, v, i);
 		tbBoids[i] = b;
-		b.printBoidInfo();
+//		b.printBoidInfo();
 	}
 }
 

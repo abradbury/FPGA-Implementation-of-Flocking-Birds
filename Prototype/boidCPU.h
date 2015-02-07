@@ -25,7 +25,7 @@
 #define CONTROLLER_ID			1	// The ID of the controller
 #define BOIDGPU_ID				2	// The ID of the BoidGPU
 
-#define BOID_DATA_LENGTH		7	// The number of bits to send for a boid
+#define BOID_DATA_LENGTH		5	// The number of bits to send for a boid
 
 #define MODE_INIT 				1	//
 #define	CMD_PING				2	// Controller -> BoidCPU
@@ -86,10 +86,9 @@ class Vector {
 	public:
 		int12 x;
 		int12 y;
-		int12 z;
 
 		Vector();
-		Vector(int12 x_, int12 y_, int12 z_);
+		Vector(int12 x_, int12 y_);
 
 		void add(Vector v);
 		void sub(Vector v);
@@ -149,12 +148,6 @@ class Boid {
 		void update(); 						// Calculate the new position of the boid
 		void draw();						// Draw the boid
 
-//		Vector getVelocity();
-//		Vector getPosition();
-//		uint8 getID();
-//		uint8 getNeighbourCount();
-//		Boid* getNeighbours();
-
 		void setNeighbourCount(int n);
 
 		void printBoidInfo();
@@ -162,7 +155,6 @@ class Boid {
 	private:
 		Vector acceleration;
 		uint8 neighbouringBoidsCount;
-//		Boid *neighbouringBoids[MAX_NEIGHBOURING_BOIDS];
 
 		Vector align();						// Calculate the alignment force
 		Vector separate();					// Calculate the separation force
