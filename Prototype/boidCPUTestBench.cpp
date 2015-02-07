@@ -1,8 +1,8 @@
 #include "boidCPU.h"
 
 // Globals
-uint32 tbOutputData[TB_MAX_OUTPUT_CMDS][MAX_CMD_LEN];
-uint32 tbInputData[TB_MAX_INPUT_CMDS][MAX_CMD_LEN];
+uint32 tbOutputData[MAX_OUTPUT_CMDS][MAX_CMD_LEN];
+uint32 tbInputData[MAX_INPUT_CMDS][MAX_CMD_LEN];
 uint32 tbOutputCount = 0;
 uint32 tbInputCount = 0;
 

@@ -38,8 +38,9 @@ int12 boidCPUCoords[4];
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 
 uint32 inputData[MAX_CMD_LEN];
-uint32 outputData[MAX_CMD_LEN];
+uint32 outputData[MAX_OUTPUT_CMDS][MAX_CMD_LEN];
 uint32 outputBody[30];
+uint32 outputCount = 0;				// The number of output messages buffered
 bool outputAvailable = false;		// True if there is output ready to send
 
 // Boid variables --------------------------------------------------------------
@@ -170,12 +171,15 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// OUTPUT --------------------------------------------------------------
 		// If there is output to send, send it
 		if (outputAvailable) {
-			outputLoop: for (int i = 0; i < outputData[CMD_LEN]; i++) {
-				output.write(outputData[i]);
+			outerOutputLoop: for (int j = 0; j < outputCount; j++) {
+				innerOutputLoop: for (int i = 0; i < outputData[j][CMD_LEN]; i++) {
+					output.write(outputData[j][i]);
+				}
+				printCommand(true, outputData[j]);
 			}
-			printCommand(true, outputData);
 		}
 		outputAvailable = false;
+		outputCount = 0;
 		// ---------------------------------------------------------------------
 
 		// TODO: Remove when deployed
@@ -564,18 +568,24 @@ void acceptBoid(uint32 *boidData) {
 }
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
-	outputData[CMD_LEN]  = len + CMD_HEADER_LEN;
-	outputData[CMD_TO]   = to;
-	outputData[CMD_FROM] = boidCPUID;
-	outputData[CMD_TYPE] = type;
+	if (outputCount > MAX_OUTPUT_CMDS - 1) {
 
-	if (len > 0) {
-		createOutputCommandLoop: for(int i = 0; i < len; i++) {
-			outputData[CMD_HEADER_LEN + i] = data[i];
+		std::cout << "Cannot send message, output buffer is full (" <<
+			outputCount << ")" << std::endl;
+	} else {
+		outputData[outputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
+		outputData[outputCount][CMD_TO]   = to;
+		outputData[outputCount][CMD_FROM] = boidCPUID;
+		outputData[outputCount][CMD_TYPE] = type;
+
+		if (len > 0) {
+			createOutputCommandLoop: for(int i = 0; i < len; i++) {
+				outputData[outputCount][CMD_HEADER_LEN + i] = data[i];
+			}
 		}
+		outputCount++;
+		outputAvailable = true;
 	}
-
-	outputAvailable = true;
 }
 
 /**
