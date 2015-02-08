@@ -321,19 +321,30 @@ void sendBoidsToNeighbours() {
 
 		// The next step is to create the message data
 		for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
-//			outputBody[(k * BOID_DATA_LENGTH) + 0] = boids[j].id;
-//			outputBody[(k * BOID_DATA_LENGTH) + 1] = boids[j].position.x;
-//			outputBody[(k * BOID_DATA_LENGTH) + 2] = boids[j].position.y;
-//			outputBody[(k * BOID_DATA_LENGTH) + 3] = boids[j].velocity.x;
-//			outputBody[(k * BOID_DATA_LENGTH) + 4] = boids[j].velocity.y;
-
 			uint32 position = 0;
 			uint32 velocity = 0;
 
-			position |= (uint32(boids[j].position.x) << 20);
-			position |= (uint32(boids[j].position.y) << 8);
-			velocity |= (uint32(boids[j].velocity.x) << 20);
-			velocity |= (uint32(boids[j].velocity.y) << 8);
+			position |= ((uint32)(boids[j].position.x) << 20);
+			position |= ((uint32)(boids[j].position.y) << 8);
+
+			// Despite being of type int12, the velocity (and position) seem to
+			// be represented using 16 bits. Therefore, negative values need to
+			// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
+			if(boids[j].velocity.x < 0) {
+				velocity |= ((uint32)((boids[j].velocity.x) & ~((int16)0x0F << 12)) << 20);
+			} else {
+				velocity |= ((uint32)(boids[j].velocity.x) << 20);
+			}
+
+			if(boids[j].velocity.y < 0) {
+				velocity |= ((uint32)((boids[j].velocity.y) & ~((int16)0x0F << 12)) << 8);
+			} else {
+				velocity |= ((uint32)(boids[j].velocity.y) << 8);
+			}
+
+			std::cout << "Boid " << boids[j].id << " has velocity [" << boids[j].velocity.x << ", " << boids[j].velocity.y << "]" << std::endl;
+			std::cout << velocity.to_string(2) << std::endl;
+			std::cout << std::endl;
 
 			outputBody[(k * BOID_DATA_LENGTH) + 0] = position;
 			outputBody[(k * BOID_DATA_LENGTH) + 1] = velocity;
@@ -903,7 +914,8 @@ double Vector::distanceBetween(Vector v1, Vector v2) {
 	xPart = xPart * xPart;
 	yPart = yPart * yPart;
 
-	return hls::sqrt(double(xPart + yPart));
+	// Could also use hls::sqrt() - in newer HLS version
+	return sqrt(double(xPart + yPart));
 }
 
 bool Vector::equal(Vector v1, Vector v2) {
@@ -916,7 +928,8 @@ bool Vector::equal(Vector v1, Vector v2) {
 
 // Advanced Operations /////////////////////////////////////////////////////////
 int12 Vector::mag() {
-	return (uint12)round(hls::sqrt(double(x*x + y*y)));
+	// Could also use hls::sqrt() - in newer HLS version
+	return (uint12)round(sqrt(double(x*x + y*y)));
 }
 
 void Vector::setMag(int12 mag) {
