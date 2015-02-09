@@ -185,7 +185,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// TODO: Remove when deployed
 		continueOperation = input.read_nb(inputData[0]);
 	}
-	std::cout << "======BoidCPU has finished======" << std::endl;
+	std::cout << "=========BoidCPU has finished=========" << std::endl;
 }
 
 //==============================================================================
@@ -754,7 +754,7 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int _index)
 	neighbouringBoidsCount = 0;
 
 	std::cout << "Created boid #" << id << std::endl;
-//	printBoidInfo();
+	printBoidInfo();
 }
 
 void Boid::update(void) {
@@ -772,6 +772,7 @@ void Boid::update(void) {
 	acceleration.mul(0);
 
 	contain();
+	printBoidInfo();
 }
 
 Vector Boid::align(void) {

@@ -63,6 +63,8 @@ int main() {
 	// TODO: Come up with a better buffer counter update method
 	tbOutputCount = 0;
 
+	std::cout << "======TestBench finished sending======" << std::endl;
+
 	// Run the hardware --------------------------------------------------------
 	toplevel(to_hw, from_hw);
 
@@ -98,6 +100,8 @@ int main() {
 		// inputCount++;
 		inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
 	}
+
+	std::cout << "=====TestBench finished receiving=====" << std::endl;
 
 	return 0;
 }
@@ -207,7 +211,7 @@ void processNeighbourReply() {
 
 		Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v, i);
 		tbBoids[i] = b;
-		b.printBoidInfo();
+//		b.printBoidInfo();
 	}
 }
 
@@ -316,6 +320,15 @@ void processDrawInfo() {
 			else digits = widthDigits - 2;
 			std::cout << i << std::string(digits, ' ');
 		} std::cout << std::endl;
+	} else {
+		// TODO: Print out boid info
+//		int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
+
+		for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN; i += 3) {
+			std::cout << "Boid " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 0]
+			    << " has position [" << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1]
+			    << ", " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2] << "]" << std::endl;
+		}
 	}
 }
 
