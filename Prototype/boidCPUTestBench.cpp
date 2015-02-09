@@ -35,158 +35,158 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
  * This acts as the external interface to the BoidCPU
  */
 int main() {
-	hls::stream<uint32> to_hw, from_hw;
+    hls::stream<uint32> to_hw, from_hw;
 
-	// Test BoidCPU input ------------------------------------------------------
-	// First send the initialisation commands
-	testPing();
-	testSimulationSetup();
+    // Test BoidCPU input ------------------------------------------------------
+    // First send the initialisation commands
+    testPing();
+    testSimulationSetup();
 
-	// Then draw the initial positions of the boids
-	testDrawBoids();
+    // Then draw the initial positions of the boids
+    testDrawBoids();
 
-	// Then repeat these commands every time step
-	testNeighbourSearch();
-	testCalcNextBoidPos();
-	testLoadBalance();
-	testMoveBoids();
-	testDrawBoids();
+    // Then repeat these commands every time step
+    testNeighbourSearch();
+    testCalcNextBoidPos();
+    testLoadBalance();
+    testMoveBoids();
+    testDrawBoids();
 
-	// Send data ---------------------------------------------------------------
-	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
-		tbPrintCommand(true, tbOutputData[i]);
-		innerOutputLoop: for(int j = 0; j < tbOutputData[i][CMD_LEN]; j++) {
-			to_hw.write(tbOutputData[i][j]);
-		}
-	}
+    // Send data ---------------------------------------------------------------
+    outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
+        tbPrintCommand(true, tbOutputData[i]);
+        innerOutputLoop: for (int j = 0; j < tbOutputData[i][CMD_LEN]; j++) {
+            to_hw.write(tbOutputData[i][j]);
+        }
+    }
 
-	// TODO: Come up with a better buffer counter update method
-	tbOutputCount = 0;
+    // TODO: Come up with a better buffer counter update method
+    tbOutputCount = 0;
 
-	std::cout << "======TestBench finished sending======" << std::endl;
+    std::cout << "======TestBench finished sending======" << std::endl;
 
-	// Run the hardware --------------------------------------------------------
-	toplevel(to_hw, from_hw);
+    // Run the hardware --------------------------------------------------------
+    toplevel(to_hw, from_hw);
 
-	// Receive data ------------------------------------------------------------
-	bool inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
+    // Receive data ------------------------------------------------------------
+    bool inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
 
-	while (inputAvailable) {
-		inputLoop: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - 1; i++) {
-			tbInputData[tbInputCount][i + 1] = from_hw.read();
-		}
+    while (inputAvailable) {
+        inLp: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - 1; i++) {
+            tbInputData[tbInputCount][i + 1] = from_hw.read();
+        }
 
-		tbPrintCommand(false, tbInputData[tbInputCount]);
+        tbPrintCommand(false, tbInputData[tbInputCount]);
 
-		// Process data --------------------------------------------------------
-		switch (tbInputData[tbInputCount][CMD_TYPE]) {
-			case CMD_PING_REPLY:
-				processPingResponse();
-				break;
-			case CMD_NBR_REPLY:
-				processNeighbourReply();
-				break;
-			case CMD_DRAW_INFO:
-				processDrawInfo();
-				break;
-			default:
-				std::cout << "Controller received a command it cannot handle: "
-					<< tbInputData[CMD_TYPE] << std::endl;
-				break;
-		}
+        // Process data --------------------------------------------------------
+        switch (tbInputData[tbInputCount][CMD_TYPE]) {
+            case CMD_PING_REPLY:
+                processPingResponse();
+                break;
+            case CMD_NBR_REPLY:
+                processNeighbourReply();
+                break;
+            case CMD_DRAW_INFO:
+                processDrawInfo();
+                break;
+            default:
+                std::cout << "Controller received a command it cannot handle: "
+                    << tbInputData[CMD_TYPE] << std::endl;
+                break;
+        }
 
-		// Check for more input ------------------------------------------------
-		// Don't really need input buffer if data is processed before the next
-		// inputCount++;
-		inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
-	}
+        // Check for more input ------------------------------------------------
+        // Don't really need input buffer if data is processed before the next
+        // inputCount++;
+        inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
+    }
 
-	std::cout << "=====TestBench finished receiving=====" << std::endl;
+    std::cout << "=====TestBench finished receiving=====" << std::endl;
 
-	return 0;
+    return 0;
 }
 
 void testPing() {
-	// Test ping response ----------------------------------------------------//
-	// 4, 0, 1, 2 ||
-	to = CMD_BROADCAST;
-	dataLength = 0;
-	createCommand(dataLength, to, from, CMD_PING, data);
+    // Test ping response ----------------------------------------------------//
+    // 4, 0, 1, 2 ||
+    to = CMD_BROADCAST;
+    dataLength = 0;
+    createCommand(dataLength, to, from, CMD_PING, data);
 }
 
 // TODO: Need to send to broadcast during actual testing as random ID unknown
 void testSimulationSetup() {
-	// Test simulation setup ---------------------------------------------------
-	// 18, 83, 1, 5 || 7, 10, 0, 0, 40, 40, 3, 4, 5, 8, 11, 10, 9, 6, [100]
-	dataLength = 14;
-	to = 83;			// The current random ID of the test BoidCPU
+    // Test simulation setup ---------------------------------------------------
+    // 18, 83, 1, 5 || 7, 10, 0, 0, 40, 40, 3, 4, 5, 8, 11, 10, 9, 6, [100]
+    dataLength = 14;
+    to = 83;            // The current random ID of the test BoidCPU
 
-	uint32 newID = 7;
-	uint32 initialBoidCount = 10;
-	coords[0] = 0;
-	coords[1] = 0;
-	coords[2] = 40;
-	coords[3] = 40;
-	uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {3, 4, 5, 8, 11, 10, 9, 6};
+    uint32 newID = 7;
+    uint32 initialBoidCount = 10;
+    coords[0] = 0;
+    coords[1] = 0;
+    coords[2] = 40;
+    coords[3] = 40;
+    uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS] = {3, 4, 5, 8, 11, 10, 9, 6};
 
-	data[0] = newID;
-	data[1] = initialBoidCount;
+    data[0] = newID;
+    data[1] = initialBoidCount;
 
-	for (int i = 0; i < EDGE_COUNT; i++) {
-		data[2 + i] = coords[i];
-	}
+    for (int i = 0; i < EDGE_COUNT; i++) {
+        data[2 + i] = coords[i];
+    }
 
-	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-		data[EDGE_COUNT + 2 + i] = neighbours[i];
-	}
+    for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+        data[EDGE_COUNT + 2 + i] = neighbours[i];
+    }
 
-	// Additional data for testing
-	// If the value is not 0 then the BoidCPU is able to progress itself until
-	// it reaches the time step equal to the supplied value - it does not need
-	// to wait for the controller to supply synchronisation steps
-//	data[14] = 100;
-//	dataLength += 1;
+    // Additional data for testing
+    // If the value is not 0 then the BoidCPU is able to progress itself until
+    // it reaches the time step equal to the supplied value - it does not need
+    // to wait for the controller to supply synchronisation steps
+//  data[14] = 100;
+//  dataLength += 1;
 
-	createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
+    createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 }
 
 void testNeighbourSearch() {
-	// 4 0 1 6 ||
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
+    // 4 0 1 6 ||
+    dataLength = 0;
+    to = CMD_BROADCAST;
+    createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
 }
 
 void testCalcNextBoidPos() {
-	// 4 0 1 9 ||
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
+    // 4 0 1 9 ||
+    dataLength = 0;
+    to = CMD_BROADCAST;
+    createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
 }
 
 void testLoadBalance() {
-	// 4 0 1 10 ||
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, CMD_LOAD_BAL, data);
+    // 4 0 1 10 ||
+    dataLength = 0;
+    to = CMD_BROADCAST;
+    createCommand(dataLength, to, from, CMD_LOAD_BAL, data);
 }
 
 void testMoveBoids() {
-	// 4 0 1 11 ||
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
+    // 4 0 1 11 ||
+    dataLength = 0;
+    to = CMD_BROADCAST;
+    createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
 }
 
 void testDrawBoids() {
-	// 4 0 1 14 ||
-	dataLength = 0;
-	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_DRAW, data);
+    // 4 0 1 14 ||
+    dataLength = 0;
+    to = CMD_BROADCAST;
+    createCommand(dataLength, to, from, MODE_DRAW, data);
 }
 
 void processPingResponse() {
-	// TODO
+    // TODO
 }
 
 /**
@@ -194,245 +194,250 @@ void processPingResponse() {
  * BoidCPU. Used when calculating the neighbours for a particular boid.
  */
 void processNeighbourReply() {
-	int count = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
-	Boid tbBoids[MAX_BOIDS];
+    int count = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 
+        BOID_DATA_LENGTH;
+    Boid tbBoids[MAX_BOIDS];
 
-	std::cout << "Dummy BoidCPU received " << count << " boids" << std::endl;
+    std::cout << "Dummy BoidCPU received " << count << " boids" << std::endl;
 
-	for (int i = 0; i < count; i++) {
-		uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
-		uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+    for (int i = 0; i < count; i++) {
+        uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
+        uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
 
-		Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
-				(int12)((position & (uint32)0xFFF00) >> 8));
+        Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
+                (int12)((position & (uint32)0xFFF00) >> 8));
 
-		Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
-				(int12)((velocity & (uint32)0xFFF00) >> 8));
+        Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
+                (int12)((velocity & (uint32)0xFFF00) >> 8));
 
-		Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v, i);
-		tbBoids[i] = b;
-//		b.printBoidInfo();
-	}
+        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v, i);
+        tbBoids[i] = b;
+//      b.printBoidInfo();
+    }
 }
 
 void processDrawInfo() {
-	std::cout << "Drawing boids..." << std::endl;
+    std::cout << "Drawing boids..." << std::endl;
 
-	if (drawBoids == true) {
-		int maxBoidID = 0;
-		int digits = 0;
-		int widthDigits = 0;
-		int idDigits = 0;
-		int boidAtPos = 0;
-		char space = '-';
-		char edge = '*';
+    if (drawBoids == true) {
+        int maxBoidID = 0;
+        int digits = 0;
+        int widthDigits = 0;
+        int idDigits = 0;
+        int boidAtPos = 0;
+        char space = '-';
+        char edge = '*';
 
-		// Get the boid bounds
-		int boidCPUWidth =  coords[X_MAX] - coords[X_MIN];
-		int boidCPUHeight = coords[Y_MAX] - coords[Y_MIN];
+        // Get the boid bounds
+        int boidCPUWidth =  coords[X_MAX] - coords[X_MIN];
+        int boidCPUHeight = coords[Y_MAX] - coords[Y_MIN];
 
-		// Get the number of boids
-		int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
+        // Get the number of boids
+        int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
 
-		// Get the maximum boid ID
-		for (int i = 0; i < tbBoidCount; i++) {
-			if (tbInputData[tbInputCount][CMD_HEADER_LEN + (i * 3)] > maxBoidID) {
-				maxBoidID = tbInputData[tbInputCount][CMD_HEADER_LEN + (i * 3)];
-			}
-		}
+        // Get the maximum boid ID
+        for (int i = 0; i < tbBoidCount; i++) {
+            if (tbInputData[tbInputCount][CMD_HEADER_LEN + (i * 3)] > maxBoidID) {
+                maxBoidID = tbInputData[tbInputCount][CMD_HEADER_LEN + (i * 3)];
+            }
+        }
 
-		// Determine the number of digits in the max boid ID
-		if (maxBoidID < 10) idDigits = 1;
-		else if (maxBoidID < 100) idDigits = 2;
-		else idDigits = 3;
+        // Determine the number of digits in the max boid ID
+        if (maxBoidID < 10) {
+            idDigits = 1;
+        } else if (maxBoidID < 100) {
+            idDigits = 2;
+        } else {
+            idDigits = 3;
+        }
 
-		// Calculate the top edge offset due to the left edge and index
-		if (boidCPUHeight < 10) widthDigits = 1;
-		else if (boidCPUHeight < 100) widthDigits = 2;
-		else widthDigits = 3;
-		std::cout << std::string(widthDigits, ' ') << edge;
+        // Calculate the top edge offset due to the left edge and index
+        if (boidCPUHeight < 10) widthDigits = 1;
+        else if (boidCPUHeight < 100) widthDigits = 2;
+        else widthDigits = 3;
+        std::cout << std::string(widthDigits, ' ') << edge;
 
-		// Print the top index row
-		for (int i = 0; i < boidCPUWidth; i++) {
-			if (i < 10) digits = widthDigits;
-			else if (i < 100) digits = widthDigits - 1;
-			else digits = widthDigits - 2;
-			std::cout << i << std::string(digits, ' ');
-		} std::cout << std::endl;
+        // Print the top index row
+        for (int i = 0; i < boidCPUWidth; i++) {
+            if (i < 10) digits = widthDigits;
+            else if (i < 100) digits = widthDigits - 1;
+            else digits = widthDigits - 2;
+            std::cout << i << std::string(digits, ' ');
+        } std::cout << std::endl;
 
-		// Print the top edge (including offset)
-		std::cout << std::string(widthDigits, ' ') << edge;
-		for (int i = 0; i < boidCPUWidth; i++) {
-			std::cout << edge << std::string(idDigits, ' ');
-		} std::cout << std::endl;
+        // Print the top edge (including offset)
+        std::cout << std::string(widthDigits, ' ') << edge;
+        for (int i = 0; i < boidCPUWidth; i++) {
+            std::cout << edge << std::string(idDigits, ' ');
+        } std::cout << std::endl;
 
-		// Print the positions of the boids in the BoidCPU
-		for (int y = 0; y < boidCPUHeight; y++) {
-			// Print the left edge and index
-			if (y < 10) digits = widthDigits - 1;
-			else if (y < 100) digits = widthDigits - 2;
-			else digits = widthDigits - 3;
-			std::cout << std::string(digits, ' ') << y << edge;
+        // Print the positions of the boids in the BoidCPU
+        for (int y = 0; y < boidCPUHeight; y++) {
+            // Print the left edge and index
+            if (y < 10) digits = widthDigits - 1;
+            else if (y < 100) digits = widthDigits - 2;
+            else digits = widthDigits - 3;
+            std::cout << std::string(digits, ' ') << y << edge;
 
-			// Print the boid ID at the appropriate position
-			for (int x = 0; x < boidCPUWidth; x++) {
-				for (int i = 0, j = 0; j < tbBoidCount; j++, i = i + 3) {
-					int boidID = tbInputData[tbInputCount][CMD_HEADER_LEN + i];
-					int boidX =  tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1];
-					int boidY =  tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2];
+            // Print the boid ID at the appropriate position
+            for (int x = 0; x < boidCPUWidth; x++) {
+                for (int i = 0, j = 0; j < tbBoidCount; j++, i = i + 3) {
+                    int boidID = tbInputData[tbInputCount][CMD_HEADER_LEN + i];
+                    int boidX =  tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1];
+                    int boidY =  tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2];
 
-					if (boidX == x) {
-						if (boidY == y) {
-							boidAtPos = tbInputData[tbInputCount][CMD_HEADER_LEN + i];
-							break;
-						}
-					}
-				}
+                    if (boidX == x) {
+                        if (boidY == y) {
+                            boidAtPos = tbInputData[tbInputCount][CMD_HEADER_LEN + i];
+                            break;
+                        }
+                    }
+                }
 
-				if (boidAtPos != 0) {
-					if (boidAtPos < 10) digits = idDigits;
-					else if (boidAtPos < 100) digits = idDigits - 1;
-					else digits = idDigits - 2;
+                if (boidAtPos != 0) {
+                    if (boidAtPos < 10) digits = idDigits;
+                    else if (boidAtPos < 100) digits = idDigits - 1;
+                    else digits = idDigits - 2;
 
-					std::cout << boidAtPos << std::string(digits, space);
+                    std::cout << boidAtPos << std::string(digits, space);
 
-					boidAtPos = 0;
-				} else {
-					std::cout << std::string(idDigits + 1, space);
-				}
-			}
+                    boidAtPos = 0;
+                } else {
+                    std::cout << std::string(idDigits + 1, space);
+                }
+            }
 
-			// Print the right edge
-			std::cout << edge << y << std::endl;
-		}
+            // Print the right edge
+            std::cout << edge << y << std::endl;
+        }
 
-		// Print the bottom edge (including offset)
-		std::cout << std::string(widthDigits, ' ') << edge;
-		for (int i = 0; i < boidCPUWidth; i++) {
-			std::cout << edge << std::string(idDigits, ' ');
-		} std::cout << std::endl;
+        // Print the bottom edge (including offset)
+        std::cout << std::string(widthDigits, ' ') << edge;
+        for (int i = 0; i < boidCPUWidth; i++) {
+            std::cout << edge << std::string(idDigits, ' ');
+        } std::cout << std::endl;
 
-		// Print the bottom index row
-		std::cout << std::string(widthDigits, ' ') << edge;
-		for (int i = 0; i < boidCPUWidth; i++) {
-			if (i < 10) digits = widthDigits;
-			else if (i < 100) digits = widthDigits - 1;
-			else digits = widthDigits - 2;
-			std::cout << i << std::string(digits, ' ');
-		} std::cout << std::endl;
-	} else {
-		// TODO: Print out boid info
-//		int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
+        // Print the bottom index row
+        std::cout << std::string(widthDigits, ' ') << edge;
+        for (int i = 0; i < boidCPUWidth; i++) {
+            if (i < 10) digits = widthDigits;
+            else if (i < 100) digits = widthDigits - 1;
+            else digits = widthDigits - 2;
+            std::cout << i << std::string(digits, ' ');
+        } std::cout << std::endl;
+    } else {
+        // TODO: Print out boid info
+//      int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
 
-		for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN; i += 3) {
-			std::cout << "Boid " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 0]
-			    << " has position [" << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1]
-			    << ", " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2] << "]" << std::endl;
-		}
-	}
+        for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN; i += 3) {
+            std::cout << "Boid " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 0]
+                << " has position [" << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1]
+                << ", " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2] << "]" << std::endl;
+        }
+    }
 }
 
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {
-	tbOutputData[tbOutputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
-	tbOutputData[tbOutputCount][CMD_TO]   = to;
-	tbOutputData[tbOutputCount][CMD_FROM] = from;
-	tbOutputData[tbOutputCount][CMD_TYPE] = type;
+    tbOutputData[tbOutputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
+    tbOutputData[tbOutputCount][CMD_TO]   = to;
+    tbOutputData[tbOutputCount][CMD_FROM] = from;
+    tbOutputData[tbOutputCount][CMD_TYPE] = type;
 
-	if (len > 0) {
-		dataToCmd: for(int i = 0; i < len; i++) {
-			tbOutputData[tbOutputCount][CMD_HEADER_LEN + i] = data[i];
-		}
-	}
+    if (len > 0) {
+        dataToCmd: for (int i = 0; i < len; i++) {
+            tbOutputData[tbOutputCount][CMD_HEADER_LEN + i] = data[i];
+        }
+    }
 
-	tbOutputCount++;
+    tbOutputCount++;
 }
 
 /**
  * Parses the supplied command and prints it out to the terminal
  */
 void tbPrintCommand(bool send, uint32 *data) {
-	if(send) {
-		if(data[CMD_TO] == CMD_BROADCAST) {
-			std::cout << "-> TX, Controller sent broadcast: ";
-		} else if(data[CMD_TO] == BOIDGPU_ID) {
-			std::cout << "-> TX, Controller sent command to BoidGPU: ";
-		} else {
-			std::cout << "-> TX, Controller sent command to " << data[CMD_TO] << ": ";
-		}
-	} else {
-		if(data[CMD_TO] == CMD_BROADCAST) {
-			// This should never happen - BoidCPUs should not be able to broadcast
-			std::cout << "<- RX, Controller received broadcast from " << data[CMD_FROM] << ": ";
-		} else if(data[CMD_FROM] == BOIDGPU_ID) {
-			// This should never happen
-			std::cout << "<- RX, Controller received command from BoidGPU: ";
-		} else {
-			std::cout << "<- RX, Controller received command from " << data[CMD_FROM] << ": ";
-		}
-	}
+    if (send) {
+        if (data[CMD_TO] == CMD_BROADCAST) {
+            std::cout << "-> TX, Controller sent broadcast: ";
+        } else if (data[CMD_TO] == BOIDGPU_ID) {
+            std::cout << "-> TX, Controller sent command to BoidGPU: ";
+        } else {
+            std::cout << "-> TX, Controller sent command to " << data[CMD_TO] << ": ";
+        }
+    } else {
+        if (data[CMD_TO] == CMD_BROADCAST) {
+            // This should never happen - BoidCPUs should not be able to broadcast
+            std::cout << "<- RX, Controller received broadcast from " << data[CMD_FROM] << ": ";
+        } else if (data[CMD_FROM] == BOIDGPU_ID) {
+            // This should never happen
+            std::cout << "<- RX, Controller received command from BoidGPU: ";
+        } else {
+            std::cout << "<- RX, Controller received command from " << data[CMD_FROM] << ": ";
+        }
+    }
 
-	switch(data[CMD_TYPE]) {
-		case 0:
-			std::cout << "do something";
-			break;
-		case MODE_INIT:
-			std::cout << "initialise self";
-			break;
-		case CMD_PING:
-			std::cout << "BoidCPU ping";
-			break;
-		case CMD_PING_REPLY:
-			std::cout << "BoidCPU ping response";
-			break;
-		case CMD_USER_INFO:
-			std::cout << "output user info";
-			break;
-		case CMD_SIM_SETUP:
-			std::cout << "setup BoidCPU";
-			break;
-		case MODE_CALC_NBRS:
-			std::cout << "calculate neighbours";
-			break;
-		case CMD_NBR_REPLY:
-			std::cout << "neighbouring boids from neighbour";
-			break;
-		case MODE_POS_BOIDS:
-			std::cout << "calculate new boid positions";
-			break;
-		case CMD_LOAD_BAL:
-			std::cout << "load balance";
-			break;
-		case MODE_TRAN_BOIDS:
-			std::cout << "transfer boids";
-			break;
-		case CMD_BOID:
-			std::cout << "boid";
-			break;
-		case MODE_DRAW:
-			std::cout << "send boids to BoidGPU";
-			break;
-		case CMD_DRAW_INFO:
-			std::cout << "boid info heading to BoidGPU";
-			break;
-		case CMD_KILL:
-			std::cout << "kill simulation";
-			break;
-		default:
-			std::cout << "UNKNOWN COMMAND";
-			break;
-	}
-	std::cout << std::endl;
+    switch (data[CMD_TYPE]) {
+        case 0:
+            std::cout << "do something";
+            break;
+        case MODE_INIT:
+            std::cout << "initialise self";
+            break;
+        case CMD_PING:
+            std::cout << "BoidCPU ping";
+            break;
+        case CMD_PING_REPLY:
+            std::cout << "BoidCPU ping response";
+            break;
+        case CMD_USER_INFO:
+            std::cout << "output user info";
+            break;
+        case CMD_SIM_SETUP:
+            std::cout << "setup BoidCPU";
+            break;
+        case MODE_CALC_NBRS:
+            std::cout << "calculate neighbours";
+            break;
+        case CMD_NBR_REPLY:
+            std::cout << "neighbouring boids from neighbour";
+            break;
+        case MODE_POS_BOIDS:
+            std::cout << "calculate new boid positions";
+            break;
+        case CMD_LOAD_BAL:
+            std::cout << "load balance";
+            break;
+        case MODE_TRAN_BOIDS:
+            std::cout << "transfer boids";
+            break;
+        case CMD_BOID:
+            std::cout << "boid";
+            break;
+        case MODE_DRAW:
+            std::cout << "send boids to BoidGPU";
+            break;
+        case CMD_DRAW_INFO:
+            std::cout << "boid info heading to BoidGPU";
+            break;
+        case CMD_KILL:
+            std::cout << "kill simulation";
+            break;
+        default:
+            std::cout << "UNKNOWN COMMAND";
+            break;
+    }
+    std::cout << std::endl;
 
-	std::cout << "\t";
-	for(int i = 0; i < CMD_HEADER_LEN; i++) {
-		std::cout << data[i] << " ";
-	}
+    std::cout << "\t";
+    for (int i = 0; i < CMD_HEADER_LEN; i++) {
+        std::cout << data[i] << " ";
+    }
 
-	std::cout << "|| ";
+    std::cout << "|| ";
 
-	for(int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
-		std::cout << data[CMD_HEADER_LEN + i] << " ";
-	}
-	std::cout << std::endl;
+    for (int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+        std::cout << data[CMD_HEADER_LEN + i] << " ";
+    }
+    std::cout << std::endl;
 }
 
