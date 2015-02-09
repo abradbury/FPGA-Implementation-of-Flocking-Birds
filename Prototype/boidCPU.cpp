@@ -302,14 +302,18 @@ void sendBoidsToNeighbours() {
 	std::cout << "-Sending boids to neighbouring BoidCPUs..." << std::endl;
 
 	// First, calculate how many messages need to be sent
-	// '+1' needed due to integer division rounding towards zero
-	int noOfMsgs = ((boidCount * BOID_DATA_LENGTH) / MAX_CMD_BODY_LEN) + 1;
+	// Division by subtraction needed due to issues with integer division
+	uint16 numerator = boidCount * BOID_DATA_LENGTH;
+	uint16 msgCount = 0;
+	for(msgCount = 0; numerator > 0; msgCount++){
+		numerator -=MAX_CMD_BODY_LEN;
+	}
 
 	// Then calculate the number of boids that can be sent per message
-	int boidsPerMsg = MAX_CMD_BODY_LEN / BOID_DATA_LENGTH;
+	uint16 boidsPerMsg = MAX_CMD_BODY_LEN / BOID_DATA_LENGTH;
 
 	// Next, send a message for each group of boids
-	for (int i = 0; i < noOfMsgs; i++) {
+	for (int i = 0; i < msgCount; i++) {
 		// Determine the boid indexes for this message
 		int startBoidIndex 	= i * boidsPerMsg;
 		int endBoidIndex 	= startBoidIndex + boidsPerMsg;
@@ -341,10 +345,6 @@ void sendBoidsToNeighbours() {
 			} else {
 				velocity |= ((uint32)(boids[j].velocity.y) << 8);
 			}
-
-			std::cout << "Boid " << boids[j].id << " has velocity [" << boids[j].velocity.x << ", " << boids[j].velocity.y << "]" << std::endl;
-			std::cout << velocity.to_string(2) << std::endl;
-			std::cout << std::endl;
 
 			outputBody[(k * BOID_DATA_LENGTH) + 0] = position;
 			outputBody[(k * BOID_DATA_LENGTH) + 1] = velocity;
