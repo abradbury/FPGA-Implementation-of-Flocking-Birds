@@ -13,8 +13,8 @@
 #define MAX_CMD_BODY_LEN        30  // The max length of the command body
 #define MAX_CMD_LEN             CMD_HEADER_LEN + MAX_CMD_BODY_LEN
 
-#define MAX_OUTPUT_CMDS         15  // The number of output commands to buffer
-#define MAX_INPUT_CMDS          5   // The number of input commands to buffer
+#define MAX_OUTPUT_CMDS         8  	 // The number of output commands to buffer
+#define MAX_INPUT_CMDS          1   // The number of input commands to buffer
 
 #define CMD_LEN                 0   // The index of the command length
 #define CMD_TO                  1   // The index of the command target
@@ -47,7 +47,7 @@
 #define MAX_VELOCITY            5
 #define MAX_FORCE               1   // Determines how quickly a boid can turn
 #define VISION_RADIUS           20  // How far a boid can see
-#define MAX_NEIGHBOURING_BOIDS  90  // TODO: Decide on appropriate value?
+#define MAX_NEIGHBOURING_BOIDS  45  // TODO: Decide on appropriate value?
 
 // BoidCPU definitions ---------------------------------------------------------
 #define AREA_WIDTH              720 // TODO: Should a BoidCPU know this?
