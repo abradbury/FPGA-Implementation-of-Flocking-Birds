@@ -2,12 +2,12 @@
 
 #include <stdio.h>          // For simple input/output (I/O)
 #include <stdlib.h>
-#include <string.h>     // For memset()
+#include <string.h>         // For memset()
 
 #include "xuartlite_l.h"    // UART
 #include "fsl.h"            // AXI Steam
 
-#define ENTER   0x0D            // Enter key press, used during puzzle requests
+#define ENTER   0x0D        // Enter key press, used during puzzle requests
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN          4   // The length of the command header
@@ -53,18 +53,22 @@ u32 from = CONTROLLER_ID;
 u32 dataLength = 0;
 u32 coords[EDGE_COUNT];
 
+u32 inputData[MAX_CMD_LEN];
+
 const char *commandDescriptions[16] = {
         "Initialisation mode",
         "Send ping to BoidCPUs",
         "Ping response from a BoidCPU",
         "User-inputed information for the BoidGPU",
         "Simulation setup information for a BoidCPU",
+        "",
         "Calculate neighbours mode",
         "Reply of neighbouring BoidCPU's boids",
         "Position calculation mode",
         "Load balancing command",
         "Transfer boids mode",
         "Transmit a boid",
+        "",
         "Draw mode",
         "Draw information heading to BoidGPU",
         "Kill simulation"};
@@ -108,11 +112,12 @@ int main() {
             index = 0;          // Reset the index and key press array
             memset(keyPresses, 0, sizeof(keyPresses));
 
-            print("Choose a command from the following list:");
-                        int i = 0;
-                        for(i = 0; i < CMD_KILL; i++) {
-                            xil_printf("%d: %s", i + 1, commandDescriptions[i + 1]);
-                        }
+            print("Choose a command from the following list: ");
+            int i = 0;
+            for(i = 0; i < CMD_KILL; i++) {
+                xil_printf("%d: %s", i + 1, commandDescriptions[i + 1]);
+            }
+
             do {
                 keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
                 XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
@@ -124,7 +129,27 @@ int main() {
             if ((cID >= 1) && (cID <= 16)) {
                 cIDValid = true;
                 print("\n\r");
+
+                // Send the command
                 chooseCommand(cID);
+
+                // Check for any response
+                int rv, invalid;
+                getfslx(rv, 0, FSL_NONBLOCKING);    // Non-blocking FSL read to device 0
+                fsl_isinvalid(invalid);             // Was there data ready?
+
+                if(!invalid) {
+                    print("Received data");
+                    inputData[0] = rv;
+                    int i = 0, value = 0;
+
+                    for (i = 1; i < inputData[0]; i++) {
+                        getfslx(value, 0, FSL_NONBLOCKING);
+                        inputData[i] = value;
+                    }
+                    printCommand(false, inputData);
+                }
+
             } else {
                 print("\n\r**Error: Command ID must be between 1 and 16 inclusive. Please try again.\n\r");
             }
@@ -136,8 +161,7 @@ int main() {
 
 
 void chooseCommand(int commandID) {
-//  putfslx(puzzleSize, 0, FSL_DEFAULT);
-//  getfslx(edgeValue, 0, FSL_DEFAULT);
+    from = CONTROLLER_ID;
 
     switch(commandID) {
         case MODE_INIT:
@@ -201,7 +225,15 @@ void testPing() {
 }
 
 void testPingReply() {
+    // 6, 1, 42, 3 || 21, 123
+    to = CONTROLLER_ID;
+    from = 42;
 
+    data[0] = 21;
+    data[1] = 123;
+    dataLength = 2;
+
+    createCommand(dataLength, to, from, CMD_PING_REPLY, data);
 }
 
 void testUserInfo() {
@@ -246,7 +278,7 @@ void testNeighbourSearch() {
 }
 
 void testNeighbourReply() {
-
+    // TODO
 }
 
 void testCalcNextBoidPos() {
