@@ -410,7 +410,7 @@ void processNeighbouringBoids() {
     // Set a flag if all the neighbouring BoidCPUs have sent their boids
     // TODO: Could use a counter instead
     bool allNeighboursReceived = false;
-    for (int i = 0; i < MAX_NEIGHBOURING_BOIDS; i++) {
+    for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
         allNeighboursReceived = (allNeighboursReceived &&
             receivedBoidCPUNbrList[i]);
     }
