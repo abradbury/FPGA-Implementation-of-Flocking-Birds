@@ -95,23 +95,16 @@ class Vector {
     Vector(int12 x_, int12 y_);
 
     void add(Vector v);
-    void sub(Vector v);
     void mul(int12 n);
     void div(int12 n);
 
     int12 mag();
     void normalise();
-    void bound(int12 n);
-    bool empty();
-
     void setMag(int12 mag);
     void limit(int12 max);
 
-    static Vector add(Vector v1, Vector v2);
     static Vector sub(Vector v1, Vector v2);
-//    static int12 distanceBetween(Vector v1, Vector v2);
     static uint12 squaredDistanceBetween(Vector v1, Vector v2);
-    static bool equal(Vector v1, Vector v2);
 };
 
 class Boid {
@@ -119,15 +112,15 @@ class Boid {
     Vector position;        // The current pixel position of the boid
     Vector velocity;        // The current velocity of the boid
     uint16 id;              // TODO: Remove this on deployment
-    uint16 index;           // Used to access relevant neighbouring boids
+    uint8 index;            // Used to access relevant neighbouring boids
 
     Boid();
-    Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int index);
+    Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, uint8 index);
 
     void update();                  // Calculate the boid's new position
     void draw();                    // Draw the boid (send to BoidGPU)
 
-    void setNeighbourCount(int n);
+    void setNeighbourCount(uint8 n);
     void printBoidInfo();
 
  private:

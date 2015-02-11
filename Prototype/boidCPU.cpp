@@ -281,7 +281,7 @@ void simulationSetup() {
 //  }
 
     // Create the boids (testing implementation)
-    int testBoidCount = 10;
+    uint8 testBoidCount = 10;
     Vector knownSetup[10][2] = {{Vector(12, 11), Vector(5, 0)},
             {Vector(19, 35), Vector(-5, 1)},
             {Vector(12, 31), Vector(-4, -2)},
@@ -383,7 +383,7 @@ void sendBoidsToNeighbours() {
 void processNeighbouringBoids() {
     // First, get the number of boids that the message contains
     // TODO: Remove division
-	int count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
+	uint8 count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
 
     std::cout << "-BoidCPU #" << boidCPUID << " received " << count <<
         " boids from BoidCPU #" << inputData[CMD_FROM] << std::endl;
@@ -553,19 +553,6 @@ void printStateOfBoidCPUBoids() {
 // Supporting functions ========================================================
 //==============================================================================
 
-// Generic methods
-void transmit(int to, int data) {
-//  output.write('a');
-}
-
-void receive() {
-//  input.read();
-	// TODO: Handle the receiving of a boid (through transfer)
-
-    // Identify the input and if it is a boid, send data to function
-//  acceptBoid(inputData);
-}
-
 // Take a copy of the boid, not the actual one
 void transmitBoid(uint16 boidID, uint8 recipientID) {
     // TODO: Perhaps move this to the boid class?
@@ -596,7 +583,7 @@ void transmitBoid(uint16 boidID, uint8 recipientID) {
 
 void acceptBoid(uint32 *boidData) {
     // TODO: Parse the input data to create a boid object
-    int boidID = 12;
+    uint16 boidID = 12;
     Vector boidPosition = Vector(12, 100);
     Vector boidVelocity = Vector(10, -2);
     Boid b = Boid(boidID, boidPosition, boidVelocity, boidCount);
@@ -810,7 +797,7 @@ Boid::Boid() {
     neighbouringBoidsCount = 0;
 }
 
-Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, int idx) {
+Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, uint8 idx) {
     id = _boidID;
     index = idx;
 
@@ -877,26 +864,20 @@ Vector Boid::separate(void) {
 
 Vector Boid::cohesion(void) {
     Vector total;
-    Vector steer;
 
     coheseBoidLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
         total.add(boidNeighbourList[index][i]->position);
     }
 
     total.div(neighbouringBoidsCount);
-    steer = seek(total);
 
-    return steer;
-}
+    Vector desired = Vector::sub(total, position);
 
-Vector Boid::seek(Vector target) {
-    Vector desired = Vector::sub(target, position);
     desired.setMag(MAX_VELOCITY);
+	Vector steer = Vector::sub(desired, velocity);
+	steer.limit(MAX_FORCE);
 
-    Vector steer = Vector::sub(desired, velocity);
-    steer.limit(MAX_FORCE);
-
-    return steer;
+	return steer;
 }
 
 void Boid::contain() {
@@ -913,8 +894,8 @@ void Boid::contain() {
     }
 }
 
-void Boid::setNeighbourCount(int n) {
-    neighbouringBoidsCount = (uint8)n;
+void Boid::setNeighbourCount(uint8 n) {
+    neighbouringBoidsCount = n;
 }
 
 void Boid::printBoidInfo() {
@@ -947,11 +928,6 @@ void Vector::add(Vector v) {
     y = y + v.y;
 }
 
-void Vector::sub(Vector v) {
-    x = x - v.x;
-    y = y - v.y;
-}
-
 void Vector::mul(int12 n) {
     x = x * n;
     y = y * n;
@@ -959,36 +935,16 @@ void Vector::mul(int12 n) {
 
 void Vector::div(int12 n) {
     if (n != 0) {
-//        x = x / n;
-//        y = y / n;
-
     	x = divide(x, n, 1);
     	y = divide(y, n, 1);
     }
 }
 
 // Static Operations /////////////////////////////////////////////////////////
-Vector Vector::add(Vector v1, Vector v2) {
-    Vector v3 = Vector(v1.x + v2.x, v1.y + v2.y);
-    return v3;
-}
-
 Vector Vector::sub(Vector v1, Vector v2) {
     Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
     return v3;
 }
-
-// FIXME: The sqrt takes a double, probably will be expensive in h/w
-//int12 Vector::distanceBetween(Vector v1, Vector v2) {
-//    int12 xPart = v1.x - v2.x;
-//    int12 yPart = v1.y - v2.y;
-//
-//    xPart = xPart * xPart;
-//    yPart = yPart * yPart;
-//
-//    // Could also use hls::sqrt() - in newer HLS version
-//    return (int12)sqrt(double(xPart + yPart));
-//}
 
 // Calculate the squared distance between two vectors - used to avoid use of
 // doubles and square roots, which are expensive in hardware.
@@ -1002,17 +958,10 @@ uint12 Vector::squaredDistanceBetween(Vector v1, Vector v2) {
 	return xPart + yPart;
 }
 
-bool Vector::equal(Vector v1, Vector v2) {
-    if ((v1.x == v2.x) && (v1.y == v2.y)) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 // Advanced Operations /////////////////////////////////////////////////////////
 int12 Vector::mag() {
     // Could also use hls::sqrt() - in newer HLS version
+	// FIXME: This really has to be removed - it is a killer
 	return (uint12)round(sqrt(double(x*x + y*y)));
 }
 
@@ -1037,19 +986,4 @@ void Vector::limit(int12 max) {
         normalise();
         mul(max);
     }
-}
-
-void Vector::bound(int12 n) {
-    // TODO: The is technically not binding the speed, which is the magnitude
-    if (x > n) x = n;
-    if (y > n) y = n;
-}
-
-bool Vector::empty() {
-    bool result = true;
-
-    if (x) result = false;
-    else if (y) result = false;
-
-    return result;
 }
