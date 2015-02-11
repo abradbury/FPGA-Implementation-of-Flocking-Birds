@@ -72,11 +72,14 @@ typedef ap_int<32> int32;
 typedef ap_uint<16> uint16;
 typedef ap_int<16> int16;
 
+typedef ap_int<12> int12;   // Used to represent position and negative velocity
+typedef ap_int<12> uint12;
+
 typedef ap_uint<8> uint8;
 typedef ap_int<8> int8;
 
-typedef ap_int<12> int12;   // Used to represent position and negative velocity
-typedef ap_int<12> uint12;
+typedef ap_uint<4> uint4;
+typedef ap_int<4> int4;
 
 // Prototypes
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
@@ -105,7 +108,7 @@ class Vector {
 
     static Vector add(Vector v1, Vector v2);
     static Vector sub(Vector v1, Vector v2);
-    static double distanceBetween(Vector v1, Vector v2);
+    static int12 distanceBetween(Vector v1, Vector v2);
     static bool equal(Vector v1, Vector v2);
 };
 

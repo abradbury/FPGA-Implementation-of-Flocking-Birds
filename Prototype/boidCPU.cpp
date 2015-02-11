@@ -19,6 +19,7 @@ void processNeighbouringBoids(void);
 // Supporting function headers -------------------------------------------------
 void transmitBoid(uint16 boidID, uint8 recipientID);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
+int12 divide(int12 numerator, int12 denominator, uint4 mode);
 
 int getRandom(int min, int max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
@@ -115,7 +116,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
     // TODO: Remove when deployment
     inputData[0] = input.read();
 
-    while (continueOperation) {
+    mainWhileLoop: while (continueOperation) {
         // INPUT ---------------------------------------------------------------
         // Block until there is input available
         // TODO: Remove comment when deployed
@@ -308,18 +309,18 @@ void sendBoidsToNeighbours() {
     std::cout << "-Sending boids to neighbouring BoidCPUs..." << std::endl;
 
     // First, calculate how many messages need to be sent
-    // Division by subtraction needed due to issues with integer division
+    // For some reason performs better when not using divide method
     uint16 numerator = boidCount * BOID_DATA_LENGTH;
     uint16 msgCount = 0;
-    for (msgCount = 0; numerator > 0; msgCount++) {
+    nbrMsgCountCalcLoop: for (msgCount = 0; numerator > 0; msgCount++) {
         numerator -= MAX_CMD_BODY_LEN;
     }
 
     // Then calculate the number of boids that can be sent per message
-    uint16 boidsPerMsg = MAX_CMD_BODY_LEN / BOID_DATA_LENGTH;
+    uint16 boidsPerMsg = (uint16)divide(MAX_CMD_BODY_LEN, BOID_DATA_LENGTH, 1);
 
     // Next, send a message for each group of boids
-    for (int i = 0; i < msgCount; i++) {
+    nbrMsgSendLoop: for (int i = 0; i < msgCount; i++) {
         // Determine the boid indexes for this message
         int startBoidIndex  = i * boidsPerMsg;
         int endBoidIndex    = startBoidIndex + boidsPerMsg;
@@ -330,7 +331,7 @@ void sendBoidsToNeighbours() {
         }
 
         // The next step is to create the message data
-        for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
+        NMClp: for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
             uint32 position = 0;
             uint32 velocity = 0;
 
@@ -358,7 +359,7 @@ void sendBoidsToNeighbours() {
         }
 
         // Finally send the message to each neighbour
-        for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+        nbrMsgSendSendLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
             int dataLength = ((endBoidIndex - startBoidIndex)) *
                 BOID_DATA_LENGTH;
             generateOutput(dataLength, neighbouringBoidCPUs[i],
@@ -381,14 +382,15 @@ void sendBoidsToNeighbours() {
  */
 void processNeighbouringBoids() {
     // First, get the number of boids that the message contains
-    int count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
+    // TODO: Remove division
+	int count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
 
     std::cout << "-BoidCPU #" << boidCPUID << " received " << count <<
         " boids from BoidCPU #" << inputData[CMD_FROM] << std::endl;
 
     // Then, create a boid object for each listed boid and add to the list of
     // possible neighbouring boids for this BoidCPU
-    for (int i = 0; i < count; i++) {
+    rxNbrBoidLoop: for (int i = 0; i < count; i++) {
         uint32 pos = inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
         uint32 vel = inputData[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
 
@@ -410,20 +412,20 @@ void processNeighbouringBoids() {
     // Set a flag if all the neighbouring BoidCPUs have sent their boids
     // TODO: Could use a counter instead
     bool allNeighboursReceived = false;
-    for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+    markRxNbrBoidLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
         allNeighboursReceived = (allNeighboursReceived &&
             receivedBoidCPUNbrList[i]);
     }
 
     // If the flag is true, calculate the neighbours for all the boids
-    // TODO: Try moving the variables outside the loop to see what happens
     //
     // 'if (i != j)' relies on the possible neighbour list starting with the
     // boids of the current BoidCPU
     if (allNeighboursReceived) {
+    	uint8 neighbouringBoidsCount;
+    	int12 distance;
         boidCPUCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
-            int neighbouringBoidsCount = 0;
-            uint16 distance;
+        	neighbouringBoidsCount = 0;
 
             calcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
                 if (i != j) {
@@ -465,7 +467,6 @@ void moveBoids() {
     std::cout << "-Transferring boids..." << std::endl;
 
     uint16 idOfBoidToTransfer;
-//  Boid boidToTransfer;
     uint8 recipientBoidCPU;
 
     moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
@@ -515,7 +516,7 @@ void updateDisplay() {
     //  direction of the boid so either send full velocity or angle
     // TODO: Decide on breakdown, should boids be sent all in one message, all
     //  in separate messages or a mixture of the two?
-    for (int i = 0; i < boidCount; i++) {
+    displayMsgCreationLoop: for (int i = 0; i < boidCount; i++) {
         outputBody[(3 * i) + 0] = boids[i].id;
         outputBody[(3 * i) + 1] = boids[i].position.x;
         outputBody[(3 * i) + 2] = boids[i].position.y;
@@ -540,7 +541,7 @@ void updateDisplay() {
 }
 
 void printStateOfBoidCPUBoids() {
-    for (int i = 0; i < boidCount; i++) {
+    boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {
         std::cout << "Boid " << boids[i].id << " has position [" <<
             boids[i].position.x << ", " << boids[i].position.y <<
             "] and velocity [" << boids[i].velocity.x << ", " <<
@@ -559,6 +560,7 @@ void transmit(int to, int data) {
 
 void receive() {
 //  input.read();
+	// TODO: Handle the receiving of a boid (through transfer)
 
     // Identify the input and if it is a boid, send data to function
 //  acceptBoid(inputData);
@@ -577,7 +579,7 @@ void transmitBoid(uint16 boidID, uint8 recipientID) {
 
     // Remove boid from own list
     bool boidFound = false;
-    for (int i = 0; i < boidCount - 1; i++) {
+    boidRemovalLoop: for (int i = 0; i < boidCount - 1; i++) {
         if (i == boidID) {
             boidFound = true;
         }
@@ -621,6 +623,60 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
         outputCount++;
         outputAvailable = true;
     }
+}
+
+/**
+ * Divide a numerator by repeated subtraction of a denominator.
+ * Mode 1: Round towards 0 (default) e.g. divide(20, 30, 1) = 0
+ * Mode 2: Round away from 0 e.g. divide(20, 30, 2) = 1
+ * Mode 3: Use mode 1 and return the remainder instead of the quotient
+ */
+int12 divide(int12 numerator, int12 denominator, uint4 mode) {
+	bool numeratorNegative = false;
+	bool denominatorNegative = false;
+
+	if (denominator == 0) {
+		std::cerr << "Cannot divide by zero" << std::endl;
+		return numerator;
+	}
+
+	if (denominator < 0) {
+		denominator = 0 - denominator;
+		denominatorNegative = true;
+	}
+
+	if (numerator < 0) {
+		numerator = 0 - numerator;
+		numeratorNegative = true;
+	}
+
+	int12 quotient = 0;
+	int12 remainder = numerator;
+	manualDivisionLoop: while (remainder >= denominator) {
+		quotient = quotient + 1;
+		remainder = remainder - denominator;
+	}
+
+	if ((mode == 2) && (remainder != 0)) {
+		quotient = quotient + 1;
+	}
+
+	if (numeratorNegative) {
+		quotient = 0 - quotient;
+		if (remainder != 0) {
+			remainder = denominator - remainder;
+		}
+	}
+
+	if (denominatorNegative) {
+		quotient = 0 - quotient;
+	}
+
+	if (mode == 3) {
+		return remainder;
+	} else {
+		return quotient;
+	}
 }
 
 /**
@@ -903,8 +959,11 @@ void Vector::mul(int12 n) {
 
 void Vector::div(int12 n) {
     if (n != 0) {
-        x = x / n;
-        y = y / n;
+//        x = x / n;
+//        y = y / n;
+
+    	x = divide(x, n, 1);
+    	y = divide(y, n, 1);
     }
 }
 
@@ -920,7 +979,7 @@ Vector Vector::sub(Vector v1, Vector v2) {
 }
 
 // FIXME: The sqrt takes a double, probably will be expensive in h/w
-double Vector::distanceBetween(Vector v1, Vector v2) {
+int12 Vector::distanceBetween(Vector v1, Vector v2) {
     int12 xPart = v1.x - v2.x;
     int12 yPart = v1.y - v2.y;
 
@@ -928,7 +987,7 @@ double Vector::distanceBetween(Vector v1, Vector v2) {
     yPart = yPart * yPart;
 
     // Could also use hls::sqrt() - in newer HLS version
-    return sqrt(double(xPart + yPart));
+    return (int12)sqrt(double(xPart + yPart));
 }
 
 bool Vector::equal(Vector v1, Vector v2) {
@@ -942,7 +1001,7 @@ bool Vector::equal(Vector v1, Vector v2) {
 // Advanced Operations /////////////////////////////////////////////////////////
 int12 Vector::mag() {
     // Could also use hls::sqrt() - in newer HLS version
-    return (uint12)round(sqrt(double(x*x + y*y)));
+	return (uint12)round(sqrt(double(x*x + y*y)));
 }
 
 void Vector::setMag(int12 mag) {
