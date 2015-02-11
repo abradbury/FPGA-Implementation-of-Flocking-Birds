@@ -423,17 +423,17 @@ void processNeighbouringBoids() {
     // boids of the current BoidCPU
     if (allNeighboursReceived) {
     	uint8 neighbouringBoidsCount;
-    	int12 distance;
+    	uint12 distance;
         boidCPUCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
         	neighbouringBoidsCount = 0;
 
             calcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
                 if (i != j) {
 //              if (possibleNeighbouringBoids[j].id != boids[i].id) {
-                    distance = Vector::distanceBetween(boids[i].position,
+                    distance = Vector::squaredDistanceBetween(boids[i].position,
                         possibleNeighbouringBoids[j].position);
 
-                    if (distance < VISION_RADIUS) {
+                    if (distance < VISION_RADIUS_SQUARED) {
                         boidNeighbourList[i][neighbouringBoidsCount] =
                             &possibleNeighbouringBoids[j];
                         neighbouringBoidsCount++;
@@ -979,15 +979,27 @@ Vector Vector::sub(Vector v1, Vector v2) {
 }
 
 // FIXME: The sqrt takes a double, probably will be expensive in h/w
-int12 Vector::distanceBetween(Vector v1, Vector v2) {
-    int12 xPart = v1.x - v2.x;
-    int12 yPart = v1.y - v2.y;
+//int12 Vector::distanceBetween(Vector v1, Vector v2) {
+//    int12 xPart = v1.x - v2.x;
+//    int12 yPart = v1.y - v2.y;
+//
+//    xPart = xPart * xPart;
+//    yPart = yPart * yPart;
+//
+//    // Could also use hls::sqrt() - in newer HLS version
+//    return (int12)sqrt(double(xPart + yPart));
+//}
 
-    xPart = xPart * xPart;
-    yPart = yPart * yPart;
+// Calculate the squared distance between two vectors - used to avoid use of
+// doubles and square roots, which are expensive in hardware.
+uint12 Vector::squaredDistanceBetween(Vector v1, Vector v2) {
+	uint12 xPart = v1.x - v2.x;
+	uint12 yPart = v1.y - v2.y;
 
-    // Could also use hls::sqrt() - in newer HLS version
-    return (int12)sqrt(double(xPart + yPart));
+	xPart *= xPart;
+	yPart *= yPart;
+
+	return xPart + yPart;
 }
 
 bool Vector::equal(Vector v1, Vector v2) {

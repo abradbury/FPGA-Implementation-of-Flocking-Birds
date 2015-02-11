@@ -47,6 +47,7 @@
 #define MAX_VELOCITY            5
 #define MAX_FORCE               1   // Determines how quickly a boid can turn
 #define VISION_RADIUS           20  // How far a boid can see
+#define VISION_RADIUS_SQUARED	400
 #define MAX_NEIGHBOURING_BOIDS  45  // TODO: Decide on appropriate value?
 
 // BoidCPU definitions ---------------------------------------------------------
@@ -108,7 +109,8 @@ class Vector {
 
     static Vector add(Vector v1, Vector v2);
     static Vector sub(Vector v1, Vector v2);
-    static int12 distanceBetween(Vector v1, Vector v2);
+//    static int12 distanceBetween(Vector v1, Vector v2);
+    static uint12 squaredDistanceBetween(Vector v1, Vector v2);
     static bool equal(Vector v1, Vector v2);
 };
 
