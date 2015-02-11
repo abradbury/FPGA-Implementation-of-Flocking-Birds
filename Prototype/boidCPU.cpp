@@ -21,7 +21,7 @@ void transmitBoid(uint16 boidID, uint8 recipientID);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 int12 divide(int12 numerator, int12 denominator, uint4 mode);
 
-int getRandom(int min, int max);
+int16 getRandom(int16 min, int16 max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
 
 // Debugging function headers --------------------------------------------------
@@ -45,7 +45,7 @@ uint32 outputCount = 0;             // The number of output messages buffered
 bool outputAvailable = false;       // True if there is output ready to send
 
 // Boid variables --------------------------------------------------------------
-int8 boidCount;
+uint8 boidCount;
 Boid boids[MAX_BOIDS];     // TODO: Perhaps re-implement as a LL due to deletion
 
 // TODO: Try with and without pointers (for synthesising)
@@ -758,16 +758,19 @@ void printCommand(bool send, uint32 *data) {
 // Random ======================================================================
 //==============================================================================
 
+// Removing random doesn't have a huge effect on resource utilisation, but
+// takes 18 cycles to do - so is costly in time
+
 // TODO: Try with 32 bits
 // http://en.wikipedia.org/wiki/Linear_feedback_shift_register#Galois_LFSRs
 // http://stackoverflow.com/q/17764587
 // http://stackoverflow.com/a/5009006
-int getRandom(int min, int max) {
+int16 getRandom(int16 min, int16 max) {
     shiftLSFR(&lfsr16, POLY_MASK_16);
     int result = (shiftLSFR(&lfsr16, POLY_MASK_16) ^
         shiftLSFR(&lfsr15, POLY_MASK_15));
 
-    return (min + (result % (int)(max - min + 1)));
+    return (min + (result % (int16)(max - min + 1)));
 }
 
 uint16 shiftLSFR(uint16 *lfsr, uint16 mask) {
@@ -851,6 +854,7 @@ Vector Boid::separate(void) {
     separateBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
         diff = Vector::sub(position, boidNeighbourList[index][i]->position);
         diff.normalise();
+        // Optionally weight by the distance
         total.add(diff);
     }
 
@@ -962,28 +966,34 @@ uint12 Vector::squaredDistanceBetween(Vector v1, Vector v2) {
 int12 Vector::mag() {
     // Could also use hls::sqrt() - in newer HLS version
 	// FIXME: This really has to be removed - it is a killer
-	return (uint12)round(sqrt(double(x*x + y*y)));
+	// Removed round function - slightly lowers overall utilisation on average
+//	return sqrt(double(x*x + y*y));
+	return (x*x + y*y);
 }
 
+// TODO: setMag and limit are similar - perhaps combine?
 void Vector::setMag(int12 mag) {
     normalise();
     mul(mag);
 }
 
-void Vector::normalise() {
-    int12 m = mag();
-
-    if (m != 0) {
-        div(m);
-    } else {
-        x = 0;
-        y = 0;
+void Vector::limit(int12 max) {
+	int12 m = mag();
+    if (m > max) {
+        normaliseWithMag(m);
+        mul(max);
     }
 }
 
-void Vector::limit(int12 max) {
-    if (mag() > max) {
-        normalise();
-        mul(max);
-    }
+void Vector::normalise() {
+	normaliseWithMag(mag());
+}
+
+void Vector::normaliseWithMag(int12 magnitude) {
+	if (magnitude != 0) {
+		div(magnitude);
+	} else {
+		x = 0;
+		y = 0;
+	}
 }

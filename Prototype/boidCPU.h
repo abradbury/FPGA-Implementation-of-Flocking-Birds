@@ -99,9 +99,11 @@ class Vector {
     void div(int12 n);
 
     int12 mag();
-    void normalise();
     void setMag(int12 mag);
     void limit(int12 max);
+
+    void normalise();
+    void normaliseWithMag(int12 magnitude);
 
     static Vector sub(Vector v1, Vector v2);
     static uint12 squaredDistanceBetween(Vector v1, Vector v2);
