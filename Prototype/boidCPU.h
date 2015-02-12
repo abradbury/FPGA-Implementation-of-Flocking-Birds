@@ -24,23 +24,25 @@
 #define CMD_BROADCAST           0   // The number for a broadcast command
 #define CONTROLLER_ID           1   // The ID of the controller
 #define BOIDGPU_ID              2   // The ID of the BoidGPU
+#define CMD_MULTICAST           99  // The 'to' value for multicast commands
 
 #define BOID_DATA_LENGTH        3   // The number of bits to send for a boid
 
-#define MODE_INIT               1   //
-#define CMD_PING                2   // Controller -> BoidCPU
-#define CMD_PING_REPLY          3   // BoidCPU -> Controller
-#define CMD_USER_INFO           4   // Controller -> BoidGPU
-#define CMD_SIM_SETUP           5   // Controller -> Boid[CG]PU
-#define MODE_CALC_NBRS          6   //
-#define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU
-#define MODE_POS_BOIDS          9   //
-#define CMD_LOAD_BAL            10  // TODO: Decide on implementation
-#define MODE_TRAN_BOIDS         11  //
-#define CMD_BOID                12  // BoidCPU -> BoidCPU
-#define MODE_DRAW               14  // TODO: Perhaps not needed?
-#define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU
-#define CMD_KILL                16  // Controller -> All
+#define MODE_INIT               1   // Controller -> BoidCPU (Broadcast (B))
+#define CMD_PING                2   // Controller -> BoidCPU (B)
+#define CMD_PING_REPLY          3   // BoidCPU -> Controller (Direct (D))
+#define CMD_USER_INFO           4   // Controller -> BoidGPU (D)
+#define CMD_SIM_SETUP           5   // Controller -> Boid[CG]PU (D)
+#define MODE_CALC_NBRS          6   // Controller -> BoidCPU (B)
+#define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU (D)
+#define MODE_POS_BOIDS          9   // Controller -> BoidCPU (B)
+#define CMD_LOAD_BAL            10  // Controller -> BoidCPU (?) TODO: Implement
+#define MODE_TRAN_BOIDS         11  // Controller -> BoidCPU (B)
+#define CMD_BOID                12  // BoidCPU -> BoidCPU (D)
+#define MODE_DRAW               14  // Controller -> BoidCPU (B) TODO: Needed?
+#define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
+#define CMD_KILL                16  // Controller -> All (B)
+
 
 // Boid definitions ------------------------------------------------------------
 #define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU

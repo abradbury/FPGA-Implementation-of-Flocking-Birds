@@ -20,6 +20,7 @@ void processNeighbouringBoids(void);
 void transmitBoid(uint16 boidID, uint8 recipientID);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 int12 divide(int12 numerator, int12 denominator, uint4 mode);
+bool fromNeighbour();
 
 int16 getRandom(int16 min, int16 max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
@@ -37,6 +38,7 @@ int8 fpgaID;
 int12 boidCPUCoords[4];
 
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
+bool neighbouringBoidCPUsSetup = false;	// True when neighbouring BoidCPUs setup
 
 uint32 inputData[MAX_CMD_LEN];
 uint32 outputData[MAX_OUTPUT_CMDS][MAX_CMD_LEN];
@@ -105,7 +107,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_ctrl_none port = return
 
     // Perform initialisation
-    // TODO: This only needs to be called on power up, not every time the
+    // TODO: Ensure that this is only called on power up, not every time the
     //  BoidCPU is called.
     initialisation();
 
@@ -113,14 +115,14 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
     // input stream will generate warnings in HLS, but should be blocking in the
     // actual implementation.
 
-    // TODO: Remove when deployment
-    inputData[0] = input.read();
+    // TODO: Remove when deployed
+//    inputData[CMD_LEN] = input.read();
 
     mainWhileLoop: while (continueOperation) {
         // INPUT ---------------------------------------------------------------
         // Block until there is input available
         // TODO: Remove comment when deployed
-        // inputData[0] = input.read();
+         inputData[CMD_LEN] = input.read();
 
         // When there is input, read in the command
         inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
@@ -130,9 +132,9 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         // ---------------------------------------------------------------------
 
         // STATE CHANGE --------------------------------------------------------
-        // TODO: Replace '83' with 'boidCPUID' when deploying
-        if ((inputData[CMD_TO] == CMD_BROADCAST) || (inputData[CMD_TO] ==
-                boidCPUID) || (inputData[CMD_TO] == 83)) {
+        if ((inputData[CMD_TO] == boidCPUID) || (inputData[CMD_TO] ==
+        	CMD_BROADCAST) || fromNeighbour()) {
+
             switch (inputData[CMD_TYPE]) {
                 case MODE_INIT:
                     initialisation();
@@ -166,6 +168,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
                         " not recognised" << std::endl;
                     break;
             }
+        } else {
+        	std::cout << "Message ignored" << std::endl;
         }
         // ---------------------------------------------------------------------
 
@@ -184,7 +188,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         // ---------------------------------------------------------------------
 
         // TODO: Remove when deployed
-        continueOperation = input.read_nb(inputData[0]);
+//        continueOperation = input.read_nb(inputData[0]);
     }
     std::cout << "=========BoidCPU has finished=========" << std::endl;
 }
@@ -201,7 +205,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 void initialisation() {
     std::cout << "-Initialising BoidCPU..." << std::endl;
 
-    boidCPUID = getRandom(1, 100);
+//    boidCPUID = getRandom(1, 100);
+    boidCPUID = 83;
     fpgaID = 123;
 
     std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
@@ -242,6 +247,7 @@ void simulationSetup() {
         neighbouringBoidCPUs[i] =
             inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
     }
+    neighbouringBoidCPUsSetup = true;
 
     // If the value is not 0 then the BoidCPU is able to progress itself until
     // it reaches the time step equal to the supplied value - it does not need
@@ -359,12 +365,11 @@ void sendBoidsToNeighbours() {
         }
 
         // Finally send the message to each neighbour
-        nbrMsgSendSendLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-            int dataLength = ((endBoidIndex - startBoidIndex)) *
-                BOID_DATA_LENGTH;
-            generateOutput(dataLength, neighbouringBoidCPUs[i],
-                CMD_NBR_REPLY, outputBody);
-        }
+        // Now only one message needs to be issued because BoidCPUs check to
+        // see if a command was sent from a neighbour. Because the 'to' field
+        // needs to have a value, the place holder CMD_MULTICAST is used.
+        int dataLength = ((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH;
+        generateOutput(dataLength, CMD_MULTICAST, CMD_NBR_REPLY, outputBody);
     }
 
     // Now, add the BoidCPU's own boids to the possible neighbouring boids list
@@ -610,6 +615,27 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
         outputCount++;
         outputAvailable = true;
     }
+}
+
+/**
+ * Iterate through the list of neighbouring BoidCPUs to determine whether the
+ * message received was from one of the neighbours. Return true if it was and
+ * return false otherwise.
+ *
+ * TODO: Would it be better to return as soon as true is set?
+ */
+bool fromNeighbour() {
+	bool result = false;
+
+	if (neighbouringBoidCPUsSetup) {
+		for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+			if (inputData[CMD_FROM] == neighbouringBoidCPUs[i]) {
+				result = true;
+			}
+		}
+	}
+
+	return result;
 }
 
 /**
