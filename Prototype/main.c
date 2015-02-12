@@ -7,7 +7,7 @@
 #include "xuartlite_l.h"    // UART
 #include "fsl.h"            // AXI Steam
 
-#define ENTER   0x0D        // Enter key press, used during puzzle requests
+#define ENTER   0x0A        // The ASCII code for '\n' or Line Feed (LF)
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN          4   // The length of the command header
@@ -89,20 +89,20 @@ void testDrawInfo();
 void testKillSwitch();
 
 void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data);
-void chooseCommand(int commandID);
+void chooseCommand(u8 commandID);
 void printCommand(bool send, u32 *data);
 
 
 int main() {
-
     // Setup Ethernet
 
     do {
-        print("\n\r\n\r-------------------------------------------------\n\r");
+        print("--------------------------------------------------\n\r");
+        print("-------- FPGA Flocking Bird Test Harness ---------\n\r");
         print("--------------------------------------------------\n\r");
 
         bool cIDValid = false;  // True if the command ID entered is valid
-        int cID = 0;            // The ID of the command to issue
+        u8 cID = 0;            // The ID of the command to issue
 
         u8 index = 0;           // Index for keyPresses
         char keyPress;          // The key pressed
@@ -112,43 +112,74 @@ int main() {
             index = 0;          // Reset the index and key press array
             memset(keyPresses, 0, sizeof(keyPresses));
 
-            print("Choose a command from the following list: ");
+            print("Choose a command from the following list: \n\r");
             int i = 0;
-            for(i = 0; i < CMD_KILL; i++) {
-                xil_printf("%d: %s", i + 1, commandDescriptions[i + 1]);
+            for(i = 0; i < 15; i++) {
+                xil_printf(" %d: %s\n\r", i + 1, commandDescriptions[i]);
             }
 
             do {
                 keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
                 XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+
                 keyPresses[index] = keyPress;
                 index++;
+                print("In while loop\n\r");
+
+                if (keyPress == ENTER) {
+                    xil_printf("0x%02x == 0x%02x", keyPress, ENTER);
+                } else {
+                    xil_printf("0x%02x != 0x%02x", keyPress, ENTER);
+                }
+
             } while(keyPress != ENTER);     // Repeat while enter isn't pressed
-            cID = atoi(keyPresses);         // Convert the key pressed to int
+            print("Exited while loop\n\r");
+            cID = (u8)atoi(keyPresses);         // Convert the key pressed to int
+
+            xil_printf("The number '%d' was received\n\r", cID);
 
             if ((cID >= 1) && (cID <= 16)) {
                 cIDValid = true;
-                print("\n\r");
+                print("Command is valid\n\r");
 
                 // Send the command
                 chooseCommand(cID);
 
                 // Check for any response
-                int rv, invalid;
-                getfslx(rv, 0, FSL_NONBLOCKING);    // Non-blocking FSL read to device 0
-                fsl_isinvalid(invalid);             // Was there data ready?
+//                int rv, invalid;
+//                getfslx(rv, 0, FSL_NONBLOCKING);    // Non-blocking FSL read to device 0
+//                fsl_isinvalid(invalid);             // Was there data ready?
+//
+//                if(!invalid) {
+//                    print("Received data\n\r");
+//                    inputData[0] = rv;
+//                    int i = 0, value = 0;
+//
+//                    for (i = 1; i < inputData[0]; i++) {
+//                        getfslx(value, 0, FSL_NONBLOCKING);
+//                        inputData[i] = value;
+//                    }
+//                    printCommand(false, inputData);
+//                } else {
+//                    print("Not received data\n\r");
+//                }
 
-                if(!invalid) {
-                    print("Received data");
-                    inputData[0] = rv;
-                    int i = 0, value = 0;
+                int rv;
+                print("Waiting for response...");
+                getfslx(rv, 0, FSL_DEFAULT);
+                print("received data: ");
+                inputData[CMD_LEN] = rv;
+                xil_printf("%d ", rv);
 
-                    for (i = 1; i < inputData[0]; i++) {
-                        getfslx(value, 0, FSL_NONBLOCKING);
-                        inputData[i] = value;
-                    }
-                    printCommand(false, inputData);
+                int i = 0, value = 0;
+                for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
+                    getfslx(value, 0, FSL_NONBLOCKING);
+                    inputData[i + 1] = value;
+                    xil_printf("%d ", value);
                 }
+                print("\n\r");
+                printCommand(false, inputData);
+
 
             } else {
                 print("\n\r**Error: Command ID must be between 1 and 16 inclusive. Please try again.\n\r");
@@ -160,7 +191,7 @@ int main() {
 }
 
 
-void chooseCommand(int commandID) {
+void chooseCommand(u8 commandID) {
     from = CONTROLLER_ID;
 
     switch(commandID) {
@@ -207,13 +238,16 @@ void chooseCommand(int commandID) {
             testKillSwitch();
             break;
         default:
-            print("UNKNOWN COMMAND");
+            print("UNKNOWN COMMAND\n\r");
             break;
     }
 }
 
 void testInitMode() {
-
+    // 4, 0, 1, 1 ||
+    to = CMD_BROADCAST;
+    dataLength = 0;
+    createCommand(dataLength, to, from, MODE_INIT, data);
 }
 
 void testPing() {
@@ -237,7 +271,14 @@ void testPingReply() {
 }
 
 void testUserInfo() {
+    // 7, 2, 1, 4 || 21 42 84
+    to = BOIDGPU_ID;
+    data[0] = 21;
+    data[1] = 42;
+    data[2] = 84;
+    dataLength = 3;
 
+    createCommand(dataLength, to, from, CMD_USER_INFO, data);
 }
 
 // TODO: Need to send to broadcast during actual testing as random ID unknown
@@ -278,7 +319,7 @@ void testNeighbourSearch() {
 }
 
 void testNeighbourReply() {
-    // TODO
+    print("Testing neighbour reply - TODO\n\r");
 }
 
 void testCalcNextBoidPos() {
@@ -303,7 +344,7 @@ void testMoveBoids() {
 }
 
 void testBoidCommand() {
-
+    print("Testing Boid command - TODO\n\r");
 }
 
 void testDrawBoids() {
@@ -314,14 +355,15 @@ void testDrawBoids() {
 }
 
 void testDrawInfo() {
-
+    print("Testing draw info - TODO\n\r");
 }
 
 void testKillSwitch() {
-
+    print("Testing kill switch - TODO\n\r");
 }
 
 void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data) {
+    print("Creating command...");
     u32 command[MAX_CMD_LEN];
 
     command[CMD_LEN]  = len + CMD_HEADER_LEN;
@@ -335,13 +377,16 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data) {
             command[CMD_HEADER_LEN + i] = data[i];
         }
     }
+    print("done\n\r");
 
     printCommand(true, command);
 
+    print("Sending command...");
     int i = 0;
     for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-        putfslx(command[i], 0, FSL_DEFAULT);
+        putfslx(command[i], 0, FSL_NONBLOCKING);
     }
+    print("done\n\r");
 }
 
 void printCommand(bool send, u32 *data) {
@@ -415,22 +460,16 @@ void printCommand(bool send, u32 *data) {
             print("UNKNOWN COMMAND");
             break;
     }
-    print("");
 
     XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, '\t');
     int i = 0;
     for(i = 0; i < CMD_HEADER_LEN; i++) {
-        XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, data[i]);
-        XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, ' ');
+    	xil_printf("%d ", data[i]);
     }
-
-    XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, '|');
-    XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, '|');
-    XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, ' ');
+    print("|| ");
 
     for(i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
-        XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, data[CMD_HEADER_LEN + i]);
-        XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, ' ');
+    	xil_printf("%d ", data[CMD_HEADER_LEN + i]);
     }
-    print("");
+    print("\n\r");
 }
