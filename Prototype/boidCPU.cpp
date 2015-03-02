@@ -3,6 +3,8 @@
 #include <iostream>     // cout
 #include <math.h>       // sqrt, floor
 
+#define USING_TB	true
+
 // Function headers ============================================================
 // Key function headers --------------------------------------------------------
 static void initialisation(void);
@@ -64,7 +66,6 @@ uint16 lfsr16 = 0xF429;     // LSFR seed - 16 bit binary (62505)
 uint16 lfsr15 = 0x51D1;     // LSFR seed - 15 bit binary (20945)
 
 // Debugging variables ---------------------------------------------------------
-bool singleBoidCPU = false;
 uint16 stopCondition;
 uint16 timeStep = 0;
 
@@ -115,15 +116,16 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
     // input stream will generate warnings in HLS, but should be blocking in the
     // actual implementation.
 
-    // TODO: Remove when deployed
-//    inputData[CMD_LEN] = input.read();
+#ifdef USING_TB
+    inputData[CMD_LEN] = input.read();
+#endif
 
     mainWhileLoop: while (continueOperation) {
         // INPUT ---------------------------------------------------------------
         // Block until there is input available
-        // TODO: Remove comment when deployed
+#ifndef USING_TB
          inputData[CMD_LEN] = input.read();
-
+#endif
         // When there is input, read in the command
         inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
             inputData[1 + i] = input.read();
@@ -187,8 +189,9 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         outputCount = 0;
         // ---------------------------------------------------------------------
 
-        // TODO: Remove when deployed
-//        continueOperation = input.read_nb(inputData[0]);
+#ifdef USING_TB
+        continueOperation = input.read_nb(inputData[0]);
+#endif
     }
     std::cout << "=========BoidCPU has finished=========" << std::endl;
 }
@@ -457,11 +460,6 @@ void calcNextBoidPositions() {
     updateBoidsLoop: for (int i = 0; i < boidCount; i++) {
         boids[i].update();
     }
-
-    // If testing only a single BoidCPU, continue to next stage
-//  if (singleBoidCPU) {
-//      moveBoids();
-//  }
 }
 
 void loadBalance() {
@@ -507,11 +505,6 @@ void moveBoids() {
             transmitBoid(idOfBoidToTransfer, recipientBoidCPU);
         }
     }
-
-    // If testing only a single BoidCPU, continue to next stage
-//  if (singleBoidCPU) {
-//      updateDisplay();
-//  }
 }
 
 void updateDisplay() {
@@ -534,15 +527,6 @@ void updateDisplay() {
     timeStep++;
 
     printStateOfBoidCPUBoids();
-
-//  // If testing only a single BoidCPU, continue to next stage
-//  if (singleBoidCPU) {
-//      // If the current time step is less than the stopping condition, continue
-////        if (boidCount > 0)
-//      if (timeStep < stopCondition) {
-//          findNeighbours();
-//      }
-//  }
 }
 
 void printStateOfBoidCPUBoids() {
