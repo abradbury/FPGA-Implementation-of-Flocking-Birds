@@ -1,13 +1,14 @@
 #include "xparameters.h"
 
-#include <stdio.h>          // For simple input/output (I/O)
+#include <stdio.h>                  // For simple input/output (I/O)
 #include <stdlib.h>
-#include <string.h>         // For memset()
+#include <string.h>                 // For memset()
 
-#include "xuartlite_l.h"    // UART
-#include "fsl.h"            // AXI Steam
+#include "xuartlite_l.h"            // UART
+#include "fsl.h"                    // AXI Steam
 
-#define ENTER   0x0A        // The ASCII code for '\n' or Line Feed (LF)
+#define ENTER   				0x0A// The ASCII code for '\n' or Line Feed (LF)
+#define USING_VLAB				0	// 1 if using VLAB, 0 if not
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN          4   // The length of the command header
@@ -27,7 +28,7 @@
 #define BOIDGPU_ID              2   // The ID of the BoidGPU
 
 #define MODE_INIT               1   //
-#define  CMD_PING               2   // Controller -> BoidCPU
+#define CMD_PING                2   // Controller -> BoidCPU
 #define CMD_PING_REPLY          3   // BoidCPU -> Controller
 #define CMD_USER_INFO           4   // Controller -> BoidGPU
 #define CMD_SIM_SETUP           5   // Controller -> Boid[CG]PU
@@ -40,6 +41,8 @@
 #define MODE_DRAW               14  // TODO: Perhaps not needed?
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU
 #define CMD_KILL                16  // Controller -> All
+
+#define CMD_COUNT               16
 
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
@@ -55,14 +58,14 @@ u32 coords[EDGE_COUNT];
 
 u32 inputData[MAX_CMD_LEN];
 
-const char *commandDescriptions[16] = {
+const char *commandDescriptions[CMD_COUNT] = {
         "Initialisation mode",
         "Send ping to BoidCPUs",
         "Ping response from a BoidCPU",
         "User-inputed information for the BoidGPU",
         "Simulation setup information for a BoidCPU",
-        "",
         "Calculate neighbours mode",
+        "",
         "Reply of neighbouring BoidCPU's boids",
         "Position calculation mode",
         "Load balancing command",
@@ -94,7 +97,7 @@ void printCommand(bool send, u32 *data);
 
 
 int main() {
-    // Setup Ethernet
+    // TODO: setup Ethernet
 
     do {
         print("--------------------------------------------------\n\r");
@@ -102,7 +105,7 @@ int main() {
         print("--------------------------------------------------\n\r");
 
         bool cIDValid = false;  // True if the command ID entered is valid
-        u8 cID = 0;            // The ID of the command to issue
+        u8 cID = 0;             // The ID of the command to issue
 
         u8 index = 0;           // Index for keyPresses
         char keyPress;          // The key pressed
@@ -112,75 +115,47 @@ int main() {
             index = 0;          // Reset the index and key press array
             memset(keyPresses, 0, sizeof(keyPresses));
 
+            // Print options
             print("Choose a command from the following list: \n\r");
             int i = 0;
-            for(i = 0; i < 15; i++) {
+            for(i = 0; i < CMD_COUNT; i++) {
                 xil_printf(" %d: %s\n\r", i + 1, commandDescriptions[i]);
             }
+            print("--------------------------------------------------\n\r");
 
+            // Take keyboard input until the ENTER key is pressed
             do {
+                // While there is no keyboard input, check for received messages
+                int rv, invalid;
+                do {
+                    getfslx(rv, 0, FSL_NONBLOCKING);    // Non-blocking FSL read to device 0
+                    fsl_isinvalid(invalid);             // Was there data ready?
+
+                    if(!invalid) {
+                        print("Received data\n\r");
+                        inputData[CMD_LEN] = rv;
+                        int i = 0, value = 0;
+
+                        for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
+                            getfslx(value, 0, FSL_NONBLOCKING);
+                            inputData[i + 1] = value;
+                        }
+                        printCommand(false, inputData);
+                    }
+                } while (XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR));
+
                 keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
-                XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+                if(USING_VLAB) XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
 
                 keyPresses[index] = keyPress;
                 index++;
-                print("In while loop\n\r");
 
-                if (keyPress == ENTER) {
-                    xil_printf("0x%02x == 0x%02x", keyPress, ENTER);
-                } else {
-                    xil_printf("0x%02x != 0x%02x", keyPress, ENTER);
-                }
+            } while(keyPress != ENTER);     	// Repeat while enter isn't pressed
 
-            } while(keyPress != ENTER);     // Repeat while enter isn't pressed
-            print("Exited while loop\n\r");
-            cID = (u8)atoi(keyPresses);         // Convert the key pressed to int
-
-            xil_printf("The number '%d' was received\n\r", cID);
-
+            cID = (u8)atoi(keyPresses);         // Convert the key pressed to int, 0 if not int
             if ((cID >= 1) && (cID <= 16)) {
                 cIDValid = true;
-                print("Command is valid\n\r");
-
-                // Send the command
-                chooseCommand(cID);
-
-                // Check for any response
-//                int rv, invalid;
-//                getfslx(rv, 0, FSL_NONBLOCKING);    // Non-blocking FSL read to device 0
-//                fsl_isinvalid(invalid);             // Was there data ready?
-//
-//                if(!invalid) {
-//                    print("Received data\n\r");
-//                    inputData[0] = rv;
-//                    int i = 0, value = 0;
-//
-//                    for (i = 1; i < inputData[0]; i++) {
-//                        getfslx(value, 0, FSL_NONBLOCKING);
-//                        inputData[i] = value;
-//                    }
-//                    printCommand(false, inputData);
-//                } else {
-//                    print("Not received data\n\r");
-//                }
-
-                int rv;
-                print("Waiting for response...");
-                getfslx(rv, 0, FSL_DEFAULT);
-                print("received data: ");
-                inputData[CMD_LEN] = rv;
-                xil_printf("%d ", rv);
-
-                int i = 0, value = 0;
-                for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
-                    getfslx(value, 0, FSL_NONBLOCKING);
-                    inputData[i + 1] = value;
-                    xil_printf("%d ", value);
-                }
-                print("\n\r");
-                printCommand(false, inputData);
-
-
+                chooseCommand(cID);				// Send the command
             } else {
                 print("\n\r**Error: Command ID must be between 1 and 16 inclusive. Please try again.\n\r");
             }
@@ -379,14 +354,14 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data) {
     }
     print("done\n\r");
 
-    printCommand(true, command);
-
     print("Sending command...");
     int i = 0;
     for (i = 0; i < CMD_HEADER_LEN + len; i++) {
         putfslx(command[i], 0, FSL_NONBLOCKING);
     }
     print("done\n\r");
+
+    printCommand(true, command);
 }
 
 void printCommand(bool send, u32 *data) {
@@ -473,3 +448,4 @@ void printCommand(bool send, u32 *data) {
     }
     print("\n\r");
 }
+
