@@ -3,7 +3,7 @@
 #include <iostream>     // cout
 #include <math.h>       // sqrt, floor
 
-#define USING_TB	true
+//#define USING_TB	true
 
 // Function headers ============================================================
 // Key function headers --------------------------------------------------------
@@ -208,8 +208,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 void initialisation() {
     std::cout << "-Initialising BoidCPU..." << std::endl;
 
-//    boidCPUID = getRandom(1, 100);
-    boidCPUID = 83;
+    lfsr16 = (uint16)inputData[CMD_HEADER_LEN + 0];
+    boidCPUID = getRandom(1, 100);
     fpgaID = 123;
 
     std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
