@@ -551,7 +551,7 @@ void transmitBoid(uint16 boidID, uint8 recipientID) {
     outputBody[3] = boids[boidID].velocity.x;
     outputBody[4] = boids[boidID].velocity.y;
 
-    generateOutput(7, recipientID, CMD_BOID, outputBody);
+    generateOutput(5, recipientID, CMD_BOID, outputBody);
 
     // Remove boid from own list
     bool boidFound = false;
