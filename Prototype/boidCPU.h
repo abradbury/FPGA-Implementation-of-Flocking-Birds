@@ -67,6 +67,10 @@
 #define POLY_MASK_16        0xD295  // Used for random
 #define POLY_MASK_15        0x6699  // Used for random
 
+#define ROUND_TOWARDS_ZERO 				1
+#define ROUND_AWAY_FROM_ZERO			2
+#define REMAINDER_ROUND_TOWARDS_ZERO	3
+
 
 // Typedefs
 typedef ap_uint<32> uint32;

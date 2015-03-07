@@ -330,7 +330,8 @@ void sendBoidsToNeighbours() {
     }
 
     // Then calculate the number of boids that can be sent per message
-    uint16 boidsPerMsg = (uint16)divide(MAX_CMD_BODY_LEN, BOID_DATA_LENGTH, 1);
+    uint16 boidsPerMsg = (uint16)divide(MAX_CMD_BODY_LEN, BOID_DATA_LENGTH, \
+    		ROUND_TOWARDS_ZERO);
 
     // Next, send a message for each group of boids
     nbrMsgSendLoop: for (int i = 0; i < msgCount; i++) {
@@ -681,7 +682,7 @@ int12 divide(int12 numerator, int12 denominator, uint4 mode) {
 		remainder = remainder - denominator;
 	}
 
-	if ((mode == 2) && (remainder != 0)) {
+	if ((mode == ROUND_AWAY_FROM_ZERO) && (remainder != 0)) {
 		quotient = quotient + 1;
 	}
 
@@ -696,7 +697,7 @@ int12 divide(int12 numerator, int12 denominator, uint4 mode) {
 		quotient = 0 - quotient;
 	}
 
-	if (mode == 3) {
+	if (mode == REMAINDER_ROUND_TOWARDS_ZERO) {
 		return remainder;
 	} else {
 		return quotient;
@@ -976,8 +977,8 @@ void Vector::mul(int12 n) {
 
 void Vector::div(int12 n) {
     if (n != 0) {
-    	x = divide(x, n, 1);
-    	y = divide(y, n, 1);
+    	x = divide(x, n, ROUND_TOWARDS_ZERO);
+    	y = divide(y, n, ROUND_TOWARDS_ZERO);
     }
 }
 
