@@ -122,7 +122,7 @@ void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
     // 18, 83, 1, 5 || 7, 10, 0, 0, 40, 40, 3, 4, 5, 8, 11, 10, 9, 6, [100]
     dataLength = 14;
-    to = 83;            // The current random ID of the test BoidCPU
+    to = 69;            // The current random ID of the test BoidCPU
 
     uint32 newID = 7;
     uint32 initialBoidCount = 10;
@@ -175,17 +175,18 @@ void testNeighbourSearch() {
 void testNeighbourResponse() {
 	// For each neighbouring BoidCPU, create a list of boids and send this to
 	// the BoidCPU under test
+	// FIXME: This seems to be called before all other testbench stuff
 	const int boidsPerBoidCPU = 10;
 	const int positionBounds[4] = {0, 0, 720, 720};
 	Boid boidsFromNbrs[MAX_BOIDCPU_NEIGHBOURS][boidsPerBoidCPU];
 
 	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 		for (int j = 0; j < boidsPerBoidCPU; j++) {
-			Vector pos = Vector(-MAX_VELOCITY + (rand() % (int)(MAX_VELOCITY -
+			Vector vel = Vector(-MAX_VELOCITY + (rand() % (int)(MAX_VELOCITY -
 				-MAX_VELOCITY + 1)), -MAX_VELOCITY + (rand() % (int)
 				(MAX_VELOCITY - -MAX_VELOCITY + 1)));
 
-			Vector vel = Vector(positionBounds[0] + (rand() % (int)
+			Vector pos = Vector(positionBounds[0] + (rand() % (int)
 				(positionBounds[2] - positionBounds[0] + 1)),
 				positionBounds[1] + (rand() % (int)(positionBounds[3] -
 				positionBounds[1] + 1)));
