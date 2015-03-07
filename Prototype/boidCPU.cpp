@@ -67,9 +67,6 @@ uint16 lfsr16 = 0xF429;     // LSFR seed - 16 bit binary (62505)
 uint16 lfsr15 = 0x51D1;     // LSFR seed - 15 bit binary (20945)
 
 // Debugging variables ---------------------------------------------------------
-uint16 stopCondition;
-uint16 timeStep = 0;
-
 bool continueOperation = true;
 
 
@@ -255,14 +252,6 @@ void simulationSetup() {
             inputData[CMD_HEADER_LEN + EDGE_COUNT + 2 + i];
     }
     neighbouringBoidCPUsSetup = true;
-
-    // If the value is not 0 then the BoidCPU is able to progress itself until
-    // it reaches the time step equal to the supplied value - it does not need
-    // to wait for the controller to supply synchronisation steps
-//  if (inputData[18] > 0) {
-////        singleBoidCPU = true;
-//      stopCondition = inputData[18];
-//  }
 
     // Print out BoidCPU parameters
     std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" <<
@@ -540,13 +529,11 @@ void updateDisplay() {
         outputBody[(3 * i) + 2] = boids[i].position.y;
     }
 
-    generateOutput((3 * boidCount), BOIDGPU_ID, CMD_DRAW_INFO, outputBody);
-    // [4 + (3 * boidCount)], 2, 6, 13 || [boid information]
-
-    // Increment the time step counter
-    timeStep++;
-
-    printStateOfBoidCPUBoids();
+    if (boidCount > 0) {
+    	generateOutput((3 * boidCount), BOIDGPU_ID, CMD_DRAW_INFO, outputBody);
+    	// [4 + (3 * boidCount)], 2, 6, 13 || [boid information]
+    	printStateOfBoidCPUBoids();
+    }
 }
 
 void printStateOfBoidCPUBoids() {
@@ -590,7 +577,10 @@ void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
 				boids[i] = boids[i + 1];
 			}
 		}
-		boidCount--;
+
+		if (boidFound) {
+			boidCount--;
+		}
 	}
 }
 
@@ -762,7 +752,7 @@ void printCommand(bool send, uint32 *data) {
             std::cout << "transfer boids";
             break;
         case CMD_BOID:
-            std::cout << "boid";
+            std::cout << "boid in transit";
             break;
         case MODE_DRAW:
             std::cout << "send boids to BoidGPU";
