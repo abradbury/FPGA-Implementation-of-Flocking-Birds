@@ -12,17 +12,18 @@ static void identify(void);
 static void simulationSetup(void);
 static void calcNextBoidPositions(void);
 static void loadBalance(void);
-static void moveBoids(void);
+static void transferBoids(void);
 static void updateDisplay(void);
 
 void sendBoidsToNeighbours(void);
 void processNeighbouringBoids(void);
 
 // Supporting function headers -------------------------------------------------
-void transmitBoid(uint16 boidID, uint8 recipientID);
+void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 int12 divide(int12 numerator, int12 denominator, uint4 mode);
 bool fromNeighbour();
+void acceptBoid();
 
 int16 getRandom(int16 min, int16 max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
@@ -160,11 +161,14 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
                     loadBalance();
                     break;
                 case MODE_TRAN_BOIDS:
-                    moveBoids();
+                    transferBoids();
                     break;
                 case MODE_DRAW:
                     updateDisplay();
                     break;
+                case CMD_BOID:
+                	acceptBoid();
+                	break;
                 default:
                     std::cout << "Command state " << inputData[CMD_TYPE] <<
                         " not recognised" << std::endl;
@@ -466,44 +470,59 @@ void loadBalance() {
     std::cout << "-Load balancing..." << std::endl;
 }
 
-void moveBoids() {
+void transferBoids() {
     std::cout << "-Transferring boids..." << std::endl;
 
-    uint16 idOfBoidToTransfer;
-    uint8 recipientBoidCPU;
+    uint8 boidIndexes[MAX_BOIDS];
+    uint8 recipientIDs[MAX_BOIDS];
+    uint8 counter = 0;
 
     moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
-        recipientBoidCPU = 0;
-
-        if ((neighbouringBoidCPUs[0] != 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[0];
-        } else if ((neighbouringBoidCPUs[2] != 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[2];
-        } else if ((neighbouringBoidCPUs[4] != 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[4];
-        } else if ((neighbouringBoidCPUs[6] != 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[6];
-        } else if ((neighbouringBoidCPUs[1] != 0) && (boids[i].position.y < boidCPUCoords[1])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[1];
-        } else if ((neighbouringBoidCPUs[3] != 0) && (boids[i].position.x > boidCPUCoords[2])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[3];
-        } else if ((neighbouringBoidCPUs[5] != 0) && (boids[i].position.y > boidCPUCoords[3])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[5];
-        } else if ((neighbouringBoidCPUs[7] != 0) && (boids[i].position.x < boidCPUCoords[0])) {
-            idOfBoidToTransfer = i;
-            recipientBoidCPU = neighbouringBoidCPUs[7];
+        if ((neighbouringBoidCPUs[0] > 0) && (boids[i].position.y < \
+        		boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
+            boidIndexes[counter] = i;
+            recipientIDs[counter] = neighbouringBoidCPUs[0];
+            counter++;
+        } else if ((neighbouringBoidCPUs[2] > 0) && (boids[i].position.y <\
+        		boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
+        	boidIndexes[counter] = i;
+        	recipientIDs[counter] = neighbouringBoidCPUs[2];
+        	counter++;
+        } else if ((neighbouringBoidCPUs[4] > 0) && (boids[i].position.y > \
+        		boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
+        	boidIndexes[counter] = i;
+			recipientIDs[counter] = neighbouringBoidCPUs[4];
+			counter++;
+        } else if ((neighbouringBoidCPUs[6] > 0) && (boids[i].position.y > \
+        		boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
+        	boidIndexes[counter] = i;
+			recipientIDs[counter] = neighbouringBoidCPUs[6];
+			counter++;
+        } else if ((neighbouringBoidCPUs[1] > 0) && (boids[i].position.y < \
+        		boidCPUCoords[1])) {
+        	boidIndexes[counter] = i;
+			recipientIDs[counter] = neighbouringBoidCPUs[1];
+			counter++;
+        } else if ((neighbouringBoidCPUs[3] > 0) && (boids[i].position.x > \
+        		boidCPUCoords[2])) {
+        	boidIndexes[counter] = i;
+			recipientIDs[counter] = neighbouringBoidCPUs[3];
+			counter++;
+        } else if ((neighbouringBoidCPUs[5] > 0) && (boids[i].position.y > \
+        		boidCPUCoords[3])) {
+        	boidIndexes[counter] = i;
+			recipientIDs[counter] = neighbouringBoidCPUs[5];
+			counter++;
+        } else if ((neighbouringBoidCPUs[7] > 0) && (boids[i].position.x < \
+        		boidCPUCoords[0])) {
+        	boidIndexes[counter] = i;
+			recipientIDs[counter] = neighbouringBoidCPUs[7];
+			counter++;
         }
+    }
 
-        if (recipientBoidCPU > 0) {
-            transmitBoid(idOfBoidToTransfer, recipientBoidCPU);
-        }
+    if (counter > 0) {
+        transmitBoids(boidIndexes, recipientIDs, counter);
     }
 }
 
@@ -542,43 +561,51 @@ void printStateOfBoidCPUBoids() {
 // Supporting functions ========================================================
 //==============================================================================
 
-// Take a copy of the boid, not the actual one
-void transmitBoid(uint16 boidID, uint8 recipientID) {
-    // TODO: Perhaps move this to the boid class?
-    outputBody[0] = boids[boidID].id;
-    outputBody[1] = boids[boidID].position.x;
-    outputBody[2] = boids[boidID].position.y;
-    outputBody[3] = boids[boidID].velocity.x;
-    outputBody[4] = boids[boidID].velocity.y;
+void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
+	// First transmit all the boids
+	boidTransmitLoop: for (int i = 0; i < count; i++) {
+		// TODO: Perhaps move this to the boid class?
+		outputBody[0] = boids[boidIndexes[i]].id;
+		outputBody[1] = boids[boidIndexes[i]].position.x;
+		outputBody[2] = boids[boidIndexes[i]].position.y;
+		outputBody[3] = boids[boidIndexes[i]].velocity.x;
+		outputBody[4] = boids[boidIndexes[i]].velocity.y;
 
-    generateOutput(5, recipientID, CMD_BOID, outputBody);
+		generateOutput(5, recipientIDs[i], CMD_BOID, outputBody);
 
-    // Remove boid from own list
-    bool boidFound = false;
-    boidRemovalLoop: for (int i = 0; i < boidCount - 1; i++) {
-        if (i == boidID) {
-            boidFound = true;
-        }
+	    std::cout << "-Transferring boid #" << boids[boidIndexes[i]].id <<
+	    	" to boidCPU #" << recipientIDs[i] << std::endl;
+	}
 
-        if (boidFound) {
-            boids[i] = boids[i + 1];
-        }
-    }
-    boidCount--;
+	// Then delete the boids from the BoidCPUs own boid list
+	outerBoidRemovalLoop: for (int i = 0; i < count; i++) {
+		bool boidFound = false;
+		innerBoidRemovalLoop: for (int i = 0; i < boidCount - 1; i++) {
+			if (i == boidIndexes[i]) {
+				boidFound = true;
+			}
 
-    std::cout << "-Transferring boid #" << boids[boidID].id << " to boidCPU #"
-        << recipientID << std::endl;
+			if (boidFound) {
+				boids[i] = boids[i + 1];
+			}
+		}
+		boidCount--;
+	}
 }
 
-void acceptBoid(uint32 *boidData) {
-    // TODO: Parse the input data to create a boid object
-    uint16 boidID = 12;
-    Vector boidPosition = Vector(12, 100);
-    Vector boidVelocity = Vector(10, -2);
+void acceptBoid() {
+    uint16 boidID = inputData[CMD_HEADER_LEN + 0];
+    Vector boidPosition = Vector(inputData[CMD_HEADER_LEN + 1],
+    		inputData[CMD_HEADER_LEN + 2]);
+    Vector boidVelocity = Vector(inputData[CMD_HEADER_LEN + 3],
+    		inputData[CMD_HEADER_LEN + 4]);
     Boid b = Boid(boidID, boidPosition, boidVelocity, boidCount);
 
     boids[boidCount] = b;
     boidCount++;
+
+    std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID <<
+		" from boidCPU #" << inputData[CMD_FROM] << std::endl;
 }
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
