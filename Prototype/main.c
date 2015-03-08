@@ -76,7 +76,7 @@ const char *commandDescriptions[CMD_COUNT] = { "Initialisation mode",
 		"Load balancing command", "Transfer boids mode", "Transmit a boid", "",
 		"Draw mode", "Draw information heading to BoidGPU", "Kill simulation" };
 
-void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data);
+void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel);
 void chooseCommand(u8 commandID);
 
 void testInitMode();
@@ -94,11 +94,11 @@ void testDrawBoids();
 void testDrawInfo();
 void testKillSwitch();
 
-void processResponse(u32 *data);
+void processResponse(u32 *data, u8 channel);
 void processPingReply(u32 *data);
 void processNeighbourReply(u32 *data);
 
-void printCommand(bool send, u32 *data);
+void printCommand(bool send, u32 *data, int channel);
 
 int main() {
 	// TODO: setup Ethernet
@@ -139,7 +139,7 @@ int main() {
 					fsl_isinvalid(invalidTwo);             // Was there data ready?
 
 					if (!invalidOne) {
-						print("Received data (Channel 1)\n\r");
+//						print("Received data (Channel 1)\n\r");
 						inputData[CMD_LEN] = rv;
 						int i = 0, value = 0;
 
@@ -147,11 +147,11 @@ int main() {
 							getfslx(value, 0, FSL_NONBLOCKING);
 							inputData[i + 1] = value;
 						}
-						processResponse(inputData);
+						processResponse(inputData, 0);
 					}
 
 					if (!invalidTwo) {
-						print("Received data (Channel 2)\n\r");
+//						print("Received data (Channel 2)\n\r");
 						inputData[CMD_LEN] = rv;
 						int i = 0, value = 0;
 
@@ -159,7 +159,7 @@ int main() {
 							getfslx(value, 1, FSL_NONBLOCKING);
 							inputData[i + 1] = value;
 						}
-						processResponse(inputData);
+						processResponse(inputData, 1);
 					}
 
 				} while (XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR));
@@ -245,9 +245,15 @@ void chooseCommand(u8 commandID) {
 
 void testInitMode() {
 	// 4, 0, 1, 1 ||
+	u32 random_seed = 0x1871abc8;
 	to = CMD_BROADCAST;
-	dataLength = 0;
-	createCommand(dataLength, to, from, MODE_INIT, data);
+	dataLength = 1;
+
+	int i;
+	for(i = 0; i < 2; i++) {
+		data[0] = (u16)(random_seed/(i+1));
+		createCommand(dataLength, to, from, MODE_INIT, data, i);
+	}
 }
 
 void testPing() {
@@ -255,7 +261,7 @@ void testPing() {
 	// 4, 0, 1, 2 ||
 	to = CMD_BROADCAST;
 	dataLength = 0;
-	createCommand(dataLength, to, from, CMD_PING, data);
+	createCommand(dataLength, to, from, CMD_PING, data, -1);
 }
 
 void testPingReply() {
@@ -267,7 +273,7 @@ void testPingReply() {
 	data[1] = 123;
 	dataLength = 2;
 
-	createCommand(dataLength, to, from, CMD_PING_REPLY, data);
+	createCommand(dataLength, to, from, CMD_PING_REPLY, data, -1);
 }
 
 void testUserInfo() {
@@ -278,7 +284,7 @@ void testUserInfo() {
 	data[2] = 84;
 	dataLength = 3;
 
-	createCommand(dataLength, to, from, CMD_USER_INFO, data);
+	createCommand(dataLength, to, from, CMD_USER_INFO, data, -1);
 }
 
 // TODO: Re-do this to make it actually extendible
@@ -292,7 +298,7 @@ void testSimulationSetup() {
 	u32 newIDOne = 0 + FIRST_BOIDCPU_ID;
 	u32 newIDTwo = 1 + FIRST_BOIDCPU_ID;
 
-	xil_printf("%d BoidCPUs discovered", boidCPUCount);
+	xil_printf("%d BoidCPUs discovered\n\r", boidCPUCount);
 
 	// BoidCPU1
 	if (boidCPUCount == 1) {
@@ -318,11 +324,37 @@ void testSimulationSetup() {
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			data[EDGE_COUNT + 2 + i] = neighbours[i];
 		}
-		createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
+		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
 	}
 
 	// BoidCPU2
 	if (boidCPUCount == 2) {
+		to = boidCPUs[0];
+		coords[0] = 0;
+		coords[1] = 0;
+		coords[2] = 40;
+		coords[3] = 40;
+		neighbours[0] = newIDTwo;
+		neighbours[1] = newIDOne;
+		neighbours[2] = newIDTwo;
+		neighbours[3] = newIDTwo;
+		neighbours[4] = newIDTwo;
+		neighbours[5] = newIDOne;
+		neighbours[6] = newIDTwo;
+		neighbours[7] = newIDTwo;
+
+		data[0] = newIDOne;
+		data[1] = initialBoidCount;
+		for (i = 0; i < EDGE_COUNT; i++) {
+			data[2 + i] = coords[i];
+		}
+		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+			data[EDGE_COUNT + 2 + i] = neighbours[i];
+		}
+		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
+
+		//--
+
 		to = boidCPUs[1];
 		coords[0] = 40;
 		coords[1] = 0;
@@ -345,7 +377,7 @@ void testSimulationSetup() {
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			data[EDGE_COUNT + 2 + i] = neighbours[i];
 		}
-		createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
+		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 1);
 	}
 }
 
@@ -353,43 +385,62 @@ void testNeighbourSearch() {
 	// 4 0 1 6 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
+	createCommand(dataLength, to, from, MODE_CALC_NBRS, data, -1);
 }
 
 void testNeighbourReply() {
-	print("Testing neighbour reply - TODO\n\r");
+	dataLength = 6;
+	to = CMD_BROADCAST;
+
+	data[0] = 212990464;	// position
+	data[1] = 1049856;		// velocity
+	data[2] = 101;			// ID
+	data[3] = 204574464;
+	data[4] = 3144448;
+	data[5] = 102;
+
+	createCommand(dataLength, to, from, CMD_NBR_REPLY, data, -1);
 }
 
 void testCalcNextBoidPos() {
 	// 4 0 1 9 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
+	createCommand(dataLength, to, from, MODE_POS_BOIDS, data, -1);
 }
 
 void testLoadBalance() {
 	// 4 0 1 10 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, CMD_LOAD_BAL, data);
+	createCommand(dataLength, to, from, CMD_LOAD_BAL, data, -1);
 }
 
 void testMoveBoids() {
 	// 4 0 1 11 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
+	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data, -1);
 }
 
 void testBoidCommand() {
-	print("Testing Boid command - TODO\n\r");
+	dataLength = 5;
+	to = CMD_BROADCAST;
+
+	data[0] = 42;	// ID
+	data[1] = 48;	// x pos
+	data[2] = 20;	// y pos
+	data[3] = -1;	// x vel
+	data[4] = -3;	// y vel
+
+	createCommand(dataLength, to, from, CMD_BOID, data, -1);
 }
 
 void testDrawBoids() {
 	// 4 0 1 14 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_DRAW, data);
+	createCommand(dataLength, to, from, MODE_DRAW, data, -1);
 }
 
 void testDrawInfo() {
@@ -400,8 +451,8 @@ void testKillSwitch() {
 	print("Testing kill switch - TODO\n\r");
 }
 
-void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data) {
-	print("Creating command...");
+void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) {
+//	print("Creating command...");
 	u32 command[MAX_CMD_LEN];
 
 	command[CMD_LEN] = len + CMD_HEADER_LEN;
@@ -415,27 +466,54 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 			command[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
-	print("done\n\r");
+//	print("done\n\r");
 
-	print("Sending command...");
+//	print("Sending command...");
 	int i = 0;
 	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
 		// FSLX ID cannot be a variable - currently transmitting on all
 		// channels without checking if the addressee is on that channel
-		putfslx(command[i], 0, FSL_NONBLOCKING);
-		putfslx(command[i], 1, FSL_NONBLOCKING);
+		if(channel == 0) {
+			putfslx(command[i], 0, FSL_NONBLOCKING);
+		} else if(channel == 1) {
+			putfslx(command[i], 1, FSL_NONBLOCKING);
+		} else {
+			putfslx(command[i], 0, FSL_NONBLOCKING);
+			putfslx(command[i], 1, FSL_NONBLOCKING);
+		}
 	}
-	print("done\n\r");
+//	print("done\n\r");
 
-	printCommand(true, command);
+	printCommand(true, command, channel);
 }
 
 //============================================================================//
 //- Command Processing -------------------------------------------------------//
 //============================================================================//
 
-void processResponse(u32 *data) {
-	printCommand(false, data);
+void processResponse(u32 *data, u8 channel) {
+	printCommand(false, data, channel);
+
+	if((data[CMD_TO] >= FIRST_BOIDCPU_ID) && (data[CMD_TYPE] <= CMD_COUNT)) {
+		int dataLength = data[CMD_LEN] - CMD_HEADER_LEN;
+		u32 dataToForward[dataLength];
+
+		int i = 0;
+		for(i = 0; i < dataLength; i++) {
+			dataToForward[i] = data[CMD_HEADER_LEN + i];
+		}
+
+		xil_printf("Controller forwarding command to BoidCPU #%d\n\r", \
+				data[CMD_TO]);
+
+		if (channel == 0) {
+			createCommand(dataLength, data[CMD_TO], data[CMD_FROM],
+				data[CMD_TYPE], dataToForward, 1);
+		} else if (channel == 1) {
+			createCommand(dataLength, data[CMD_TO], data[CMD_FROM],
+				data[CMD_TYPE], dataToForward, 0);
+		}
+	}
 
 	switch (data[CMD_TYPE]) {
 	case CMD_PING_REPLY:
@@ -466,28 +544,30 @@ void processNeighbourReply(u32 *data) {
 //- Command Debug ------------------------------------------------------------//
 //============================================================================//
 
-void printCommand(bool send, u32 *data) {
+void printCommand(bool send, u32 *data, int channel) {
 	if (send) {
 		if (data[CMD_TO] == CMD_BROADCAST) {
-			print("-> TX, Controller sent broadcast: ");
+			print("-> TX, Controller sent broadcast");
 		} else if (data[CMD_TO] == BOIDGPU_ID) {
-			print("-> TX, Controller sent command to BoidGPU: ");
+			print("-> TX, Controller sent command to BoidGPU");
 		} else {
-			xil_printf("-> TX, Controller sent command to %d: ", data[CMD_TO]);
+			xil_printf("-> TX, Controller sent command to %d", data[CMD_TO]);
 		}
 	} else {
 		if (data[CMD_TO] == CMD_BROADCAST) {
 			// This should never happen - BoidCPUs should not be able to broadcast
-			xil_printf("<- RX, Controller received broadcast from %d: ",
+			xil_printf("<- RX, Controller received broadcast from %d",
 					data[CMD_FROM]);
 		} else if (data[CMD_FROM] == BOIDGPU_ID) {
 			// This should never happen
-			print("<- RX, Controller received command from BoidGPU: ");
+			print("<- RX, Controller received command from BoidGPU");
 		} else {
-			xil_printf("<- RX, Controller received command from %d: ",
+			xil_printf("<- RX, Controller received command from %d",
 					data[CMD_FROM]);
 		}
 	}
+
+	xil_printf(" (on channel %d): ", channel);
 
 	switch (data[CMD_TYPE]) {
 	case 0:
@@ -524,7 +604,7 @@ void printCommand(bool send, u32 *data) {
 		print("transfer boids");
 		break;
 	case CMD_BOID:
-		print("boid");
+		print("boid in transit");
 		break;
 	case MODE_DRAW:
 		print("send boids to BoidGPU");
