@@ -6,10 +6,10 @@
 #include "xuartlite_l.h"            // UART
 #include "fsl.h"                    // AXI Steam
 
-#define ENTER   				0x0A// The ASCII code for '\n' or Line Feed (LF)
-#define USING_VLAB				0	// 1 if using VLAB, 0 if not
+#define ENTER                   0x0A// The ASCII code for '\n' or Line Feed (LF)
+#define USING_VLAB              0   // 1 if using VLAB, 0 if not
 
-#define BOID_COUNT				20	// The total number of system boids
+#define BOID_COUNT              20  // The total number of system boids
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN          4   // The length of the command header
@@ -28,7 +28,7 @@
 
 #define CONTROLLER_ID           1   // The ID of the controller
 #define BOIDGPU_ID              2   // The ID of the BoidGPU
-#define FIRST_BOIDCPU_ID		3	// The lowest possible BoidCPU ID
+#define FIRST_BOIDCPU_ID        3   // The lowest possible BoidCPU ID
 
 #define MODE_INIT               1   //
 #define CMD_PING                2   // Controller -> BoidCPU
@@ -50,7 +50,7 @@
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
 #define MAX_BOIDCPU_NEIGHBOURS  8   // The maximum neighbours a BoidCPUs has
-#define MAX_SYSTEM_BOIDCPUS		10	// The maximum number of BoidCPUs
+#define MAX_SYSTEM_BOIDCPUS     10  // The maximum number of BoidCPUs
 
 typedef enum {
 	false, true
@@ -108,14 +108,14 @@ int main() {
 		print("-------- FPGA Flocking Bird Test Harness ---------\n\r");
 		print("--------------------------------------------------\n\r");
 
-		bool cIDValid = false;  // True if the command ID entered is valid
+		bool cIDValid = false;	// True if the command ID entered is valid
 		u8 cID = 0;             // The ID of the command to issue
 
 		u8 index = 0;           // Index for keyPresses
 		char keyPress;          // The key pressed
 		char keyPresses[] = ""; // An array containing the keys pressed
 
-		while (!cIDValid) {       // Ask for a valid command ID
+		while (!cIDValid) {		// Ask for a valid command ID
 			index = 0;          // Reset the index and key press array
 			memset(keyPresses, 0, sizeof(keyPresses));
 
@@ -130,18 +130,24 @@ int main() {
 			// Take keyboard input until the ENTER key is pressed
 			do {
 				// While there is no keyboard input, check for received messages
-				int rv, invalidOne, invalidTwo;
+				int rvOne, rvTwo, invalidOne, invalidTwo;
 				do {
-					getfslx(rv, 0, FSL_NONBLOCKING); // Non-blocking FSL read to device 0
-					fsl_isinvalid(invalidOne);             // Was there data ready?
+					getfslx(rvOne, 0, FSL_NONBLOCKING);	// Check for data (c0)
+					fsl_isinvalid(invalidOne);          // Was there any data?
 
-					getfslx(rv, 1, FSL_NONBLOCKING); // Non-blocking FSL read to device 1
-					fsl_isinvalid(invalidTwo);             // Was there data ready?
+					getfslx(rvTwo, 1, FSL_NONBLOCKING);	// Check for data (c0)
+					fsl_isinvalid(invalidTwo);			// Was there any data?
 
 					if (!invalidOne) {
-//						print("Received data (Channel 1)\n\r");
-						inputData[CMD_LEN] = rv;
+						inputData[CMD_LEN] = rvOne;
+						xil_printf("Received data (Channel 0) of length %d \n\r", inputData[CMD_LEN]);
 						int i = 0, value = 0;
+
+						// Handle invalid length values
+						if ((inputData[CMD_LEN] == 0) || (inputData[CMD_LEN] > MAX_CMD_LEN)) {
+							inputData[CMD_LEN] = MAX_CMD_LEN;
+							print("Message has invalid length - correcting\n\r");
+						}
 
 						for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
 							getfslx(value, 0, FSL_NONBLOCKING);
@@ -151,9 +157,15 @@ int main() {
 					}
 
 					if (!invalidTwo) {
-//						print("Received data (Channel 2)\n\r");
-						inputData[CMD_LEN] = rv;
+						print("Received data (Channel 1)\n\r");
+						inputData[CMD_LEN] = rvTwo;
 						int i = 0, value = 0;
+
+						// Handle invalid length values
+						if ((inputData[CMD_LEN] == 0) || (inputData[CMD_LEN] > MAX_CMD_LEN)) {
+							inputData[CMD_LEN] = MAX_CMD_LEN;
+							print("Message has invalid length - correcting\n\r");
+						}
 
 						for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
 							getfslx(value, 1, FSL_NONBLOCKING);
@@ -173,8 +185,14 @@ int main() {
 
 			} while (keyPress != ENTER);     // Repeat while enter isn't pressed
 
+			print("Enter key press registered\n\r");
+
 			cID = (u8) atoi(keyPresses); // Convert the key pressed to int, 0 if not int
+
+			xil_printf("Received command %d\n\r", cID);
+
 			if ((cID >= 1) && (cID <= 16)) {
+				print("Command ID is valid\n\r");
 				cIDValid = true;
 				chooseCommand(cID);				// Send the command
 			} else {
@@ -432,6 +450,14 @@ void testBoidCommand() {
 	data[2] = 20;	// y pos
 	data[3] = -1;	// x vel
 	data[4] = -3;	// y vel
+
+	createCommand(dataLength, to, from, CMD_BOID, data, -1);
+
+	data[0] = 43;	// ID
+	data[1] = 53;	// x pos
+	data[2] = 21;	// y pos
+	data[3] = 0;	// x vel
+	data[4] = 4;	// y vel
 
 	createCommand(dataLength, to, from, CMD_BOID, data, -1);
 }
