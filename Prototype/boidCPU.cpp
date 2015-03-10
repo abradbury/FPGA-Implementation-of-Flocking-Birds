@@ -12,7 +12,7 @@ static void identify(void);
 static void simulationSetup(void);
 static void calcNextBoidPositions(void);
 static void loadBalance(void);
-static void moveBoids(void);
+static void calculateEscapedBoids(void);
 static void updateDisplay(void);
 
 void sendBoidsToNeighbours(void);
@@ -32,6 +32,12 @@ int12 divide(int12 numerator, int12 denominator, uint4 mode);
 
 int16 getRandom(int16 min, int16 max);
 uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
+
+void commitAcceptedBoids();
+
+bool isBoidBeyond(Boid boid, uint8 edge);
+bool isBoidBeyondSingle(Boid boid, uint8 edge);
+bool isNeighbourTo(uint16 bearing);
 
 // Debugging function headers --------------------------------------------------
 void printCommand(bool send, uint32 *data);
@@ -163,7 +169,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
                     loadBalance();
                     break;
                 case MODE_TRAN_BOIDS:
-                    moveBoids();
+                    calculateEscapedBoids();
                     break;
                 case CMD_BOID:
                 	acceptBoid();
@@ -414,85 +420,6 @@ void loadBalance() {
     std::cout << "-Load balancing..." << std::endl;
 }
 
-void moveBoids() {
-    std::cout << "-Transferring boids..." << std::endl;
-
-    uint8 boidIndexes[MAX_BOIDS];
-	uint8 recipientIDs[MAX_BOIDS];
-	uint8 counter = 0;
-
-	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
-		if ((neighbouringBoidCPUs[0] > 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[0];
-			counter++;
-		} else if ((neighbouringBoidCPUs[2] > 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[2];
-			counter++;
-		} else if ((neighbouringBoidCPUs[4] > 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[4];
-			counter++;
-		} else if ((neighbouringBoidCPUs[6] > 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[6];
-			counter++;
-		} else if ((neighbouringBoidCPUs[1] > 0) && (boids[i].position.y < boidCPUCoords[1])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[1];
-			counter++;
-		} else if ((neighbouringBoidCPUs[3] > 0) && (boids[i].position.x > boidCPUCoords[2])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[3];
-			counter++;
-		} else if ((neighbouringBoidCPUs[5] > 0) && (boids[i].position.y > boidCPUCoords[3])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[5];
-			counter++;
-		} else if ((neighbouringBoidCPUs[7] > 0) && (boids[i].position.x < boidCPUCoords[0])) {
-			boidIndexes[counter] = i;
-			recipientIDs[counter] = neighbouringBoidCPUs[7];
-			counter++;
-		}
-	}
-
-	if (counter > 0) {
-		transmitBoids(boidIndexes, recipientIDs, counter);
-	}
-
-	// Process queued boids here
-	for (int i = 0; i < queuedBoidsCounter; i++) {
-		// Method 1
-		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
-		uint16 boidID = queuedBoids[queuedBoidsCounter][0];
-		Vector boidPosition = Vector(queuedBoids[queuedBoidsCounter][1], queuedBoids[queuedBoidsCounter][2]);
-		Vector boidVelocity = Vector(queuedBoids[queuedBoidsCounter][3], queuedBoids[queuedBoidsCounter][4]);
-		Boid boid = Boid(boidID, boidPosition, boidVelocity, boidCount);
-
-		boids[boidCount] = boid;
-		boidCount++;
-	}
-}
-
-void commitAcceptedBoids() {
-	for (int i = 0; i < queuedBoidsCounter; i++) {
-		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
-		uint16 boidID = queuedBoids[i][0];
-		Vector boidPosition = Vector(queuedBoids[i][1], queuedBoids[i][2]);
-		Vector boidVelocity = Vector(queuedBoids[i][3], queuedBoids[i][4]);
-		Boid boid = Boid(boidID, boidPosition, boidVelocity, boidCount);
-
-		boids[boidCount] = boid;
-		boidCount++;
-
-		std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID
-			<< " from boidCPU #" << inputData[CMD_FROM] << std::endl;
-	}
-
-	queuedBoidsCounter = 0;
-}
-
 void updateDisplay() {
 
 	if (queuedBoidsCounter > 0) {
@@ -503,18 +430,124 @@ void updateDisplay() {
     packBoidsForSending(BOIDGPU_ID, CMD_DRAW_INFO);
 }
 
-void printStateOfBoidCPUBoids() {
-    boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {
-        std::cout << "Boid " << boids[i].id << " has position [" <<
-            boids[i].position.x << ", " << boids[i].position.y <<
-            "] and velocity [" << boids[i].velocity.x << ", " <<
-            boids[i].velocity.y << "]" << std::endl;
-    }
+//==============================================================================
+//- Boid Transmission and Acceptance -------------------------------------------
+//==============================================================================
+
+void calculateEscapedBoids() {
+    std::cout << "-Transferring boids..." << std::endl;
+
+    uint8 boidIndexes[MAX_BOIDS];
+	uint8 recipientIDs[MAX_BOIDS];
+	uint8 counter = 0;
+
+	// For each boid
+	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
+		// For each bearing (from NORTHWEST (0) to WEST (7))
+		for (int bearing = NORTHWEST; bearing < WEST + 1; bearing++) {
+			// If a BoidCPU is at the bearing & boid is beyond the bearing limit
+			if (isNeighbourTo(bearing) && isBoidBeyond(boids[i], bearing)) {
+				// Mark boid as to be transferred
+				boidIndexes[counter] = i;
+				recipientIDs[counter] = neighbouringBoidCPUs[bearing];
+				counter++;
+			}
+		}
+	}
+
+	if (counter > 0) {
+		transmitBoids(boidIndexes, recipientIDs, counter);
+	}
 }
 
-//==============================================================================
-// Supporting functions ========================================================
-//==============================================================================
+/**
+ * Checks if the supplied boid is beyond the supplied BoidCPU edge. Can handle
+ * compound edge bearings such as NORTHWEST.
+ */
+bool isBoidBeyond(Boid boid, uint8 edge) {
+	bool result;
+
+	switch (edge) {
+	case NORTHWEST:
+		result = isBoidBeyondSingle(boid, NORTH) && isBoidBeyondSingle(boid, WEST);
+		break;
+	case NORTHEAST:
+		result = isBoidBeyondSingle(boid, NORTH) && isBoidBeyondSingle(boid, WEST);
+		break;
+	case SOUTHEAST:
+		result = isBoidBeyondSingle(boid, NORTH) && isBoidBeyondSingle(boid, WEST);
+		break;
+	case SOUTHWEST:
+		result = isBoidBeyondSingle(boid, NORTH) && isBoidBeyondSingle(boid, WEST);
+		break;
+	default:
+		result = isBoidBeyondSingle(boid, edge);
+		break;
+	}
+
+	return result;
+}
+
+/**
+ * Checks if the supplied boid is beyond the supplied BoidCPU edge. Can only
+ * handle singular edge bearings e.g. NORTH.
+ */
+bool isBoidBeyondSingle(Boid boid, uint8 edge) {
+	int12 coordinate;
+	bool result;
+
+	switch (edge){
+	case NORTH:
+		edge = Y_MIN;
+		break;
+	case EAST:
+		edge = X_MAX;
+		break;
+	case SOUTH:
+		edge = Y_MAX;
+		break;
+	case WEST:
+		edge = X_MIN;
+		break;
+	default:
+		break;
+	}
+
+	// Determine the coordinate to check against
+	if ((edge == X_MIN) || (edge == X_MAX)) {
+		coordinate = boid.position.x;
+	} else if ((edge == Y_MIN) || (edge == Y_MAX)) {
+		coordinate = boid.position.y;
+	}
+
+	// Determine if the comparison should be less than or greater than
+	if ((edge == X_MIN) || (edge == Y_MIN)) {
+		if (coordinate < boidCPUCoords[edge]) {
+			result = true;
+		} else {
+			result = false;
+		}
+	} else if ((edge == X_MAX) || (edge == Y_MAX)) {
+		if (coordinate > boidCPUCoords[edge]) {
+			result = true;
+		} else {
+			result = false;
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Checks if the BoidCPU has a neighbour at the specified bearing
+ */
+bool isNeighbourTo(uint16 bearing) {
+	if (neighbouringBoidCPUs[bearing] > 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
 
 void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
 	// First transmit all the boids
@@ -536,6 +569,7 @@ void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
 	outerBoidRemovalLoop: for (int i = 0; i < count; i++) {
 		bool boidFound = false;
 		//  j < boidCount - 1 as list is decremented by 1
+		// TODO: Avoid using indexes as these will change - use IDs
 		innerBoidRemovalLoop: for (int j = 0; j < boidCount - 1; j++) {
 			if (boids[j].index == boidIndexes[i]) {
 				boidFound = true;
@@ -579,6 +613,37 @@ void acceptBoid() {
 //		boids[boidCount] = parsePackedBoid(i);
 //		boidCount++;
 //	}
+}
+
+void commitAcceptedBoids() {
+	for (int i = 0; i < queuedBoidsCounter; i++) {
+		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
+		uint16 boidID = queuedBoids[i][0];
+		Vector boidPosition = Vector(queuedBoids[i][1], queuedBoids[i][2]);
+		Vector boidVelocity = Vector(queuedBoids[i][3], queuedBoids[i][4]);
+		Boid boid = Boid(boidID, boidPosition, boidVelocity, boidCount);
+
+		boids[boidCount] = boid;
+		boidCount++;
+
+		std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID
+			<< " from boidCPU #" << inputData[CMD_FROM] << std::endl;
+	}
+
+	queuedBoidsCounter = 0;
+}
+
+//==============================================================================
+// Supporting functions ========================================================
+//==============================================================================
+
+void printStateOfBoidCPUBoids() {
+    boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {
+        std::cout << "Boid " << boids[i].id << " has position [" <<
+            boids[i].position.x << ", " << boids[i].position.y <<
+            "] and velocity [" << boids[i].velocity.x << ", " <<
+            boids[i].velocity.y << "]" << std::endl;
+    }
 }
 
 Boid parsePackedBoid(uint8 offset) {

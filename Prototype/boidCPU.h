@@ -64,6 +64,15 @@
 #define X_MAX                   2   // Coordinate index of the max x position
 #define Y_MAX                   3   // Coordinate index of the max y position
 
+#define NORTHWEST 				0	// Index of the BoidCPU to the northwest
+#define NORTH					1	// Index of the BoidCPU to the north
+#define NORTHEAST				2	// Index of the BoidCPU to the northeast
+#define EAST					3	// Index of the BoidCPU to the east
+#define SOUTHEAST				4	// Index of the BoidCPU to the southeast
+#define SOUTH					5	// Index of the BoidCPU to the south
+#define SOUTHWEST				6	// Index of the BoidCPU to the southwest
+#define WEST					7	// Index of the BoidCPU to the west
+
 // Other definitions -----------------------------------------------------------
 #define POLY_MASK_16        0xD295  // Used for random
 #define POLY_MASK_15        0x6699  // Used for random
