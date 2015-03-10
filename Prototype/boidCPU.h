@@ -13,7 +13,7 @@
 #define MAX_CMD_BODY_LEN        30  // The max length of the command body
 #define MAX_CMD_LEN             CMD_HEADER_LEN + MAX_CMD_BODY_LEN
 
-#define MAX_OUTPUT_CMDS         8  	 // The number of output commands to buffer
+#define MAX_OUTPUT_CMDS         10  // The number of output commands to buffer
 #define MAX_INPUT_CMDS          1   // The number of input commands to buffer
 
 #define CMD_LEN                 0   // The index of the command length
@@ -57,6 +57,7 @@
 #define AREA_HEIGHT             720 // TODO: Should a BoidCPU know this?
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
 #define MAX_BOIDCPU_NEIGHBOURS  8   // The maximum neighbours a BoidCPUs has
+#define MAX_QUEUED_BOIDS 		10	// The maximum queued boids that can be held
 
 #define X_MIN                   0   // Coordinate index of the min x position
 #define Y_MIN                   1   // Coordinate index of the min y position

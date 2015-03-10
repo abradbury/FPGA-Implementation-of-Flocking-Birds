@@ -17,6 +17,7 @@ uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS];
 bool drawBoids = false;
 
 // Function headers
+void testInitMode();
 void testPing();
 void testSimulationSetup();
 void testNeighbourSearch();
@@ -25,6 +26,8 @@ void testCalcNextBoidPos();
 void testLoadBalance();
 void testMoveBoids();
 void testDrawBoids();
+
+void simulateBoidTransfer();
 
 void processPingResponse();
 void processNeighbourReply();
@@ -41,19 +44,25 @@ int main() {
 
     // Test BoidCPU input ------------------------------------------------------
     // First send the initialisation commands
+    testInitMode();
     testPing();
     testSimulationSetup();
 
     // Then draw the initial positions of the boids
     testDrawBoids();
+	simulateBoidTransfer();
+	testDrawBoids();
+	testMoveBoids();
+	testDrawBoids();
 
-    // Then repeat these commands every time step
-    testNeighbourSearch();
-    testNeighbourResponse();
-    testCalcNextBoidPos();
-    testLoadBalance();
-    testMoveBoids();
-    testDrawBoids();
+//    // Then repeat these commands every time step
+//    testNeighbourSearch();
+//    testNeighbourResponse();
+//    testCalcNextBoidPos();
+//    testLoadBalance();
+//    testMoveBoids();
+////    simulateBoidTransfer();
+//    testDrawBoids();
 
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -93,8 +102,6 @@ int main() {
                 processDrawInfo();
                 break;
             default:
-                std::cout << "Controller received a command it cannot handle: "
-                    << tbInputData[CMD_TYPE] << std::endl;
                 break;
         }
 
@@ -107,6 +114,15 @@ int main() {
     std::cout << "=====TestBench finished receiving=====" << std::endl;
 
     return 0;
+}
+
+void testInitMode() {
+	// 4, 0, 1, 1 || [seed]
+	uint32 randomSeed = 0x1871abc8;
+	to = CMD_BROADCAST;
+	dataLength = 1;
+	data[0] = (uint16)randomSeed;
+	createCommand(dataLength, to, from, MODE_INIT, data);
 }
 
 void testPing() {
@@ -122,7 +138,7 @@ void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
     // 18, 83, 1, 5 || 7, 10, 0, 0, 40, 40, 3, 4, 5, 8, 11, 10, 9, 6, [100]
     dataLength = 14;
-    to = 69;            // The current random ID of the test BoidCPU
+    to = 29;            // The current random ID of the test BoidCPU
 
     uint32 newID = 7;
     uint32 initialBoidCount = 10;
@@ -130,15 +146,28 @@ void testSimulationSetup() {
     coords[1] = 0;
     coords[2] = 40;
     coords[3] = 40;
+//    coords[0] = 40;
+//	coords[1] = 0;
+//	coords[2] = 80;
+//	coords[3] = 80;
 
-    neighbours[0] = 3;
-    neighbours[1] = 4;
-    neighbours[2] = 5;
+//    neighbours[0] = 3;
+//    neighbours[1] = 4;
+//    neighbours[2] = 5;
+//    neighbours[3] = 8;
+//    neighbours[4] = 11;
+//    neighbours[5] = 10;
+//    neighbours[6] = 9;
+//    neighbours[7] = 6;
+
+    neighbours[0] = 8;
+    neighbours[1] = 7;
+    neighbours[2] = 8;
     neighbours[3] = 8;
-    neighbours[4] = 11;
-    neighbours[5] = 10;
-    neighbours[6] = 9;
-    neighbours[7] = 6;
+    neighbours[4] = 8;
+    neighbours[5] = 7;
+    neighbours[6] = 8;
+    neighbours[7] = 8;
 
     data[0] = newID;
     data[1] = initialBoidCount;
@@ -150,13 +179,6 @@ void testSimulationSetup() {
     for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
         data[EDGE_COUNT + 2 + i] = neighbours[i];
     }
-
-    // Additional data for testing
-    // If the value is not 0 then the BoidCPU is able to progress itself until
-    // it reaches the time step equal to the supplied value - it does not need
-    // to wait for the controller to supply synchronisation steps
-//  data[14] = 100;
-//  dataLength += 1;
 
     createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 }
@@ -182,13 +204,15 @@ void testNeighbourResponse() {
 
 	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 		for (int j = 0; j < boidsPerBoidCPU; j++) {
-			Vector vel = Vector(-MAX_VELOCITY + (rand() % (int)(MAX_VELOCITY -
-				-MAX_VELOCITY + 1)), -MAX_VELOCITY + (rand() % (int)
+			// FIXME: Simulator generates an error unless the vel and pos
+			// 	variables are incorrectly swapped round
+			Vector vel = Vector(-MAX_VELOCITY + (rand() % (int)(MAX_VELOCITY -\
+				-MAX_VELOCITY + 1)), -MAX_VELOCITY + (rand() % (int)\
 				(MAX_VELOCITY - -MAX_VELOCITY + 1)));
 
-			Vector pos = Vector(positionBounds[0] + (rand() % (int)
-				(positionBounds[2] - positionBounds[0] + 1)),
-				positionBounds[1] + (rand() % (int)(positionBounds[3] -
+			Vector pos = Vector(positionBounds[0] + (rand() % (int)\
+				(positionBounds[2] - positionBounds[0] + 1)),\
+				positionBounds[1] + (rand() % (int)(positionBounds[3] -\
 				positionBounds[1] + 1)));
 
 			int boidID = ((neighbours[i] - 1) * boidsPerBoidCPU) + j + 1;
@@ -251,6 +275,26 @@ void testMoveBoids() {
     dataLength = 0;
     to = CMD_BROADCAST;
     createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
+}
+
+void simulateBoidTransfer() {
+	// 9 3 4 12 || 31 12 11 5 -1
+	dataLength = 5;
+	to = CMD_BROADCAST;
+
+	data[0] = 42;
+	data[1] = 48;
+	data[2] = 20;
+	data[3] = -1;
+	data[4] = -3;
+	createCommand(dataLength, to, from, CMD_BOID, data);
+
+	data[0] = 43;
+	data[1] = 53;
+	data[2] = 21;
+	data[3] = 0;
+	data[4] = 4;
+	createCommand(dataLength, to, from, CMD_BOID, data);
 }
 
 void testDrawBoids() {

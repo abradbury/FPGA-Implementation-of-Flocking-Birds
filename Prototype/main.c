@@ -64,6 +64,8 @@ u32 coords[EDGE_COUNT];
 
 u32 inputData[MAX_CMD_LEN];
 
+u16 boidCmdCount = 0;
+
 u16 boidCPUs[MAX_SYSTEM_BOIDCPUS];
 u16 boidCPUCount = 0;
 
@@ -445,7 +447,7 @@ void testBoidCommand() {
 	dataLength = 5;
 	to = CMD_BROADCAST;
 
-	data[0] = 42;	// ID
+	data[0] = 42 + boidCmdCount;	// ID
 	data[1] = 48;	// x pos
 	data[2] = 20;	// y pos
 	data[3] = -1;	// x vel
@@ -453,13 +455,15 @@ void testBoidCommand() {
 
 	createCommand(dataLength, to, from, CMD_BOID, data, -1);
 
-	data[0] = 43;	// ID
+	data[0] = 43 + boidCmdCount;	// ID
 	data[1] = 53;	// x pos
 	data[2] = 21;	// y pos
 	data[3] = 0;	// x vel
 	data[4] = 4;	// y vel
 
 	createCommand(dataLength, to, from, CMD_BOID, data, -1);
+
+	boidCmdCount++;
 }
 
 void testDrawBoids() {

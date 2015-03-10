@@ -48,10 +48,13 @@ int12 boidCPUCoords[4];
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 bool neighbouringBoidCPUsSetup = false;	// True when neighbouring BoidCPUs setup
 
+uint16 queuedBoids[MAX_QUEUED_BOIDS][5];// Holds boids received from neighbours
+uint8 queuedBoidsCounter = 0;			// A counter for queued boids
+
 uint32 inputData[MAX_CMD_LEN];
 uint32 outputData[MAX_OUTPUT_CMDS][MAX_CMD_LEN];
 uint32 outputBody[30];
-uint8 outputCount = 0;             // The number of output messages buffered
+uint8 outputCount = 0;             		// The number of output messages stored
 
 // Boid variables --------------------------------------------------------------
 uint8 boidCount;
@@ -419,43 +422,35 @@ void moveBoids() {
 	uint8 counter = 0;
 
 	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
-		if ((neighbouringBoidCPUs[0] > 0) && (boids[i].position.y < \
-				boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
+		if ((neighbouringBoidCPUs[0] > 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x < boidCPUCoords[0])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[0];
 			counter++;
-		} else if ((neighbouringBoidCPUs[2] > 0) && (boids[i].position.y <\
-				boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
+		} else if ((neighbouringBoidCPUs[2] > 0) && (boids[i].position.y < boidCPUCoords[1]) && (boids[i].position.x > boidCPUCoords[2])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[2];
 			counter++;
-		} else if ((neighbouringBoidCPUs[4] > 0) && (boids[i].position.y > \
-				boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
+		} else if ((neighbouringBoidCPUs[4] > 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x > boidCPUCoords[2])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[4];
 			counter++;
-		} else if ((neighbouringBoidCPUs[6] > 0) && (boids[i].position.y > \
-				boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
+		} else if ((neighbouringBoidCPUs[6] > 0) && (boids[i].position.y > boidCPUCoords[3]) && (boids[i].position.x < boidCPUCoords[0])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[6];
 			counter++;
-		} else if ((neighbouringBoidCPUs[1] > 0) && (boids[i].position.y < \
-				boidCPUCoords[1])) {
+		} else if ((neighbouringBoidCPUs[1] > 0) && (boids[i].position.y < boidCPUCoords[1])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[1];
 			counter++;
-		} else if ((neighbouringBoidCPUs[3] > 0) && (boids[i].position.x > \
-				boidCPUCoords[2])) {
+		} else if ((neighbouringBoidCPUs[3] > 0) && (boids[i].position.x > boidCPUCoords[2])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[3];
 			counter++;
-		} else if ((neighbouringBoidCPUs[5] > 0) && (boids[i].position.y > \
-				boidCPUCoords[3])) {
+		} else if ((neighbouringBoidCPUs[5] > 0) && (boids[i].position.y > boidCPUCoords[3])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[5];
 			counter++;
-		} else if ((neighbouringBoidCPUs[7] > 0) && (boids[i].position.x < \
-				boidCPUCoords[0])) {
+		} else if ((neighbouringBoidCPUs[7] > 0) && (boids[i].position.x < boidCPUCoords[0])) {
 			boidIndexes[counter] = i;
 			recipientIDs[counter] = neighbouringBoidCPUs[7];
 			counter++;
@@ -465,9 +460,45 @@ void moveBoids() {
 	if (counter > 0) {
 		transmitBoids(boidIndexes, recipientIDs, counter);
 	}
+
+	// Process queued boids here
+	for (int i = 0; i < queuedBoidsCounter; i++) {
+		// Method 1
+		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
+		uint16 boidID = queuedBoids[queuedBoidsCounter][0];
+		Vector boidPosition = Vector(queuedBoids[queuedBoidsCounter][1], queuedBoids[queuedBoidsCounter][2]);
+		Vector boidVelocity = Vector(queuedBoids[queuedBoidsCounter][3], queuedBoids[queuedBoidsCounter][4]);
+		Boid boid = Boid(boidID, boidPosition, boidVelocity, boidCount);
+
+		boids[boidCount] = boid;
+		boidCount++;
+	}
+}
+
+void commitAcceptedBoids() {
+	for (int i = 0; i < queuedBoidsCounter; i++) {
+		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
+		uint16 boidID = queuedBoids[i][0];
+		Vector boidPosition = Vector(queuedBoids[i][1], queuedBoids[i][2]);
+		Vector boidVelocity = Vector(queuedBoids[i][3], queuedBoids[i][4]);
+		Boid boid = Boid(boidID, boidPosition, boidVelocity, boidCount);
+
+		boids[boidCount] = boid;
+		boidCount++;
+
+		std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID
+			<< " from boidCPU #" << inputData[CMD_FROM] << std::endl;
+	}
+
+	queuedBoidsCounter = 0;
 }
 
 void updateDisplay() {
+
+	if (queuedBoidsCounter > 0) {
+		commitAcceptedBoids();
+	}
+
     std::cout << "-Updating display" << std::endl;
     packBoidsForSending(BOIDGPU_ID, CMD_DRAW_INFO);
 }
@@ -504,8 +535,9 @@ void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
 	// Then delete the boids from the BoidCPUs own boid list
 	outerBoidRemovalLoop: for (int i = 0; i < count; i++) {
 		bool boidFound = false;
+		//  j < boidCount - 1 as list is decremented by 1
 		innerBoidRemovalLoop: for (int j = 0; j < boidCount - 1; j++) {
-			if (j == boidIndexes[i]) {
+			if (boids[j].index == boidIndexes[i]) {
 				boidFound = true;
 			}
 
@@ -518,15 +550,35 @@ void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
 }
 
 void acceptBoid() {
-	// TODO: Remove divide
-	uint8 count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
-
-	// Then, create a boid object for each listed boid and add to the list of
-	// possible neighbouring boids for this BoidCPU
-	rxNbrBoidLoop: for (int i = 0; i < count; i++) {
-		boids[boidCount] = parsePackedBoid(i);
-		boidCount++;
+	// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
+	for (int i = 0; i < 5; i++) {
+		queuedBoids[queuedBoidsCounter][i] = inputData[CMD_HEADER_LEN + i];
 	}
+
+	queuedBoidsCounter++;
+
+//	uint16 boidID = inputData[CMD_HEADER_LEN + 0];
+//	Vector boidPosition = Vector(inputData[CMD_HEADER_LEN + 1],
+//			inputData[CMD_HEADER_LEN + 2]);
+//	Vector boidVelocity = Vector(inputData[CMD_HEADER_LEN + 3],
+//			inputData[CMD_HEADER_LEN + 4]);
+//	Boid b = Boid(boidID, boidPosition, boidVelocity, boidCount);
+//
+//	boids[boidCount] = b;
+//	boidCount++;
+
+//	std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID <<
+//		" from boidCPU #" << inputData[CMD_FROM] << std::endl;
+//
+//	// TODO: Remove divide
+//	uint8 count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
+//
+//	// Then, create a boid object for each listed boid and add to the list of
+//	// possible neighbouring boids for this BoidCPU
+//	rxNbrBoidLoop: for (int i = 0; i < count; i++) {
+//		boids[boidCount] = parsePackedBoid(i);
+//		boidCount++;
+//	}
 }
 
 Boid parsePackedBoid(uint8 offset) {
@@ -550,71 +602,73 @@ Boid parsePackedBoid(uint8 offset) {
 }
 
 void packBoidsForSending(uint32 to, uint32 msg_type) {
-    // First, calculate how many messages need to be sent
-    // For some reason this performs better when not using divide() method
-    int16 numerator = boidCount * BOID_DATA_LENGTH;
-    uint16 msgCount = 0;
-    nbrMsgCountCalcLoop: for (msgCount = 0; numerator > 0; msgCount++) {
-        numerator -= MAX_CMD_BODY_LEN;
-    }
+	if(boidCount > 0) {
+		// First, calculate how many messages need to be sent
+		// For some reason this performs better when not using divide() method
+		int16 numerator = boidCount * BOID_DATA_LENGTH;
+		uint16 msgCount = 0;
+		nbrMsgCountCalcLoop: for (msgCount = 0; numerator > 0; msgCount++) {
+			numerator -= MAX_CMD_BODY_LEN;
+		}
 
-    // Then calculate the number of boids that can be sent per message
-    uint16 boidsPerMsg = (uint16)divide(MAX_CMD_BODY_LEN, BOID_DATA_LENGTH, \
-    		ROUND_TOWARDS_ZERO);
+		// Then calculate the number of boids that can be sent per message
+		uint16 boidsPerMsg = (uint16)divide(MAX_CMD_BODY_LEN, BOID_DATA_LENGTH, \
+				ROUND_TOWARDS_ZERO);
 
-    // Determine the initial boid indexes for this message
-    uint8 startBoidIndex = 0;
-    uint8 endBoidIndex   = startBoidIndex + boidsPerMsg;
+		// Determine the initial boid indexes for this message
+		uint8 startBoidIndex = 0;
+		uint8 endBoidIndex   = startBoidIndex + boidsPerMsg;
 
-    // Next, send a message for each group of boids
-    nbrMsgSendLoop: for (int i = 0; i < msgCount; i++) {
-        // Limit the end index if the message won't be full
-        if (endBoidIndex > boidCount) {
-            endBoidIndex = boidCount;
-        }
+		// Next, send a message for each group of boids
+		nbrMsgSendLoop: for (int i = 0; i < msgCount; i++) {
+			// Limit the end index if the message won't be full
+			if (endBoidIndex > boidCount) {
+				endBoidIndex = boidCount;
+			}
 
-        // The next step is to create the message data
-        uint8 index = 0;
-        NMClp: for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
-            uint32 position = 0;
-            uint32 velocity = 0;
+			// The next step is to create the message data
+			uint8 index = 0;
+			NMClp: for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
+				uint32 position = 0;
+				uint32 velocity = 0;
 
-            position |= ((uint32)(boids[j].position.x) << 20);
-            position |= ((uint32)(boids[j].position.y) << 8);
+				position |= ((uint32)(boids[j].position.x) << 20);
+				position |= ((uint32)(boids[j].position.y) << 8);
 
-            // Despite being of type int12, the velocity (and position) seem to
-            // be represented using 16 bits. Therefore, negative values need to
-            // have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
-            if (boids[j].velocity.x < 0) {
-                velocity |= ((uint32)((boids[j].velocity.x) & ~((int16)0x0F \
-                		<< 12)) << 20);
-            } else {
-                velocity |= ((uint32)(boids[j].velocity.x) << 20);
-            }
+				// Despite being of type int12, the velocity (and position) seem to
+				// be represented using 16 bits. Therefore, negative values need to
+				// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
+				if (boids[j].velocity.x < 0) {
+					velocity |= ((uint32)((boids[j].velocity.x) & ~((int16)0x0F \
+							<< 12)) << 20);
+				} else {
+					velocity |= ((uint32)(boids[j].velocity.x) << 20);
+				}
 
-            if (boids[j].velocity.y < 0) {
-                velocity |= ((uint32)((boids[j].velocity.y) & ~((int16)0x0F \
-                		<< 12)) << 8);
-            } else {
-                velocity |= ((uint32)(boids[j].velocity.y) << 8);
-            }
+				if (boids[j].velocity.y < 0) {
+					velocity |= ((uint32)((boids[j].velocity.y) & ~((int16)0x0F \
+							<< 12)) << 8);
+				} else {
+					velocity |= ((uint32)(boids[j].velocity.y) << 8);
+				}
 
-            outputBody[index + 0] = position;
-            outputBody[index + 1] = velocity;
-            // ID can be removed on deployment
-            outputBody[index + 2] = boids[j].id;
+				outputBody[index + 0] = position;
+				outputBody[index + 1] = velocity;
+				// ID can be removed on deployment
+				outputBody[index + 2] = boids[j].id;
 
-            index += BOID_DATA_LENGTH;
-        }
+				index += BOID_DATA_LENGTH;
+			}
 
-        // Finally send the message
-        int dataLength = ((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH;
-        generateOutput(dataLength, to, msg_type, outputBody);
+			// Finally send the message
+			uint32 dataLength = ((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH;
+			generateOutput(dataLength, to, msg_type, outputBody);
 
-        // Update the boid indexes for the next message
-        startBoidIndex += boidsPerMsg;
-        endBoidIndex = startBoidIndex + boidsPerMsg;
-    }
+			// Update the boid indexes for the next message
+			startBoidIndex += boidsPerMsg;
+			endBoidIndex = startBoidIndex + boidsPerMsg;
+		}
+	}
 }
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
