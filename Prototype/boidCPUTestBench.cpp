@@ -50,19 +50,19 @@ int main() {
 
     // Then draw the initial positions of the boids
     testDrawBoids();
-	simulateBoidTransfer();
-	testDrawBoids();
-	testMoveBoids();
-	testDrawBoids();
+//	simulateBoidTransfer();
+//	testDrawBoids();
+//	testMoveBoids();
+//	testDrawBoids();
 
 //    // Then repeat these commands every time step
-//    testNeighbourSearch();
-//    testNeighbourResponse();
-//    testCalcNextBoidPos();
-//    testLoadBalance();
-//    testMoveBoids();
-////    simulateBoidTransfer();
-//    testDrawBoids();
+    testNeighbourSearch();
+    testNeighbourResponse();
+    testCalcNextBoidPos();
+    testLoadBalance();
+    testMoveBoids();
+//    simulateBoidTransfer();
+    testDrawBoids();
 
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -136,9 +136,9 @@ void testPing() {
 // TODO: Need to send to broadcast during actual testing as random ID unknown
 void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
-    // 18, 83, 1, 5 || 7, 10, 0, 0, 40, 40, 3, 4, 5, 8, 11, 10, 9, 6, [100]
-    dataLength = 14;
-    to = 29;            // The current random ID of the test BoidCPU
+    // 19, 83, 1, 5 || 7, 10, 0, 0, 40, 40, [2], 3, 4, 5, 8, 11, 10, 9, 6, [100]
+    dataLength = 15;
+    to = 35;            // The current random ID of the test BoidCPU
 
     uint32 newID = 7;
     uint32 initialBoidCount = 10;
@@ -160,6 +160,8 @@ void testSimulationSetup() {
 //    neighbours[6] = 9;
 //    neighbours[7] = 6;
 
+    uint32 distinctNeighbourCount = 1;
+
     neighbours[0] = 8;
     neighbours[1] = 7;
     neighbours[2] = 8;
@@ -176,8 +178,10 @@ void testSimulationSetup() {
         data[2 + i] = coords[i];
     }
 
+    data[2 + EDGE_COUNT] = distinctNeighbourCount;
+
     for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-        data[EDGE_COUNT + 2 + i] = neighbours[i];
+        data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
     }
 
     createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
@@ -202,7 +206,8 @@ void testNeighbourResponse() {
 	const int positionBounds[4] = {0, 0, 720, 720};
 	Boid boidsFromNbrs[MAX_BOIDCPU_NEIGHBOURS][boidsPerBoidCPU];
 
-	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+	int neighboursToSimulate = 1;
+	for (int i = 0; i < neighboursToSimulate; i++) {
 		for (int j = 0; j < boidsPerBoidCPU; j++) {
 			// FIXME: Simulator generates an error unless the vel and pos
 			// 	variables are incorrectly swapped round
@@ -222,7 +227,7 @@ void testNeighbourResponse() {
 	}
 
 	// Now send the data to the BoidCPU under test
-	for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+	for (int i = 0; i < neighboursToSimulate; i++) {
 		// The next step is to create the message data
 		for (int j = 0, k = 0; j < boidsPerBoidCPU; j++, k++) {
 			uint32 position = 0;
@@ -445,13 +450,23 @@ void processDrawInfo() {
             std::cout << i << std::string(digits, ' ');
         } std::cout << std::endl;
     } else {
-        // TODO: Print out boid info
-//      int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
-
-        for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN; i += 3) {
-            std::cout << "Boid " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 0]
-                << " has position [" << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 1]
-                << ", " << tbInputData[tbInputCount][CMD_HEADER_LEN + i + 2] << "]" << std::endl;
+        // FIXME: Wrong print out
+//    	int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
+//
+//		for (int i = 0; i < tbBoidCount; i++) {
+//			uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
+//			uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+//
+//			Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
+//					(int12)((position & (uint32)0xFFF00) >> 8));
+//
+//			Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
+//					(int12)((velocity & (uint32)0xFFF00) >> 8));
+//
+//			uint16 boidID = (uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
+//
+//			std::cout << "Boid " << boidID << " has position [" << p.x
+//				<< ", " << v.y << "]" << std::endl;
         }
     }
 }

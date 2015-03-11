@@ -102,6 +102,9 @@ void processNeighbourReply(u32 *data);
 
 void printCommand(bool send, u32 *data, int channel);
 
+void putData(u32 value, u32 channel);
+u32 getData(u32 channel);
+
 int main() {
 	// TODO: setup Ethernet
 
@@ -132,18 +135,33 @@ int main() {
 			// Take keyboard input until the ENTER key is pressed
 			do {
 				// While there is no keyboard input, check for received messages
-				int rvOne, rvTwo, invalidOne, invalidTwo;
+				int rvOne, rvTwo, invalidOne, invalidTwo, errorOne, errorTwo;
 				do {
+//					rvOne = getData(0);
+//					rvTwo = getData(1);
+
 					getfslx(rvOne, 0, FSL_NONBLOCKING);	// Check for data (c0)
 					fsl_isinvalid(invalidOne);          // Was there any data?
+					fsl_iserror(errorOne);				// Was there an error?
 
-					getfslx(rvTwo, 1, FSL_NONBLOCKING);	// Check for data (c0)
+					getfslx(rvTwo, 1, FSL_NONBLOCKING);	// Check for data (c1)
 					fsl_isinvalid(invalidTwo);			// Was there any data?
+					fsl_iserror(errorTwo);				// Was there an error?
+
+					// Handle errors
+					if (errorOne) {
+						xil_printf("Error receiving data on Channel 0: %d\n\r", errorOne);
+					}
+
+					if (errorTwo) {
+						xil_printf("Error receiving data on Channel 1: %d\n\r", errorTwo);
+					}
 
 					if (!invalidOne) {
 						inputData[CMD_LEN] = rvOne;
-						xil_printf("Received data (Channel 0) of length %d \n\r", inputData[CMD_LEN]);
-						int i = 0, value = 0;
+						print("Received data (Channel 0)\n\r");
+						int i = 0;
+						u32 value = 0;
 
 						// Handle invalid length values
 						if ((inputData[CMD_LEN] == 0) || (inputData[CMD_LEN] > MAX_CMD_LEN)) {
@@ -153,6 +171,10 @@ int main() {
 
 						for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
 							getfslx(value, 0, FSL_NONBLOCKING);
+
+							fsl_iserror(errorOne);				// Was there an error?
+							if (errorOne) xil_printf("Error receiving data on Channel 0: %d\n\r", errorOne);
+
 							inputData[i + 1] = value;
 						}
 						processResponse(inputData, 0);
@@ -161,7 +183,8 @@ int main() {
 					if (!invalidTwo) {
 						print("Received data (Channel 1)\n\r");
 						inputData[CMD_LEN] = rvTwo;
-						int i = 0, value = 0;
+						int i = 0;
+						u32 value = 0;
 
 						// Handle invalid length values
 						if ((inputData[CMD_LEN] == 0) || (inputData[CMD_LEN] > MAX_CMD_LEN)) {
@@ -171,6 +194,10 @@ int main() {
 
 						for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
 							getfslx(value, 1, FSL_NONBLOCKING);
+
+							fsl_iserror(errorTwo);				// Was there an error?
+							if (errorTwo) xil_printf("Error receiving data on Channel 1: %d\n\r", errorTwo);
+
 							inputData[i + 1] = value;
 						}
 						processResponse(inputData, 1);
@@ -313,8 +340,9 @@ void testSimulationSetup() {
 	u32 initialBoidCount = 10;
 	u32 neighbours[MAX_BOIDCPU_NEIGHBOURS];
 	int i = 0;
-	dataLength = 14;
+	dataLength = 15;
 
+	u32 distinctNeighbourCount = 1;
 	u32 newIDOne = 0 + FIRST_BOIDCPU_ID;
 	u32 newIDTwo = 1 + FIRST_BOIDCPU_ID;
 
@@ -341,8 +369,9 @@ void testSimulationSetup() {
 		for (i = 0; i < EDGE_COUNT; i++) {
 			data[2 + i] = coords[i];
 		}
+		data[2 + EDGE_COUNT] = distinctNeighbourCount;
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-			data[EDGE_COUNT + 2 + i] = neighbours[i];
+			data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
 		}
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
 	}
@@ -368,8 +397,9 @@ void testSimulationSetup() {
 		for (i = 0; i < EDGE_COUNT; i++) {
 			data[2 + i] = coords[i];
 		}
+		data[2 + EDGE_COUNT] = distinctNeighbourCount;
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-			data[EDGE_COUNT + 2 + i] = neighbours[i];
+			data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
 		}
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
 
@@ -394,8 +424,9 @@ void testSimulationSetup() {
 		for (i = 0; i < EDGE_COUNT; i++) {
 			data[2 + i] = coords[i];
 		}
+		data[2 + EDGE_COUNT] = distinctNeighbourCount;
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-			data[EDGE_COUNT + 2 + i] = neighbours[i];
+			data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
 		}
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 1);
 	}
@@ -504,17 +535,56 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) 
 		// FSLX ID cannot be a variable - currently transmitting on all
 		// channels without checking if the addressee is on that channel
 		if(channel == 0) {
-			putfslx(command[i], 0, FSL_NONBLOCKING);
+			putData(command[i], 0);
 		} else if(channel == 1) {
-			putfslx(command[i], 1, FSL_NONBLOCKING);
+			putData(command[i], 1);
 		} else {
-			putfslx(command[i], 0, FSL_NONBLOCKING);
-			putfslx(command[i], 1, FSL_NONBLOCKING);
+			putData(command[i], 0);
+			putData(command[i], 1);
 		}
 	}
 //	print("done\n\r");
 
 	printCommand(true, command, channel);
+}
+
+void putData(u32 value, u32 channel) {
+	int error = 0, invalid = 0;
+
+	// TODO: Change back to FSL_DEFAULT
+	if (channel == 1) putfslx(value, 1, FSL_NONBLOCKING);
+	else if (channel == 0) putfslx(value, 0, FSL_NONBLOCKING);
+
+	fsl_isinvalid(invalid);
+	fsl_iserror(error);
+
+	if (invalid) {
+		xil_printf("Warning - channel %d is full: %d\n\r", channel, value);
+	}
+
+	if (error) {
+		xil_printf("Error writing data to channel %d: %d\n\r", channel, value);
+	}
+}
+
+u32 getData(u32 channel) {
+	int error = 0, invalid = 0, value = 0;
+
+	if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
+	else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
+
+	fsl_isinvalid(invalid);
+	fsl_iserror(error);
+
+	if (invalid) {
+		xil_printf("Warning - channel %d is empty: %d", channel, value);
+	}
+
+	if (error) {
+		xil_printf("Error reading data from channel %d: %d", channel, value);
+	}
+
+	return value;
 }
 
 //============================================================================//
@@ -533,8 +603,7 @@ void processResponse(u32 *data, u8 channel) {
 			dataToForward[i] = data[CMD_HEADER_LEN + i];
 		}
 
-		xil_printf("Controller forwarding command to BoidCPU #%d\n\r", \
-				data[CMD_TO]);
+//		xil_printf("Controller forwarding command to BoidCPU #%d\n\r", data[CMD_TO]);
 
 		if (channel == 0) {
 			createCommand(dataLength, data[CMD_TO], data[CMD_FROM],
@@ -543,17 +612,17 @@ void processResponse(u32 *data, u8 channel) {
 			createCommand(dataLength, data[CMD_TO], data[CMD_FROM],
 				data[CMD_TYPE], dataToForward, 0);
 		}
-	}
-
-	switch (data[CMD_TYPE]) {
-	case CMD_PING_REPLY:
-		processPingReply(data);
-		break;
-	case CMD_NBR_REPLY:
-		processNeighbourReply(data);
-		break;
-	default:
-		break;
+	} else {
+		switch (data[CMD_TYPE]) {
+		case CMD_PING_REPLY:
+			processPingReply(data);
+			break;
+		case CMD_NBR_REPLY:
+			processNeighbourReply(data);
+			break;
+		default:
+			break;
+		}
 	}
 }
 
