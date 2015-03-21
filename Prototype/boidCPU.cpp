@@ -19,7 +19,7 @@ void sendBoidsToNeighbours(void);
 void processNeighbouringBoids(void);
 
 // Supporting function headers -------------------------------------------------
-void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count);
+void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count);
 void acceptBoid();
 
 void packBoidsForSending(uint32 to, uint32 msg_type);
@@ -54,8 +54,8 @@ int12 boidCPUCoords[4];
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 bool neighbouringBoidCPUsSetup = false;	// True when neighbouring BoidCPUs setup
 
-uint8 distinctNeighbourCount = 0;
-uint8 distinctNeighbourCounter = 0;
+uint8 distinctNeighbourCount = 0;		// The number of distinct neighbouring BoidCPUs
+uint8 distinctNeighbourCounter = 0;		// A counter to the above
 
 uint16 queuedBoids[MAX_QUEUED_BOIDS][5];// Holds boids received from neighbours
 uint8 queuedBoidsCounter = 0;			// A counter for queued boids
@@ -321,7 +321,7 @@ void simulationSetup() {
 
     testBoidCreationLoop: for (int i = 0; i < boidCount; i++) {
         uint16 boidID = baseBoidID + i + 1;
-        Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1], i);
+        Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
         boids[i] = boid;
     }
 }
@@ -354,7 +354,7 @@ void processNeighbouringBoids() {
 	// Before processing first response, add own boids to list
 	if (distinctNeighbourCounter == 0) {
 		addOwnBoidsToNbrList: for (int i = 0; i < boidCount; i++) {
-			possibleBoidNeighbours[i] = boids[i];
+			possibleBoidNeighbours[possibleNeighbourCount] = boids[i];
 			possibleNeighbourCount++;
 		}
 	}
@@ -372,7 +372,7 @@ void processNeighbouringBoids() {
     }
 
     // Increment the boids received from neighbour counter
-    distinctNeighbourCount++;
+    distinctNeighbourCounter++;
 }
 
 /**
@@ -385,7 +385,6 @@ void calculateBoidNeighbours() {
 	outerCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
 		uint8 boidNeighbourCount = 0;
 		innerCalcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
-//                if (i != j) {
 			if (possibleBoidNeighbours[j].id != boids[i].id) {
 				uint12 boidSeparation = Vector::squaredDistanceBetween(
 					boids[i].position, possibleBoidNeighbours[j].position);
@@ -398,18 +397,18 @@ void calculateBoidNeighbours() {
 			}
 		}
 
-		boids[i].setNeighbourCount(boidNeighbourCount);
+		boids[i].setNeighbourDetails(i, boidNeighbourCount);
 	}
 
 	// Reset the flags
 	possibleNeighbourCount = 0;
-	distinctNeighbourCount = 0;
+	distinctNeighbourCounter = 0;
 }
 
 void calcNextBoidPositions() {
     std::cout << "-Calculating next boid positions..." << std::endl;
 
-    if (distinctNeighbourCounter != 0) {
+    if (distinctNeighbourCounter != distinctNeighbourCount) {
     	std::cout << "WARNING: Boid neighbours have not been calculated"
 			<< " - not all neighbour responses have been received" << std::endl;
     } else {
@@ -442,7 +441,7 @@ void updateDisplay() {
 void calculateEscapedBoids() {
     std::cout << "-Transferring boids..." << std::endl;
 
-    uint8 boidIndexes[MAX_BOIDS];
+    uint16 boidIDs[MAX_BOIDS];
 	uint8 recipientIDs[MAX_BOIDS];
 	uint8 counter = 0;
 
@@ -453,7 +452,7 @@ void calculateEscapedBoids() {
 			// If a BoidCPU is at the bearing & boid is beyond the bearing limit
 			if (isNeighbourTo(bearing) && isBoidBeyond(boids[i], bearing)) {
 				// Mark boid as to be transferred
-				boidIndexes[counter] = i;
+				boidIDs[counter] = boids[i].id;
 				recipientIDs[counter] = neighbouringBoidCPUs[bearing];
 				counter++;
 			}
@@ -461,7 +460,7 @@ void calculateEscapedBoids() {
 	}
 
 	if (counter > 0) {
-		transmitBoids(boidIndexes, recipientIDs, counter);
+		transmitBoids(boidIDs, recipientIDs, counter);
 	}
 }
 
@@ -554,20 +553,26 @@ bool isNeighbourTo(uint16 bearing) {
 	}
 }
 
-void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
+void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 	// First transmit all the boids
 	boidTransmitLoop: for (int i = 0; i < count; i++) {
-		// TODO: Perhaps move this to the boid class?
-		outputBody[0] = boids[boidIndexes[i]].id;
-		outputBody[1] = boids[boidIndexes[i]].position.x;
-		outputBody[2] = boids[boidIndexes[i]].position.y;
-		outputBody[3] = boids[boidIndexes[i]].velocity.x;
-		outputBody[4] = boids[boidIndexes[i]].velocity.y;
+		boidTransmitSearchLoop: for (int j = 0; j < boidCount; j++) {
+			if (boidIDs[i] == boids[j].id) {
+				// TODO: Perhaps move this to the boid class?
+				outputBody[0] = boids[boidIDs[i]].id;
+				outputBody[1] = boids[boidIDs[i]].position.x;
+				outputBody[2] = boids[boidIDs[i]].position.y;
+				outputBody[3] = boids[boidIDs[i]].velocity.x;
+				outputBody[4] = boids[boidIDs[i]].velocity.y;
 
-		generateOutput(5, recipientIDs[i], CMD_BOID, outputBody);
+				generateOutput(5, recipientIDs[i], CMD_BOID, outputBody);
 
-	    std::cout << "-Transferring boid #" << boids[boidIndexes[i]].id <<
-	    	" to boidCPU #" << recipientIDs[i] << std::endl;
+				std::cout << "-Transferring boid #" << boids[boidIDs[i]].id <<
+					" to boidCPU #" << recipientIDs[i] << std::endl;
+
+				break;
+			}
+		}
 	}
 
 	// Then delete the boids from the BoidCPUs own boid list
@@ -576,7 +581,7 @@ void transmitBoids(uint8 *boidIndexes, uint8 *recipientIDs, uint8 count) {
 		//  j < boidCount - 1 as list is decremented by 1
 		// TODO: Avoid using indexes as these will change - use IDs
 		innerBoidRemovalLoop: for (int j = 0; j < boidCount - 1; j++) {
-			if (boids[j].index == boidIndexes[i]) {
+			if (boids[j].id == boidIDs[i]) {
 				boidFound = true;
 			}
 
@@ -626,7 +631,7 @@ void commitAcceptedBoids() {
 		uint16 boidID = queuedBoids[i][0];
 		Vector boidPosition = Vector(queuedBoids[i][1], queuedBoids[i][2]);
 		Vector boidVelocity = Vector(queuedBoids[i][3], queuedBoids[i][4]);
-		Boid boid = Boid(boidID, boidPosition, boidVelocity, boidCount);
+		Boid boid = Boid(boidID, boidPosition, boidVelocity);
 
 		boids[boidCount] = boid;
 		boidCount++;
@@ -656,6 +661,7 @@ Boid parsePackedBoid(uint8 offset) {
 
 	uint32 pos = inputData[index + 0];
 	uint32 vel = inputData[index + 1];
+	uint16 bID = inputData[index + 2];		// boid ID
 
 	Vector position = Vector((int12)((pos & (~(uint32)0xFFFFF)) >> 20),
 			(int12)((pos & (uint32)0xFFF00) >> 8));
@@ -663,12 +669,10 @@ Boid parsePackedBoid(uint8 offset) {
 	Vector velocity = Vector((int12)((vel & (~(uint32)0xFFFFF)) >> 20),
 			(int12)((vel & (uint32)0xFFF00) >> 8));
 
-	uint16 boidID = inputData[index + 2];
-
-	std::cout << "-BoidCPU #" << boidCPUID << " received boid #" << boidID <<
+	std::cout << "-BoidCPU #" << boidCPUID << " received boid #" << bID <<
 			" from BoidCPU #" << inputData[CMD_FROM] << std::endl;
 
-	return Boid(boidID, position, velocity, offset);
+	return Boid(bID, position, velocity);
 }
 
 void packBoidsForSending(uint32 to, uint32 msg_type) {
@@ -961,22 +965,22 @@ uint16 shiftLSFR(uint16 *lfsr, uint16 mask) {
 
 Boid::Boid() {
     id = 0;
-    index = 0;
 
     position = Vector(0, 0);
     velocity = Vector(0, 0);
 
-    neighbouringBoidsCount = 0;
+    boidNeighbourIndex = 0;
+    boidNeighbourCount = 0;
 }
 
-Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, uint8 idx) {
+Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
     id = _boidID;
-    index = idx;
 
     position = initPosition;
     velocity = initVelocity;
 
-    neighbouringBoidsCount = 0;
+    boidNeighbourIndex = 0;
+    boidNeighbourCount = 0;
 
     std::cout << "Created boid #" << id << std::endl;
     printBoidInfo();
@@ -985,7 +989,7 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, uint8 idx) 
 void Boid::update(void) {
     std::cout << "Updating boid #" << id << std::endl;
 
-    if (neighbouringBoidsCount > 0) {
+    if (boidNeighbourCount > 0) {
         acceleration.add(separate());
         acceleration.add(align());
         acceleration.add(cohesion());
@@ -1003,11 +1007,11 @@ void Boid::update(void) {
 Vector Boid::align(void) {
     Vector total;
 
-    alignBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-        total.add(boidNeighbourList[index][i]->velocity);
+    alignBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
+        total.add(boidNeighbourList[boidNeighbourIndex][i]->velocity);
     }
 
-    total.div(neighbouringBoidsCount);
+    total.div(boidNeighbourCount);
     total.setMag(MAX_VELOCITY);
 
     Vector steer = Vector::sub(total, velocity);
@@ -1020,14 +1024,14 @@ Vector Boid::separate(void) {
     Vector total;
     Vector diff;
 
-    separateBoidsLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-        diff = Vector::sub(position, boidNeighbourList[index][i]->position);
+    separateBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
+        diff = Vector::sub(position, boidNeighbourList[boidNeighbourIndex][i]->position);
         diff.normalise();
         // Optionally weight by the distance
         total.add(diff);
     }
 
-    total.div(neighbouringBoidsCount);
+    total.div(boidNeighbourCount);
     total.setMag(MAX_VELOCITY);
     Vector steer = Vector::sub(total, velocity);
     steer.limit(MAX_FORCE);
@@ -1038,11 +1042,11 @@ Vector Boid::separate(void) {
 Vector Boid::cohesion(void) {
     Vector total;
 
-    coheseBoidLoop: for (int i = 0; i < neighbouringBoidsCount; i++) {
-        total.add(boidNeighbourList[index][i]->position);
+    coheseBoidLoop: for (int i = 0; i < boidNeighbourCount; i++) {
+        total.add(boidNeighbourList[boidNeighbourIndex][i]->position);
     }
 
-    total.div(neighbouringBoidsCount);
+    total.div(boidNeighbourCount);
 
     Vector desired = Vector::sub(total, position);
 
@@ -1067,8 +1071,9 @@ void Boid::contain() {
     }
 }
 
-void Boid::setNeighbourCount(uint8 n) {
-    neighbouringBoidsCount = n;
+void Boid::setNeighbourDetails(uint8 neighbourIndex, uint8 neighbourCount) {
+	boidNeighbourIndex = neighbourIndex;
+	boidNeighbourCount = neighbourCount;
 }
 
 void Boid::printBoidInfo() {

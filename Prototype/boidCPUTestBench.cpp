@@ -222,7 +222,7 @@ void testNeighbourResponse() {
 
 			int boidID = ((neighbours[i] - 1) * boidsPerBoidCPU) + j + 1;
 
-			boidsFromNbrs[i][j] = Boid(boidID, pos, vel, j);
+			boidsFromNbrs[i][j] = Boid(boidID, pos, vel);
 		}
 	}
 
@@ -334,7 +334,7 @@ void processNeighbourReply() {
         Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
                 (int12)((velocity & (uint32)0xFFF00) >> 8));
 
-        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v, i);
+        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v);
         tbBoids[i] = b;
 //      b.printBoidInfo();
     }
@@ -467,7 +467,7 @@ void processDrawInfo() {
 //
 //			std::cout << "Boid " << boidID << " has position [" << p.x
 //				<< ", " << v.y << "]" << std::endl;
-        }
+//        }
     }
 }
 

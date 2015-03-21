@@ -43,6 +43,7 @@
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
 #define CMD_KILL                16  // Controller -> All (B)
 
+#define CMD_ACK					17
 
 // Boid definitions ------------------------------------------------------------
 #define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU
@@ -127,23 +128,29 @@ class Vector {
 
 class Boid {
  public:
-    Vector position;        // The current pixel position of the boid
-    Vector velocity;        // The current velocity of the boid
-    uint16 id;              // TODO: Remove this on deployment
-    uint8 index;            // Used to access relevant neighbouring boids
+    Vector position;        	// The current pixel position of the boid
+    Vector velocity;        	// The current velocity of the boid
+    uint16 id;              	// TODO: Remove this on deployment - MAYBE
 
     Boid();
-    Boid(uint16 _boidID, Vector initPosition, Vector initVelocity, uint8 index);
+    Boid(uint16 _boidID, Vector initPosition, Vector initVelocity);
 
     void update();                  // Calculate the boid's new position
     void draw();                    // Draw the boid (send to BoidGPU)
 
-    void setNeighbourCount(uint8 n);
     void printBoidInfo();
+
+    // Tell the boid where its neighbours are located in the neighbouring boid
+    // list held by the BoidCPU and how many there are
+    void setNeighbourDetails(uint8 index, uint8 count);
 
  private:
     Vector acceleration;
-    uint8 neighbouringBoidsCount;
+
+    // Points to this boid's list of neighbouring boids in the list of boid
+    // neighbouring boids that is stored by the boid's BoidCPU
+    uint8 boidNeighbourIndex;
+    uint8 boidNeighbourCount;
 
     Vector align();         // Calculate the alignment force
     Vector separate();      // Calculate the separation force
