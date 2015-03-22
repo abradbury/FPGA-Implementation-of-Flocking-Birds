@@ -24,6 +24,7 @@
 #define CMD_BROADCAST           0   // The number for a broadcast command
 #define CONTROLLER_ID           1   // The ID of the controller
 #define BOIDGPU_ID              2   // The ID of the BoidGPU
+#define FIRST_BOIDCPU_ID		3	// The lowest possible BoidCPU ID
 #define CMD_MULTICAST           99  // The 'to' value for multicast commands
 
 #define BOID_DATA_LENGTH        3   // The number of bits to send for a boid

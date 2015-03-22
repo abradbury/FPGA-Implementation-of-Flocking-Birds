@@ -62,7 +62,7 @@ u32 from = CONTROLLER_ID;
 u32 dataLength = 0;
 u32 coords[EDGE_COUNT];
 
-u32 inputData[MAX_CMD_LEN];
+//u32 inputData[MAX_CMD_LEN];
 
 u16 boidCmdCount = 0;
 
@@ -128,80 +128,95 @@ int main() {
 			print("Choose a command from the following list: \n\r");
 			int i = 0;
 			for (i = 0; i < CMD_COUNT; i++) {
-				xil_printf(" %d: %s\n\r", i + 1, commandDescriptions[i]);
+				xil_printf(" %3d: %s\n\r", i + 1, commandDescriptions[i]);
 			}
 			print("--------------------------------------------------\n\r");
 
 			// Take keyboard input until the ENTER key is pressed
 			do {
 				// While there is no keyboard input, check for received messages
-				int rvOne, rvTwo, invalidOne, invalidTwo, errorOne, errorTwo;
 				do {
-//					rvOne = getData(0);
-//					rvTwo = getData(1);
+					// Channel 0 -----------------------------------------------
+					int channelZeroInvalid, channelZeroError, channelZeroDataum;
+					u32 channelZeroData[MAX_CMD_LEN];
 
-					getfslx(rvOne, 0, FSL_NONBLOCKING);	// Check for data (c0)
-					fsl_isinvalid(invalidOne);          // Was there any data?
-					fsl_iserror(errorOne);				// Was there an error?
+					getfslx(channelZeroDataum, 0, FSL_NONBLOCKING);	// Check for data (c0)
+					fsl_isinvalid(channelZeroInvalid);          	// Was there any data?
+					fsl_iserror(channelZeroError);					// Was there an error?
 
-					getfslx(rvTwo, 1, FSL_NONBLOCKING);	// Check for data (c1)
-					fsl_isinvalid(invalidTwo);			// Was there any data?
-					fsl_iserror(errorTwo);				// Was there an error?
-
-					// Handle errors
-					if (errorOne) {
-						xil_printf("Error receiving data on Channel 0: %d\n\r", errorOne);
+					if (channelZeroError) {
+						xil_printf("Error receiving data on Channel 0: %d\n\r", channelZeroError);
 					}
 
-					if (errorTwo) {
-						xil_printf("Error receiving data on Channel 1: %d\n\r", errorTwo);
-					}
-
-					if (!invalidOne) {
-						inputData[CMD_LEN] = rvOne;
+					if (!channelZeroInvalid) {
+						channelZeroData[CMD_LEN] = channelZeroDataum;
 						print("Received data (Channel 0)\n\r");
 						int i = 0;
-						u32 value = 0;
 
 						// Handle invalid length values
-						if ((inputData[CMD_LEN] == 0) || (inputData[CMD_LEN] > MAX_CMD_LEN)) {
-							inputData[CMD_LEN] = MAX_CMD_LEN;
+						if ((channelZeroData[CMD_LEN] == 0) || (channelZeroData[CMD_LEN] > MAX_CMD_LEN)) {
+							channelZeroData[CMD_LEN] = MAX_CMD_LEN;
 							print("Message has invalid length - correcting\n\r");
 						}
 
-						for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
-							getfslx(value, 0, FSL_NONBLOCKING);
+						for (i = 0; i < channelZeroData[CMD_LEN] - 1; i++) {
+							getfslx(channelZeroDataum, 0, FSL_NONBLOCKING);
 
-							fsl_iserror(errorOne);				// Was there an error?
-							if (errorOne) xil_printf("Error receiving data on Channel 0: %d\n\r", errorOne);
+							fsl_iserror(channelZeroError);				// Was there an error?
+							if (channelZeroError) {
+								xil_printf("Error receiving data on Channel 0: %d\n\r", channelZeroError);
+							}
 
-							inputData[i + 1] = value;
+							channelZeroData[i + 1] = channelZeroDataum;
 						}
-						processResponse(inputData, 0);
+					}
+					// ---------------------------------------------------------
+
+					// Channel 1 -----------------------------------------------
+					int channelOneInvalid, channelOneError, channelOneDataum;
+					u32 channelOneData[MAX_CMD_LEN];
+
+					getfslx(channelOneDataum, 1, FSL_NONBLOCKING);	// Check for data (c1)
+					fsl_isinvalid(channelOneInvalid);				// Was there any data?
+					fsl_iserror(channelOneError);					// Was there an error?
+
+					if (channelOneError) {
+						xil_printf("Error receiving data on Channel 1: %d\n\r", channelOneError);
 					}
 
-					if (!invalidTwo) {
+					if (!channelOneInvalid) {
 						print("Received data (Channel 1)\n\r");
-						inputData[CMD_LEN] = rvTwo;
+						channelOneData[CMD_LEN] = channelOneDataum;
 						int i = 0;
-						u32 value = 0;
 
 						// Handle invalid length values
-						if ((inputData[CMD_LEN] == 0) || (inputData[CMD_LEN] > MAX_CMD_LEN)) {
-							inputData[CMD_LEN] = MAX_CMD_LEN;
+						if ((channelOneData[CMD_LEN] == 0) || (channelOneData[CMD_LEN] > MAX_CMD_LEN)) {
+							channelOneData[CMD_LEN] = MAX_CMD_LEN;
 							print("Message has invalid length - correcting\n\r");
 						}
 
-						for (i = 0; i < inputData[CMD_LEN] - 1; i++) {
-							getfslx(value, 1, FSL_NONBLOCKING);
+						for (i = 0; i < channelOneData[CMD_LEN] - 1; i++) {
+							getfslx(channelOneDataum, 1, FSL_NONBLOCKING);
 
-							fsl_iserror(errorTwo);				// Was there an error?
-							if (errorTwo) xil_printf("Error receiving data on Channel 1: %d\n\r", errorTwo);
+							fsl_iserror(channelOneError);				// Was there an error?
+							if (channelOneError) {
+								xil_printf("Error receiving data on Channel 1: %d\n\r", channelOneError);
+							}
 
-							inputData[i + 1] = value;
+							channelOneData[i + 1] = channelOneDataum;
 						}
-						processResponse(inputData, 1);
 					}
+					// ---------------------------------------------------------
+
+					// Process received data -----------------------------------
+					if (!channelZeroInvalid) {
+						processResponse(channelZeroData, 0);
+					}
+
+					if (!channelOneInvalid) {
+						processResponse(channelOneData, 1);
+					}
+					// ---------------------------------------------------------
 
 				} while (XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR));
 
@@ -298,7 +313,7 @@ void testInitMode() {
 
 	int i;
 	for(i = 0; i < 2; i++) {
-		data[0] = (u16)(random_seed/(i+1));
+		data[0] = (u16)(random_seed/(i + 1));
 		createCommand(dataLength, to, from, MODE_INIT, data, i);
 	}
 }
@@ -536,11 +551,15 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) 
 		// channels without checking if the addressee is on that channel
 		if(channel == 0) {
 			putData(command[i], 0);
+//			getData(0);
 		} else if(channel == 1) {
 			putData(command[i], 1);
+//			getData(1);
 		} else {
 			putData(command[i], 0);
+//			getData(0);
 			putData(command[i], 1);
+//			getData(1);
 		}
 	}
 //	print("done\n\r");
@@ -551,9 +570,9 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) 
 void putData(u32 value, u32 channel) {
 	int error = 0, invalid = 0;
 
-	// TODO: Change back to FSL_DEFAULT
-	if (channel == 1) putfslx(value, 1, FSL_NONBLOCKING);
-	else if (channel == 0) putfslx(value, 0, FSL_NONBLOCKING);
+	// TODO: Ensure that writes use FSL_DEFAULT (blocking write)
+	if (channel == 1) putfslx(value, 1, FSL_DEFAULT);
+	else if (channel == 0) putfslx(value, 0, FSL_DEFAULT);
 
 	fsl_isinvalid(invalid);
 	fsl_iserror(error);
@@ -565,6 +584,10 @@ void putData(u32 value, u32 channel) {
 	if (error) {
 		xil_printf("Error writing data to channel %d: %d\n\r", channel, value);
 	}
+
+//	if (!invalid && !error) {
+//		xil_printf("Data written to channel %d successfully: %d\n\r", channel, value);
+//	}
 }
 
 u32 getData(u32 channel) {
@@ -583,6 +606,10 @@ u32 getData(u32 channel) {
 	if (error) {
 		xil_printf("Error reading data from channel %d: %d", channel, value);
 	}
+
+//	if (!invalid && !error) {
+//		xil_printf("Data read from channel %d successfully: %d\n\r", channel, value);
+//	}
 
 	return value;
 }
@@ -655,14 +682,12 @@ void printCommand(bool send, u32 *data, int channel) {
 	} else {
 		if (data[CMD_TO] == CMD_BROADCAST) {
 			// This should never happen - BoidCPUs should not be able to broadcast
-			xil_printf("<- RX, Controller received broadcast from %d",
-					data[CMD_FROM]);
+			xil_printf("<- RX, Controller received broadcast from %d", data[CMD_FROM]);
 		} else if (data[CMD_FROM] == BOIDGPU_ID) {
 			// This should never happen
 			print("<- RX, Controller received command from BoidGPU");
 		} else {
-			xil_printf("<- RX, Controller received command from %d",
-					data[CMD_FROM]);
+			xil_printf("<- RX, Controller received command from %d", data[CMD_FROM]);
 		}
 	}
 

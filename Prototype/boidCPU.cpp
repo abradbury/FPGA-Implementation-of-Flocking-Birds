@@ -47,7 +47,7 @@ void printStateOfBoidCPUBoids();
 // Global variables ============================================================
 // TODO: Determine which variables should really be global
 // BoidCPU variables -----------------------------------------------------------
-int8 boidCPUID;
+int8 boidCPUID = FIRST_BOIDCPU_ID;
 int8 fpgaID;
 int12 boidCPUCoords[4];
 
@@ -122,7 +122,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_ctrl_none port = return
 
     // Perform initialisation
-    initialisation();
+//    initialisation();
 
     // Continually check for input and deal with it. Note that reading an empty
     // input stream will generate warnings in HLS, but should be blocking in the
@@ -137,10 +137,12 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         // Block until there is input available
 #ifndef USING_TB
          inputData[CMD_LEN] = input.read();
+//         output.write(inputData[CMD_LEN]);
 #endif
         // When there is input, read in the command
         inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
             inputData[1 + i] = input.read();
+//            output.write(inputData[1 + i]);
         }
         printCommand(false, inputData);
         // ---------------------------------------------------------------------
