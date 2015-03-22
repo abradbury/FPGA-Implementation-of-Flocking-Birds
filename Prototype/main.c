@@ -673,11 +673,11 @@ void processNeighbourReply(u32 *data) {
 void printCommand(bool send, u32 *data, int channel) {
 	if (send) {
 		if (data[CMD_TO] == CMD_BROADCAST) {
-			print("-> TX, Controller sent broadcast");
+			print("-> TX, Controller sent broadcast                 ");
 		} else if (data[CMD_TO] == BOIDGPU_ID) {
-			print("-> TX, Controller sent command to BoidGPU");
+			print("-> TX, Controller sent command to BoidGPU      ");
 		} else {
-			xil_printf("-> TX, Controller sent command to %d", data[CMD_TO]);
+			xil_printf("-> TX, Controller sent command to %d      ", data[CMD_TO]);
 		}
 	} else {
 		if (data[CMD_TO] == CMD_BROADCAST) {
@@ -695,56 +695,55 @@ void printCommand(bool send, u32 *data, int channel) {
 
 	switch (data[CMD_TYPE]) {
 	case 0:
-		print("do something");
+		print("do something                      ");
 		break;
 	case MODE_INIT:
-		print("initialise self");
+		print("initialise self                   ");
 		break;
 	case CMD_PING:
-		print("BoidCPU ping");
+		print("BoidCPU ping                      ");
 		break;
 	case CMD_PING_REPLY:
-		print("BoidCPU ping response");
+		print("BoidCPU ping response             ");
 		break;
 	case CMD_USER_INFO:
-		print("output user info");
+		print("output user info                  ");
 		break;
 	case CMD_SIM_SETUP:
-		print("setup BoidCPU");
+		print("setup BoidCPU                     ");
 		break;
 	case MODE_CALC_NBRS:
-		print("calculate neighbours");
+		print("calculate neighbours              ");
 		break;
 	case CMD_NBR_REPLY:
-		print("neighbouring boids from neighbour");
+		print("neighbouring boids from neighbour ");
 		break;
 	case MODE_POS_BOIDS:
-		print("calculate new boid positions");
+		print("calculate new boid positions      ");
 		break;
 	case CMD_LOAD_BAL:
-		print("load balance");
+		print("load balance                      ");
 		break;
 	case MODE_TRAN_BOIDS:
-		print("transfer boids");
+		print("transfer boids                    ");
 		break;
 	case CMD_BOID:
-		print("boid in transit");
+		print("boid in transit                   ");
 		break;
 	case MODE_DRAW:
-		print("send boids to BoidGPU");
+		print("send boids to BoidGPU             ");
 		break;
 	case CMD_DRAW_INFO:
-		print("boid info heading to BoidGPU");
+		print("boid info heading to BoidGPU      ");
 		break;
 	case CMD_KILL:
-		print("kill simulation");
+		print("kill simulation                   ");
 		break;
 	default:
-		print("UNKNOWN COMMAND");
+		print("UNKNOWN COMMAND                   ");
 		break;
 	}
 
-	XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, '\t');
 	int i = 0;
 	for (i = 0; i < CMD_HEADER_LEN; i++) {
 		xil_printf("%d ", data[i]);
