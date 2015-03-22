@@ -42,27 +42,36 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
 int main() {
     hls::stream<uint32> to_hw, from_hw;
 
-    // Test BoidCPU input ------------------------------------------------------
-    // First send the initialisation commands
+//    // Test BoidCPU input ------------------------------------------------------
+//    // First send the initialisation commands
+//    testInitMode();
+//    testPing();
+//    testSimulationSetup();
+//
+//    // Then draw the initial positions of the boids
+//    testDrawBoids();
+////	simulateBoidTransfer();
+////	testDrawBoids();
+////	testMoveBoids();
+////	testDrawBoids();
+
+    // Test BoidCPU #4 Failure -------------------------------------------------
     testInitMode();
     testPing();
     testSimulationSetup();
-
-    // Then draw the initial positions of the boids
-    testDrawBoids();
-//	simulateBoidTransfer();
-//	testDrawBoids();
-//	testMoveBoids();
-//	testDrawBoids();
-
-//    // Then repeat these commands every time step
-    testNeighbourSearch();
     testNeighbourResponse();
-    testCalcNextBoidPos();
-    testLoadBalance();
-    testMoveBoids();
-//    simulateBoidTransfer();
+    testNeighbourSearch();
     testDrawBoids();
+    // -------------------------------------------------------------------------
+
+////    // Then repeat these commands every time step
+//    testNeighbourSearch();
+//    testNeighbourResponse();
+//    testCalcNextBoidPos();
+//    testLoadBalance();
+//    testMoveBoids();
+////    simulateBoidTransfer();
+//    testDrawBoids();
 
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -121,7 +130,7 @@ void testInitMode() {
 	uint32 randomSeed = 0x1871abc8;
 	to = CMD_BROADCAST;
 	dataLength = 1;
-	data[0] = (uint16)randomSeed;
+	data[0] = (uint16)(randomSeed/2);
 	createCommand(dataLength, to, from, MODE_INIT, data);
 }
 
@@ -138,38 +147,46 @@ void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
     // 19, 83, 1, 5 || 7, 10, 0, 0, 40, 40, [2], 3, 4, 5, 8, 11, 10, 9, 6, [100]
     dataLength = 15;
-    to = 35;            // The current random ID of the test BoidCPU
 
-    uint32 newID = 7;
+    uint32 newID;
     uint32 initialBoidCount = 10;
-    coords[0] = 0;
-    coords[1] = 0;
-    coords[2] = 40;
-    coords[3] = 40;
-//    coords[0] = 40;
-//	coords[1] = 0;
-//	coords[2] = 80;
-//	coords[3] = 80;
-
-//    neighbours[0] = 3;
-//    neighbours[1] = 4;
-//    neighbours[2] = 5;
-//    neighbours[3] = 8;
-//    neighbours[4] = 11;
-//    neighbours[5] = 10;
-//    neighbours[6] = 9;
-//    neighbours[7] = 6;
-
     uint32 distinctNeighbourCount = 1;
 
-    neighbours[0] = 8;
-    neighbours[1] = 7;
-    neighbours[2] = 8;
-    neighbours[3] = 8;
-    neighbours[4] = 8;
-    neighbours[5] = 7;
-    neighbours[6] = 8;
-    neighbours[7] = 8;
+//    // BoidCPU #3
+//    newID = 3;
+//    to = 35;
+//
+//    coords[0] = 0;
+//    coords[1] = 0;
+//    coords[2] = 40;
+//    coords[3] = 40;
+//
+//    neighbours[0] = 4;
+//    neighbours[1] = 3;
+//    neighbours[2] = 4;
+//    neighbours[3] = 4;
+//    neighbours[4] = 4;
+//    neighbours[5] = 3;
+//    neighbours[6] = 4;
+//    neighbours[7] = 4;
+
+    // BoidCPU #4
+    newID = 4;
+    to = 10;
+
+    coords[0] = 40;
+	coords[1] = 0;
+	coords[2] = 80;
+	coords[3] = 40;
+
+    neighbours[0] = 3;
+    neighbours[1] = 4;
+    neighbours[2] = 3;
+    neighbours[3] = 3;
+    neighbours[4] = 3;
+    neighbours[5] = 4;
+    neighbours[6] = 3;
+    neighbours[7] = 3;
 
     data[0] = newID;
     data[1] = initialBoidCount;
@@ -202,63 +219,97 @@ void testNeighbourResponse() {
 	// For each neighbouring BoidCPU, create a list of boids and send this to
 	// the BoidCPU under test
 	// FIXME: This seems to be called before all other testbench stuff
-	const int boidsPerBoidCPU = 10;
-	const int positionBounds[4] = {0, 0, 720, 720};
-	Boid boidsFromNbrs[MAX_BOIDCPU_NEIGHBOURS][boidsPerBoidCPU];
+//	const int boidsPerBoidCPU = 10;
+//	const int positionBounds[4] = {0, 0, 720, 720};
+//	Boid boidsFromNbrs[MAX_BOIDCPU_NEIGHBOURS][boidsPerBoidCPU];
+//
+//	int neighboursToSimulate = 1;
+//	for (int i = 0; i < neighboursToSimulate; i++) {
+//		for (int j = 0; j < boidsPerBoidCPU; j++) {
+//			// FIXME: Simulator generates an error unless the vel and pos
+//			// 	variables are incorrectly swapped round
+//			Vector vel = Vector(-MAX_VELOCITY + (rand() % (int)(MAX_VELOCITY -\
+//				-MAX_VELOCITY + 1)), -MAX_VELOCITY + (rand() % (int)\
+//				(MAX_VELOCITY - -MAX_VELOCITY + 1)));
+//
+//			Vector pos = Vector(positionBounds[0] + (rand() % (int)\
+//				(positionBounds[2] - positionBounds[0] + 1)),\
+//				positionBounds[1] + (rand() % (int)(positionBounds[3] -\
+//				positionBounds[1] + 1)));
+//
+//			int boidID = ((neighbours[i] - 1) * boidsPerBoidCPU) + j + 1;
+//
+//			boidsFromNbrs[i][j] = Boid(boidID, pos, vel);
+//		}
+//	}
+//
+//	// Now send the data to the BoidCPU under test
+//	for (int i = 0; i < neighboursToSimulate; i++) {
+//		// The next step is to create the message data
+//		for (int j = 0, k = 0; j < boidsPerBoidCPU; j++, k++) {
+//			uint32 position = 0;
+//			uint32 velocity = 0;
+//
+//			position |= ((uint32)(boidsFromNbrs[i][j].position.x) << 20);
+//			position |= ((uint32)(boidsFromNbrs[i][j].position.y) << 8);
+//
+//			// Despite being of type int12, the velocity (and position) seem to
+//			// be represented using 16 bits. Therefore, negative values need to
+//			// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
+//			if (boidsFromNbrs[i][j].velocity.x < 0) {
+//				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.x) & ~((int16)0x0F << 12)) << 20);
+//			} else {
+//				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.x) << 20);
+//			}
+//
+//			if (boidsFromNbrs[i][j].velocity.y < 0) {
+//				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.y) & ~((int16)0x0F << 12)) << 8);
+//			} else {
+//				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.y) << 8);
+//			}
+//
+//			data[(k * BOID_DATA_LENGTH) + 0] = position;
+//			data[(k * BOID_DATA_LENGTH) + 1] = velocity;
+//			data[(k * BOID_DATA_LENGTH) + 2] = boidsFromNbrs[i][j].id;
+//		}
+//
+//		int dataLength = boidsPerBoidCPU * BOID_DATA_LENGTH;
+//		createCommand(dataLength, 7, neighbours[i], CMD_NBR_REPLY, data);
+//	}
 
-	int neighboursToSimulate = 1;
-	for (int i = 0; i < neighboursToSimulate; i++) {
-		for (int j = 0; j < boidsPerBoidCPU; j++) {
-			// FIXME: Simulator generates an error unless the vel and pos
-			// 	variables are incorrectly swapped round
-			Vector vel = Vector(-MAX_VELOCITY + (rand() % (int)(MAX_VELOCITY -\
-				-MAX_VELOCITY + 1)), -MAX_VELOCITY + (rand() % (int)\
-				(MAX_VELOCITY - -MAX_VELOCITY + 1)));
+	// 34 99 3 8 || 12585728 5242880 21 19931904 -5242624 22 12590848 -3146240 23 36705792 1047808 24 4196608 -1048576 25 19927552 3144960 26 39850752 5241856 27 18875648 -1048064 28 15737088 3145216 29 3147776 -2097152 30
+	data[0] = 12585728;
+	data[1] = 5242880;
+	data[2] = 21;
+	data[3] = 19931904;
+	data[4] = -5242624;
+	data[5] = 22;
+	data[6] = 12590848;
+	data[7] = -3146240;
+	data[8] = 23;
+	data[9] = 36705792;
+	data[10] = 1047808;
+	data[11] = 24;
+	data[12] = 4196608;
+	data[13] = -1048576;
+	data[14] = 25;
+	data[15] = 19927552;
+	data[16] = 3144960;
+	data[17] = 26;
+	data[18] = 39850752;
+	data[19] = 5241856;
+	data[20] = 27;
+	data[21] = 18875648;
+	data[22] = -1048064;
+	data[23] = 28;
+	data[24] = 15737088;
+	data[25] = 3145216;
+	data[26] = 29;
+	data[27] = 3147776;
+	data[28] = -2097152;
+	data[29] = 30;
 
-			Vector pos = Vector(positionBounds[0] + (rand() % (int)\
-				(positionBounds[2] - positionBounds[0] + 1)),\
-				positionBounds[1] + (rand() % (int)(positionBounds[3] -\
-				positionBounds[1] + 1)));
-
-			int boidID = ((neighbours[i] - 1) * boidsPerBoidCPU) + j + 1;
-
-			boidsFromNbrs[i][j] = Boid(boidID, pos, vel);
-		}
-	}
-
-	// Now send the data to the BoidCPU under test
-	for (int i = 0; i < neighboursToSimulate; i++) {
-		// The next step is to create the message data
-		for (int j = 0, k = 0; j < boidsPerBoidCPU; j++, k++) {
-			uint32 position = 0;
-			uint32 velocity = 0;
-
-			position |= ((uint32)(boidsFromNbrs[i][j].position.x) << 20);
-			position |= ((uint32)(boidsFromNbrs[i][j].position.y) << 8);
-
-			// Despite being of type int12, the velocity (and position) seem to
-			// be represented using 16 bits. Therefore, negative values need to
-			// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
-			if (boidsFromNbrs[i][j].velocity.x < 0) {
-				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.x) & ~((int16)0x0F << 12)) << 20);
-			} else {
-				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.x) << 20);
-			}
-
-			if (boidsFromNbrs[i][j].velocity.y < 0) {
-				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.y) & ~((int16)0x0F << 12)) << 8);
-			} else {
-				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.y) << 8);
-			}
-
-			data[(k * BOID_DATA_LENGTH) + 0] = position;
-			data[(k * BOID_DATA_LENGTH) + 1] = velocity;
-			data[(k * BOID_DATA_LENGTH) + 2] = boidsFromNbrs[i][j].id;
-		}
-
-		int dataLength = boidsPerBoidCPU * BOID_DATA_LENGTH;
-		createCommand(dataLength, 7, neighbours[i], CMD_NBR_REPLY, data);
-	}
+	createCommand(30, 99, 3, CMD_NBR_REPLY, data);
 }
 
 void testCalcNextBoidPos() {
