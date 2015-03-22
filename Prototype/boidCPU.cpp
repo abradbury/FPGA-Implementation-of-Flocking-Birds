@@ -137,12 +137,10 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         // Block until there is input available
 #ifndef USING_TB
          inputData[CMD_LEN] = input.read();
-//         output.write(inputData[CMD_LEN]);
 #endif
         // When there is input, read in the command
-        inputLoop: for (int i = 0; i < inputData[CMD_LEN] - 1; i++) {
-            inputData[1 + i] = input.read();
-//            output.write(inputData[1 + i]);
+        inputLoop: for (int i = 1; i < inputData[CMD_LEN]; i++) {
+            inputData[i] = input.read();
         }
         printCommand(false, inputData);
         // ---------------------------------------------------------------------
@@ -450,7 +448,7 @@ void calculateEscapedBoids() {
 	// For each boid
 	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
 		// For each bearing (from NORTHWEST (0) to WEST (7))
-		for (int bearing = NORTHWEST; bearing < WEST + 1; bearing++) {
+		bearingLoop: for (int bearing = NORTHWEST; bearing < WEST + 1; bearing++) {
 			// If a BoidCPU is at the bearing & boid is beyond the bearing limit
 			if (isNeighbourTo(bearing) && isBoidBeyond(boids[i], bearing)) {
 				// Mark boid as to be transferred
@@ -561,15 +559,15 @@ void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 		boidTransmitSearchLoop: for (int j = 0; j < boidCount; j++) {
 			if (boidIDs[i] == boids[j].id) {
 				// TODO: Perhaps move this to the boid class?
-				outputBody[0] = boids[boidIDs[i]].id;
-				outputBody[1] = boids[boidIDs[i]].position.x;
-				outputBody[2] = boids[boidIDs[i]].position.y;
-				outputBody[3] = boids[boidIDs[i]].velocity.x;
-				outputBody[4] = boids[boidIDs[i]].velocity.y;
+				outputBody[0] = boids[j].id;
+				outputBody[1] = boids[j].position.x;
+				outputBody[2] = boids[j].position.y;
+				outputBody[3] = boids[j].velocity.x;
+				outputBody[4] = boids[j].velocity.y;
 
 				generateOutput(5, recipientIDs[i], CMD_BOID, outputBody);
 
-				std::cout << "-Transferring boid #" << boids[boidIDs[i]].id <<
+				std::cout << "-Transferring boid #" << boids[j].id <<
 					" to boidCPU #" << recipientIDs[i] << std::endl;
 
 				break;
@@ -744,6 +742,8 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 			startBoidIndex += boidsPerMsg;
 			endBoidIndex = startBoidIndex + boidsPerMsg;
 		}
+	} else {
+		std::cout << "No boids to send" << std::endl;
 	}
 }
 
