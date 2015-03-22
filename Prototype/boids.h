@@ -5,6 +5,7 @@
 #define USING_VLAB              0   // 1 if using VLAB, 0 if not
 
 #define BOID_COUNT              20  // The total number of system boids
+#define MAX_BOIDCPUS_PER_FPGA	3	// The number of BoidCPUs per FPGA
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN          4   // The length of the command header
@@ -24,6 +25,7 @@
 #define CONTROLLER_ID           1   // The ID of the controller
 #define BOIDGPU_ID              2   // The ID of the BoidGPU
 #define FIRST_BOIDCPU_ID        3   // The lowest possible BoidCPU ID
+#define CMD_MULTICAST			99	// The 'to' value for multicast commands
 
 #define MODE_INIT               1   //
 #define CMD_PING                2   // Controller -> BoidCPU
