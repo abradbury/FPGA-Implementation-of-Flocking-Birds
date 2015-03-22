@@ -1002,7 +1002,6 @@ void Boid::update(void) {
     position.add(velocity);
     acceleration.mul(0);
 
-    contain();
     printBoidInfo();
 }
 
@@ -1057,20 +1056,6 @@ Vector Boid::cohesion(void) {
 	steer.limit(MAX_FORCE);
 
 	return steer;
-}
-
-void Boid::contain() {
-    if (position.x > AREA_WIDTH) {
-        position.x = 0;
-    } else if (position.x < 0) {
-        position.x = AREA_WIDTH;
-    }
-
-    if (position.y > AREA_HEIGHT) {
-        position.y = 0;
-    } else if (position.y < 0) {
-        position.y = AREA_HEIGHT;
-    }
 }
 
 void Boid::setNeighbourDetails(uint8 neighbourIndex, uint8 neighbourCount) {

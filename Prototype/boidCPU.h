@@ -55,8 +55,6 @@
 #define MAX_NEIGHBOURING_BOIDS  45  // TODO: Decide on appropriate value?
 
 // BoidCPU definitions ---------------------------------------------------------
-#define AREA_WIDTH              720 // TODO: Should a BoidCPU know this?
-#define AREA_HEIGHT             720 // TODO: Should a BoidCPU know this?
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
 #define MAX_BOIDCPU_NEIGHBOURS  8   // The maximum neighbours a BoidCPUs has
 #define MAX_QUEUED_BOIDS 		10	// The maximum queued boids that can be held
@@ -158,7 +156,6 @@ class Boid {
     Vector cohesion();      // Calculate the cohesion force
 
     Vector seek(Vector);    // Seek a new position
-    void contain();         // Contain the boids within the simulation area
 };
 
 #endif
