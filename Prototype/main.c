@@ -6,55 +6,7 @@
 #include "xuartlite_l.h"            // UART
 #include "fsl.h"                    // AXI Steam
 
-#define ENTER                   0x0A// The ASCII code for '\n' or Line Feed (LF)
-#define USING_VLAB              0   // 1 if using VLAB, 0 if not
-
-#define BOID_COUNT              20  // The total number of system boids
-
-// Command definitions ---------------------------------------------------------
-#define CMD_HEADER_LEN          4   // The length of the command header
-#define MAX_CMD_BODY_LEN        30  // The max length of the command body
-#define MAX_CMD_LEN             CMD_HEADER_LEN + MAX_CMD_BODY_LEN
-
-#define MAX_OUTPUT_CMDS         15  // The number of output commands to buffer
-#define MAX_INPUT_CMDS          5   // The number of input commands to buffer
-
-#define CMD_LEN                 0   // The index of the command length
-#define CMD_TO                  1   // The index of the command target
-#define CMD_FROM                2   // The index of the command sender
-#define CMD_TYPE                3   // The index of the command type
-
-#define CMD_BROADCAST           0   // The number for a broadcast command
-
-#define CONTROLLER_ID           1   // The ID of the controller
-#define BOIDGPU_ID              2   // The ID of the BoidGPU
-#define FIRST_BOIDCPU_ID        3   // The lowest possible BoidCPU ID
-
-#define MODE_INIT               1   //
-#define CMD_PING                2   // Controller -> BoidCPU
-#define CMD_PING_REPLY          3   // BoidCPU -> Controller
-#define CMD_USER_INFO           4   // Controller -> BoidGPU
-#define CMD_SIM_SETUP           5   // Controller -> Boid[CG]PU
-#define MODE_CALC_NBRS          6   //
-#define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU
-#define MODE_POS_BOIDS          9   //
-#define CMD_LOAD_BAL            10  // TODO: Decide on implementation
-#define MODE_TRAN_BOIDS         11  //
-#define CMD_BOID                12  // BoidCPU -> BoidCPU
-#define MODE_DRAW               14  // TODO: Perhaps not needed?
-#define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU
-#define CMD_KILL                16  // Controller -> All
-
-#define CMD_COUNT               16
-
-// BoidCPU definitions ---------------------------------------------------------
-#define EDGE_COUNT              4   // The number of edges a BoidCPU has
-#define MAX_BOIDCPU_NEIGHBOURS  8   // The maximum neighbours a BoidCPUs has
-#define MAX_SYSTEM_BOIDCPUS     10  // The maximum number of BoidCPUs
-
-typedef enum {
-	false, true
-} bool;
+#include "boids.h"
 
 u32 data[MAX_CMD_BODY_LEN];
 u32 to;
@@ -103,7 +55,7 @@ void processNeighbourReply(u32 *data);
 void printCommand(bool send, u32 *data, int channel);
 
 void putData(u32 value, u32 channel);
-u32 getData(u32 channel);
+u32 getData(u32 *data, u32 channel);
 
 int main() {
 	// TODO: setup Ethernet
@@ -137,75 +89,13 @@ int main() {
 				// While there is no keyboard input, check for received messages
 				do {
 					// Channel 0 -----------------------------------------------
-					int channelZeroInvalid, channelZeroError, channelZeroDataum;
 					u32 channelZeroData[MAX_CMD_LEN];
-
-					getfslx(channelZeroDataum, 0, FSL_NONBLOCKING);	// Check for data (c0)
-					fsl_isinvalid(channelZeroInvalid);          	// Was there any data?
-					fsl_iserror(channelZeroError);					// Was there an error?
-
-					if (channelZeroError) {
-						xil_printf("Error receiving data on Channel 0: %d\n\r", channelZeroError);
-					}
-
-					if (!channelZeroInvalid) {
-						channelZeroData[CMD_LEN] = channelZeroDataum;
-						print("Received data (Channel 0)\n\r");
-						int i = 0;
-
-						// Handle invalid length values
-						if ((channelZeroData[CMD_LEN] == 0) || (channelZeroData[CMD_LEN] > MAX_CMD_LEN)) {
-							channelZeroData[CMD_LEN] = MAX_CMD_LEN;
-							print("Message has invalid length - correcting\n\r");
-						}
-
-						for (i = 0; i < channelZeroData[CMD_LEN] - 1; i++) {
-							getfslx(channelZeroDataum, 0, FSL_NONBLOCKING);
-
-							fsl_iserror(channelZeroError);				// Was there an error?
-							if (channelZeroError) {
-								xil_printf("Error receiving data on Channel 0: %d\n\r", channelZeroError);
-							}
-
-							channelZeroData[i + 1] = channelZeroDataum;
-						}
-					}
+					int channelZeroInvalid = getData(channelZeroData, 0);
 					// ---------------------------------------------------------
 
 					// Channel 1 -----------------------------------------------
-					int channelOneInvalid, channelOneError, channelOneDataum;
 					u32 channelOneData[MAX_CMD_LEN];
-
-					getfslx(channelOneDataum, 1, FSL_NONBLOCKING);	// Check for data (c1)
-					fsl_isinvalid(channelOneInvalid);				// Was there any data?
-					fsl_iserror(channelOneError);					// Was there an error?
-
-					if (channelOneError) {
-						xil_printf("Error receiving data on Channel 1: %d\n\r", channelOneError);
-					}
-
-					if (!channelOneInvalid) {
-						print("Received data (Channel 1)\n\r");
-						channelOneData[CMD_LEN] = channelOneDataum;
-						int i = 0;
-
-						// Handle invalid length values
-						if ((channelOneData[CMD_LEN] == 0) || (channelOneData[CMD_LEN] > MAX_CMD_LEN)) {
-							channelOneData[CMD_LEN] = MAX_CMD_LEN;
-							print("Message has invalid length - correcting\n\r");
-						}
-
-						for (i = 0; i < channelOneData[CMD_LEN] - 1; i++) {
-							getfslx(channelOneDataum, 1, FSL_NONBLOCKING);
-
-							fsl_iserror(channelOneError);				// Was there an error?
-							if (channelOneError) {
-								xil_printf("Error receiving data on Channel 1: %d\n\r", channelOneError);
-							}
-
-							channelOneData[i + 1] = channelOneDataum;
-						}
-					}
+					int channelOneInvalid = getData(channelOneData, 1);
 					// ---------------------------------------------------------
 
 					// Process received data -----------------------------------
@@ -528,7 +418,6 @@ void testKillSwitch() {
 }
 
 void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) {
-//	print("Creating command...");
 	u32 command[MAX_CMD_LEN];
 
 	command[CMD_LEN] = len + CMD_HEADER_LEN;
@@ -542,27 +431,20 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) 
 			command[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
-//	print("done\n\r");
 
-//	print("Sending command...");
 	int i = 0;
 	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
 		// FSLX ID cannot be a variable - currently transmitting on all
 		// channels without checking if the addressee is on that channel
 		if(channel == 0) {
 			putData(command[i], 0);
-//			getData(0);
 		} else if(channel == 1) {
 			putData(command[i], 1);
-//			getData(1);
 		} else {
 			putData(command[i], 0);
-//			getData(0);
 			putData(command[i], 1);
-//			getData(1);
 		}
 	}
-//	print("done\n\r");
 
 	printCommand(true, command, channel);
 }
@@ -590,28 +472,44 @@ void putData(u32 value, u32 channel) {
 //	}
 }
 
-u32 getData(u32 channel) {
-	int error = 0, invalid = 0, value = 0;
+u32 getData(u32 *data, u32 channel) {
+	int invalid, error, value = 0;
 
 	if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
 	else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
 
-	fsl_isinvalid(invalid);
-	fsl_iserror(error);
-
-	if (invalid) {
-		xil_printf("Warning - channel %d is empty: %d", channel, value);
-	}
+	fsl_isinvalid(invalid);          	// Was there any data?
+	fsl_iserror(error);					// Was there an error?
 
 	if (error) {
-		xil_printf("Error reading data from channel %d: %d", channel, value);
+		xil_printf("Error receiving data on Channel %d: %d\n\r", channel, error);
 	}
 
-//	if (!invalid && !error) {
-//		xil_printf("Data read from channel %d successfully: %d\n\r", channel, value);
-//	}
+	if (!invalid) {
+		data[CMD_LEN] = value;
+		xil_printf("Received data (Channel %d)\n\r", channel);
+		int i = 0;
 
-	return value;
+		// Handle invalid length values
+		if ((data[CMD_LEN] == 0) || (data[CMD_LEN] > MAX_CMD_LEN)) {
+			data[CMD_LEN] = MAX_CMD_LEN;
+			print("Message has invalid length - correcting\n\r");
+		}
+
+		for (i = 0; i < data[CMD_LEN] - 1; i++) {
+			if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
+			else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
+
+			fsl_iserror(error);				// Was there an error?
+			if (error) {
+				xil_printf("Error receiving data on Channel %d: %d\n\r", channel, error);
+			}
+
+			data[i + 1] = value;
+		}
+	}
+
+	return invalid;
 }
 
 //============================================================================//
@@ -755,4 +653,5 @@ void printCommand(bool send, u32 *data, int channel) {
 	}
 	print("\n\r");
 }
+
 
