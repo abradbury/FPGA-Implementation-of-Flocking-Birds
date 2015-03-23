@@ -149,7 +149,6 @@ class BoidCPU(object):
             boid_state = [boid.boid_id, boid.position.tolist(), boid.velocity.tolist()]
             saved_state.append(boid_state)
 
-        # print saved_state
         return saved_state
 
 

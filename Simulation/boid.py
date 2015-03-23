@@ -371,10 +371,8 @@ class Boid(object):
             result = dec.Decimal(str(result))
 
         else:
-            result = math.sqrt(sum([((float_point_a[i] - float_point_b[i]) ** 2) for i in \
+            result = math.sqrt(sum([((point_a[i] - point_b[i]) ** 2) for i in \
                 range(len(point_a))]))
-
-            # result = self.trimf(result)
 
         return result
 
