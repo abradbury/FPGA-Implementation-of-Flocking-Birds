@@ -269,14 +269,14 @@ void testSimulationSetup() {
 		neighbours[6] = newIDTwo;
 		neighbours[7] = newIDTwo;
 
-		data[0] = newIDOne;
-		data[1] = initialBoidCount;
+		data[CMD_SETUP_NEWID_IDX] = newIDOne;
+		data[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
 		for (i = 0; i < EDGE_COUNT; i++) {
-			data[2 + i] = coords[i];
+			data[CMD_SETUP_COORD_IDX + i] = coords[i];
 		}
-		data[2 + EDGE_COUNT] = distinctNeighbourCount;
+		data[CMD_SETUP_NBCNT_IDX] = distinctNeighbourCount;
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-			data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
+			data[CMD_SETUP_BNBRS_IDX + i] = neighbours[i];
 		}
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
 	}

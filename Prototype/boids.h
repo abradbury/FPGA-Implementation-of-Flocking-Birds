@@ -5,7 +5,6 @@
 #define USING_VLAB              0   // 1 if using VLAB, 0 if not
 
 #define BOID_COUNT              20  // The total number of system boids
-#define MAX_BOIDCPUS_PER_FPGA	3	// The number of BoidCPUs per FPGA
 
 // Command definitions ---------------------------------------------------------
 #define CMD_HEADER_LEN          4   // The length of the command header
@@ -43,6 +42,12 @@
 #define CMD_KILL                16  // Controller -> All
 
 #define CMD_COUNT               16
+
+#define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
+#define CMD_SETUP_COORD_IDX 	2	// Coordinates start index
+#define CMD_SETUP_NBCNT_IDX 	6	// Distinct BoidCPU neighbour index
+#define CMD_SETUP_NEWID_IDX 	0	// New BoidCPU ID index
+#define CMD_SETUP_BDCNT_IDX 	1	// Initial boid count index
 
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
