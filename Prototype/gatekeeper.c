@@ -3,13 +3,14 @@
  * and forwards internal data to external entities as appropriate.
  */
 
-//TODO: Have the Gatekeeper intercept the setup commands so that it knows the
-// IDs of the BoidCPUs that it contains and the neighbours of those BoidCPUs
-
+#include "stdlib.h"			// For rand()
 #include "xparameters.h"	// Xilinx definitions
 #include "xemaclite.h"		// Ethernet
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
+
+#define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
+#define ALL_CHANNELS			99	// When a message is sent to all channels
 
 // Setup Ethernet MAC addresses and transmit and receive buffers
 XEmacLite ether;
@@ -19,9 +20,13 @@ XEmacLite ether;
 u8 tmit_buffer[XEL_MAX_FRAME_SIZE];
 u8 recv_buffer[XEL_MAX_FRAME_SIZE];
 
-u8 residentBoidCPUCount = 0;
-u8 residentBoidCPUChannels[MAX_BOIDCPUS_PER_FPGA];
-u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * MAX_BOIDCPUS_PER_FPGA];
+u8 initialisedBoidCPUCounter = 0;
+u8 residentNbrCounter = 0;
+u8 residentBoidCPUChannels[RESIDENT_BOIDCPU_COUNT];
+u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
+
+u32 tempGatekeeperID = 0;
+bool boidCPUIDsFinalised = false;
 
 // Protocols
 u8 channelLookup(u32 to);
@@ -34,7 +39,8 @@ u32 getFSLData(u32 *data, u32 channel);
 void processExternalMessage();
 void processInternalMessage(u32 *data, u8 channel);
 void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
-void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
+void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
+		u8 channel);
 
 // TODO: Rename to main() when deployed
 int mainThree() {
@@ -43,6 +49,9 @@ int mainThree() {
 	XEmacLite_Config *etherconfig = XEmacLite_LookupConfig(
 			XPAR_EMACLITE_0_DEVICE_ID);
 	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
+
+	// Generate random, temporary Gatekeeper ID
+	//	tempGatekeeperID = rand();
 
 	// Main execution loop
 	do {
@@ -110,7 +119,8 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
  * Sends a message internally, over the FSL/AXI bus/stream, to BoidCPUs that
  * reside on the same FPGA that the MicroBlaze does.
  */
-void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
+void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
+		u8 channel) {
 	// First, create the message
 	u32 command[MAX_CMD_LEN];
 	int i = 0;
@@ -125,9 +135,6 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 			command[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
-
-	// Then, check which channel the recipient resides on
-	int channel = channelLookup(to);
 
 	// Finally, send the message
 	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
@@ -145,21 +152,83 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 /**
  * On receiving an external message, determine if it is addressed to any
  * internal BoidCPUs. If it is, then forward it internally, if not, ignore it.
+ *
+ * If the BoidCPUs have not been finalised yet and the Gatekeeper receives a
+ * ping command from the controller, it intercepts the command and responds
+ * with the number of BoidCPUs that it serves and a random Gatekeeper ID.
+ *
+ * The Gatekeeper will then receive a setup message, addressed to its temporary
+ * ID, for each of the BoidCPUs that it serves. The Gatekeeper will then
+ * forward the setup message (as a broadcast) to a resident BoidCPU. It will
+ * then update its list of resident BoidCPU IDs and their resident channel.
  */
 void processExternalMessage() {
-	// Check if the message is applicable to contained BoidCPUs
-	if(arrivalCheckPassed(recv_buffer[CMD_FROM])) {
+	if (!boidCPUIDsFinalised) {
+		if (recv_buffer[CMD_TYPE] == CMD_PING) {
+			// Reply to ping with random Gatekeeper ID and resident count
+			u32 data[1] = { RESIDENT_BOIDCPU_COUNT };
+
+			sendExternalMessage(1, CONTROLLER_ID, tempGatekeeperID,
+					CMD_PING_REPLY, data);
+
+		} else if ((recv_buffer[CMD_TO] = tempGatekeeperID)
+				&& (recv_buffer[CMD_TYPE] == CMD_SIM_SETUP)) {
+			// Create a copy of the data supplied with the message
+			int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
+			u32 dataToForward[dataLength];
+			int i = 0;
+			for (i = 0; i < dataLength; i++) {
+				dataToForward[i] = recv_buffer[CMD_HEADER_LEN + i];
+			}
+
+			// Forward the setup message one of the resident BoidCPUs
+			sendInternalMessage(recv_buffer[CMD_LEN], CMD_BROADCAST,
+					recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward,
+					initialisedBoidCPUCounter);
+
+			// Update the Gatekeeper's internal routing table
+			residentBoidCPUChannels[initialisedBoidCPUCounter] =
+					recv_buffer[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
+
+			// Update the Gatekeeper's list of neighbours to residents
+			for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+				u8 nbr = recv_buffer[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
+				bool neighbourAlreadyListed = false;
+				int j = 0;
+
+				for (j = 0; j < residentNbrCounter; j++) {
+					if (nbr == residentBoidCPUNeighbours[j]) {
+						neighbourAlreadyListed = true;
+						break;
+					}
+				}
+
+				if (!neighbourAlreadyListed) {
+					residentBoidCPUNeighbours[residentNbrCounter] = nbr;
+					residentNbrCounter++;
+				}
+			}
+
+			initialisedBoidCPUCounter++;
+			if (initialisedBoidCPUCounter == RESIDENT_BOIDCPU_COUNT) {
+				boidCPUIDsFinalised = true;
+			}
+		}
+	} else if (arrivalCheckPassed(recv_buffer[CMD_FROM])) {
 		// Collate the data to forward
 		int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
 		u32 dataToForward[dataLength];
 
 		int i = 0;
-		for(i = 0; i < dataLength; i++) {
+		for (i = 0; i < dataLength; i++) {
 			dataToForward[i] = recv_buffer[CMD_HEADER_LEN + i];
 		}
 
+		u8 channel = channelLookup(recv_buffer[CMD_TO]);
+
 		sendInternalMessage(recv_buffer[CMD_LEN], recv_buffer[CMD_TO],
-			recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward);
+				recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward,
+				channel);
 	}
 }
 
@@ -173,7 +242,7 @@ void processInternalMessage(u32 *data, u8 channel) {
 	u32 dataToForward[dataLength];
 
 	int i = 0;
-	for(i = 0; i < dataLength; i++) {
+	for (i = 0; i < dataLength; i++) {
 		dataToForward[i] = data[CMD_HEADER_LEN + i];
 	}
 
@@ -184,13 +253,14 @@ void processInternalMessage(u32 *data, u8 channel) {
 	// 	neighbours are within the current BoidCPU.
 	if (data[CMD_TO] == CMD_MULTICAST) {
 		sendInternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-			data[CMD_TYPE], dataToForward);
+				data[CMD_TYPE], dataToForward, ALL_CHANNELS);
 
 		sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-			data[CMD_TYPE], dataToForward);
-	} else if(departureCheckPassed(data[CMD_TO])) {
+				data[CMD_TYPE], dataToForward);
+
+	} else if (departureCheckPassed(data[CMD_TO])) {
 		sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-			data[CMD_TYPE], dataToForward);
+				data[CMD_TYPE], dataToForward);
 	}
 }
 
@@ -207,7 +277,7 @@ bool arrivalCheckPassed(u32 from) {
 		return true;
 	} else if (from >= FIRST_BOIDCPU_ID) {
 		int i = 0;
-		for (i = 0; i < residentBoidCPUCount; i++) {
+		for (i = 0; i < residentNbrCounter; i++) {
 			if (from == residentBoidCPUNeighbours[i]) {
 				return true;
 			}
@@ -233,10 +303,19 @@ bool departureCheckPassed(u32 to) {
 	}
 }
 
+/**
+ * Determines the channel that at message should be sent down to reach the
+ * recipient BoidCPU. If a suitable channel cannot be found, it is sent to all.
+ */
 u8 channelLookup(u32 to) {
-	// TODO: Finish channel lookup implementation
+	int i = 0;
+	for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
+		if (residentBoidCPUChannels[i] == to) {
+			return i;
+		}
+	}
 
-	return 0;
+	return ALL_CHANNELS;
 }
 
 /**
@@ -246,14 +325,17 @@ u8 channelLookup(u32 to) {
 u32 getFSLData(u32 *data, u32 channel) {
 	int invalid, error, value = 0;
 
-	if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
-	else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
+	if (channel == 1)
+		getfslx(value, 1, FSL_NONBLOCKING);
+	else if (channel == 0)
+		getfslx(value, 0, FSL_NONBLOCKING);
 
 	fsl_isinvalid(invalid);          	// Was there any data?
 	fsl_iserror(error);					// Was there an error?
 
 	if (error) {
-		xil_printf("Error receiving data on Channel %d: %d\n\r", channel, error);
+		xil_printf("Error receiving data on Channel %d: %d\n\r", channel,
+				error);
 	}
 
 	if (!invalid) {
@@ -268,12 +350,15 @@ u32 getFSLData(u32 *data, u32 channel) {
 		}
 
 		for (i = 0; i < data[CMD_LEN] - 1; i++) {
-			if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
-			else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
+			if (channel == 1)
+				getfslx(value, 1, FSL_NONBLOCKING);
+			else if (channel == 0)
+				getfslx(value, 0, FSL_NONBLOCKING);
 
 			fsl_iserror(error);				// Was there an error?
 			if (error) {
-				xil_printf("Error receiving data on Channel %d: %d\n\r", channel, error);
+				xil_printf("Error receiving data on Channel %d: %d\n\r",
+						channel, error);
 			}
 
 			data[i + 1] = value;
@@ -291,8 +376,10 @@ void putFSLData(u32 value, u32 channel) {
 	int error = 0, invalid = 0;
 
 	// TODO: Ensure that writes use FSL_DEFAULT (blocking write)
-	if (channel == 1) putfslx(value, 1, FSL_DEFAULT);
-	else if (channel == 0) putfslx(value, 0, FSL_DEFAULT);
+	if (channel == 1)
+		putfslx(value, 1, FSL_DEFAULT);
+	else if (channel == 0)
+		putfslx(value, 0, FSL_DEFAULT);
 
 	fsl_isinvalid(invalid);
 	fsl_iserror(error);
