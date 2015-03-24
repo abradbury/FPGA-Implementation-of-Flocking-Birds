@@ -3,8 +3,10 @@
 #include <iostream>     // cout
 #include <math.h>       // sqrt, floor
 
-#define USING_TB		true
-#define MAX_BOIDCPUS	32		// TODO: Decide on a suitable value
+#define USING_TB				true	// Defined when using VHLS test bench
+#define NBR_CALC_OPTIMISE_TIME 	true	// Defined to optimise time, else space
+
+#define MAX_BOIDCPUS			32		// TODO: Decide on a suitable value
 
 // Function headers ============================================================
 void processPingReply();
@@ -43,12 +45,18 @@ struct BoidCPU {
 	uint8 boidCount;
 	uint8 distinctNeighbourCount;
 	uint8 boidCPUCoords[EDGE_COUNT];
-	uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
+	uint8 neighbours[MAX_BOIDCPU_NEIGHBOURS];
 	uint8 gatekeeperID;
+	uint8 x;
+	uint8 y;
 };
 
 uint8 boidCPUCount = 0;
 BoidCPU boidCPUs[MAX_BOIDCPUS];
+
+#ifdef NBR_CALC_OPTIMISE_TIME
+uint8 gridAssignment[MAX_BOIDCPUS][MAX_BOIDCPUS];
+#endif
 
 uint32 boidCount = 100;
 
@@ -190,7 +198,7 @@ void processUserData() {
  */
 void processPingReply() {
 	uint8 gatekeeprBoidCPUCount = inputData[CMD_HEADER_LEN + 0];
-	for (int i = 0; i < gatekeeprBoidCPUCount; i++) {
+	pingResponseLoop: for (int i = 0; i < gatekeeprBoidCPUCount; i++) {
 		boidCPUs[boidCPUCount] = BoidCPU();
 
 		boidCPUs[boidCPUCount].gatekeeperID = inputData[CMD_FROM];
@@ -220,7 +228,7 @@ void setupSimulation() {
 	uint16 boidsPerBoidCPU = boidCount / boidCPUCount;
 	uint16 remainingBoids = (boidCount - (boidsPerBoidCPU * boidCPUCount));
 
-	for (int i = 0; i < boidCPUCount; i++) {
+	setupBoidCountLoop: for (int i = 0; i < boidCPUCount; i++) {
 		if (i == (boidCPUCount - 1)) {
 			boidCPUs[i].boidCount = boidsPerBoidCPU + remainingBoids;
 		} else {
@@ -228,7 +236,7 @@ void setupSimulation() {
 		}
 	}
 
-	// Global ---------------
+	// Globals? -------------
 	uint16 simulationHeight = 0;
 	uint16 simulationWidth  = 0;
 	// ----------------------
@@ -252,10 +260,10 @@ void setupSimulation() {
 	// Then calculate each BoidCPU's coordinates
 	uint16 count = 0;
 	uint16 height = 0;
-	for (int h = 0; h < simulationGridHeight; h++) {
+	coordHeightLoop: for (int h = 0; h < simulationGridHeight; h++) {
 		uint16 width = 0;
 
-		for (int w = 0; w < simulationGridWidth; w++) {
+		coordWidthLoop: for (int w = 0; w < simulationGridWidth; w++) {
 			boidCPUs[count].boidCPUCoords[0] = width;
 			boidCPUs[count].boidCPUCoords[1] = height;
 
@@ -277,6 +285,13 @@ void setupSimulation() {
 						boidCPUCoords[1] + boidCPUPixelHeight;
 			}
 
+			// Store the grid position of the BoidCPU
+			boidCPUs[count].x = w;
+			boidCPUs[count].y = h;
+#ifdef NBR_CALC_OPTIMISE_TIME
+			gridAssignment[h][w] = boidCPUs[count].boidCPUID;
+#endif
+
 			count++;
 			width += boidCPUPixelWidth;
 		}
@@ -284,21 +299,97 @@ void setupSimulation() {
 		height += boidCPUPixelHeight;
 	}
 
-	// Calculate neighbours - TODO
-//	for (int i = 0; i < boidCPUCount; i++) {
-//		for (int j = 0; j < MAX_BOIDCPU_NEIGHBOURS; j++) {
-//
-//		}
-//	}
+	// Calculate neighbours
+	neighbourCalcOuterLoop: for (int i = 0; i < boidCPUCount; i++) {
+		uint8 x = boidCPUs[i].x;
+		uint8 y = boidCPUs[i].y;
 
-	//    neighbours[0] = 4;
-	//    neighbours[1] = 3;
-	//    neighbours[2] = 4;
-	//    neighbours[3] = 4;
-	//    neighbours[4] = 4;
-	//    neighbours[5] = 3;
-	//    neighbours[6] = 4;
-	//    neighbours[7] = 4;
+		uint8 xMinusOne = (x - 1) % simulationGridWidth;
+		uint8 xPlusOne  = (x + 1) % simulationGridWidth;
+		uint8 yMinusOne = (y - 1) % simulationGridHeight;
+		uint8 yPlusOne  = (y + 1) % simulationGridHeight;
+
+#ifdef NBR_CALC_OPTIMISE_TIME
+		boidCPUs[i].neighbours[0] =
+				boidCPUs[gridAssignment[yMinusOne][xMinusOne]].boidCPUID;
+
+		boidCPUs[i].neighbours[1] =
+				boidCPUs[gridAssignment[yMinusOne][x]].boidCPUID;
+
+		boidCPUs[i].neighbours[2] =
+				boidCPUs[gridAssignment[yMinusOne][xPlusOne]].boidCPUID;
+
+		boidCPUs[i].neighbours[3] =
+				boidCPUs[gridAssignment[y][xPlusOne]].boidCPUID;
+
+		boidCPUs[i].neighbours[4] =
+				boidCPUs[gridAssignment[yPlusOne][xPlusOne]].boidCPUID;
+
+		boidCPUs[i].neighbours[5] =
+				boidCPUs[gridAssignment[yPlusOne][x]].boidCPUID;
+
+		boidCPUs[i].neighbours[6] =
+				boidCPUs[gridAssignment[yPlusOne][xMinusOne]].boidCPUID;
+
+		boidCPUs[i].neighbours[7] =
+				boidCPUs[gridAssignment[y][xMinusOne]].boidCPUID;
+#else
+		neighbourCalcInnerLoop: for (int j = 0; j < boidCPUCount; j++) {
+			if ((boidCPUs[j].x == xMinusOne) && (boidCPUs[j].y == yMinusOne)) {
+				boidCPUs[i].neighbours[0] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == x) && (boidCPUs[j].y == yMinusOne)) {
+				boidCPUs[i].neighbours[1] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == xPlusOne) && (boidCPUs[j].y == yMinusOne)) {
+				boidCPUs[i].neighbours[2] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == xPlusOne) && (boidCPUs[j].y == y)) {
+				boidCPUs[i].neighbours[3] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == xPlusOne) && (boidCPUs[j].y == yPlusOne)) {
+				boidCPUs[i].neighbours[4] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == x) && (boidCPUs[j].y == yPlusOne)) {
+				boidCPUs[i].neighbours[5] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == xMinusOne) && (boidCPUs[j].y == yPlusOne)) {
+				boidCPUs[i].neighbours[6] = boidCPUs[j].boidCPUID;
+				break;
+
+			} else if ((boidCPUs[j].x == xMinusOne) && (boidCPUs[j].y == y)) {
+				boidCPUs[i].neighbours[7] = boidCPUs[j].boidCPUID;
+				break;
+			}
+		}
+#endif
+	}
+
+	// Calculate the number of distinct neighbours for a BoidCPU
+	// TODO: This is a horrible way of doing it, find an alternative, if time
+	distNbrOuter: for (int i = 0; i < boidCPUCount; i++) {
+		uint8 distinctNeighbourCount = 0;
+		distNbrMiddle: for (int j = 0; j < MAX_NEIGHBOURING_BOIDS; j++) {
+			distNbrInner:for (int k = j + 1; k < MAX_NEIGHBOURING_BOIDS; k++) {
+				if (boidCPUs[i].neighbours[j] == boidCPUs[i].neighbours[k]) {
+					distinctNeighbourCount++;
+				}
+			}
+		}
+		boidCPUs[i].distinctNeighbourCount = distinctNeighbourCount;
+	}
+
+	// TODO: Perhaps split this method into smaller ones?
+	//	calculateBoidCPUBoidCounts();
+	//	calculateBoidCPUCoordinates();
+	//	calculateBoidCPUNeighbours();
+	//	calculateBoidCPUDistinctNbrs();
 }
 
 void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
@@ -340,7 +431,7 @@ void issueSetupInformation() {
 		data[CMD_SETUP_NBCNT_IDX] = boidCPUs[i].distinctNeighbourCount;
 
 		for (int j = 0; j < MAX_BOIDCPU_NEIGHBOURS; j++) {
-			data[CMD_SETUP_BNBRS_IDX + j] = boidCPUs[i].neighbouringBoidCPUs[j];
+			data[CMD_SETUP_BNBRS_IDX + j] = boidCPUs[i].neighbours[j];
 		}
 
 		dataLength = 15;
