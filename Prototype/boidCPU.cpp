@@ -7,8 +7,6 @@
 
 // Function headers ============================================================
 // Key function headers --------------------------------------------------------
-static void initialisation(void);
-static void identify(void);
 static void simulationSetup(void);
 static void calcNextBoidPositions(void);
 static void loadBalance(void);
@@ -48,7 +46,6 @@ void printStateOfBoidCPUBoids();
 // TODO: Determine which variables should really be global
 // BoidCPU variables -----------------------------------------------------------
 int8 boidCPUID = FIRST_BOIDCPU_ID;
-int8 fpgaID;
 int12 boidCPUCoords[4];
 
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
@@ -121,9 +118,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable = output core = AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port = return
 
-    // Perform initialisation
-//    initialisation();
-
     // Continually check for input and deal with it. Note that reading an empty
     // input stream will generate warnings in HLS, but should be blocking in the
     // actual implementation.
@@ -150,12 +144,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         	CMD_BROADCAST) || fromNeighbour()) {
 
             switch (inputData[CMD_TYPE]) {
-                case MODE_INIT:
-                    initialisation();
-                    break;
-                case CMD_PING:
-                    identify();
-                    break;
                 case CMD_SIM_SETUP:
                     simulationSetup();
                     break;
@@ -213,34 +201,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 //==============================================================================
 // State functions =============================================================
 //==============================================================================
-
-/**
- * TODO: Setup necessary components - maybe?
- * Generate a random initial ID
- * TODO: Identify the serial number of the host FPGA
- */
-void initialisation() {
-    std::cout << "-Initialising BoidCPU..." << std::endl;
-
-    lfsr16 = (uint16)inputData[CMD_HEADER_LEN + 0];
-    boidCPUID = getRandom(1, 100);
-    fpgaID = 123;
-
-    std::cout << "-Waiting for ping from Boid Controller..." << std::endl;
-}
-
-/**
- * Waits for a ping from the controller
- * Transmits its temporary ID and FPGA serial number to the controller
- */
-void identify() {
-    outputBody[0] = boidCPUID;
-    outputBody[1] = fpgaID;
-    generateOutput(2, CONTROLLER_ID, CMD_PING_REPLY, outputBody);
-    // 6, 1, [RANDOM ID], 3 || [RANDOM ID], 123
-
-    std::cout << "-Responded to ping" << std::endl;
-}
 
 /**
  * Sets ID to that provided by the controller
