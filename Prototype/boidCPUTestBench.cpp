@@ -17,19 +17,16 @@ uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS];
 bool drawBoids = false;
 
 // Function headers
-void testInitMode();
-void testPing();
 void testSimulationSetup();
 void testNeighbourSearch();
-void testNeighbourResponse();
 void testCalcNextBoidPos();
 void testLoadBalance();
 void testMoveBoids();
 void testDrawBoids();
 
+void simulateNeighbourResponse();
 void simulateBoidTransfer();
 
-void processPingResponse();
 void processNeighbourReply();
 void processDrawInfo();
 
@@ -42,36 +39,18 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
 int main() {
     hls::stream<uint32> to_hw, from_hw;
 
-//    // Test BoidCPU input ------------------------------------------------------
-//    // First send the initialisation commands
-//    testInitMode();
-//    testPing();
-//    testSimulationSetup();
-//
-//    // Then draw the initial positions of the boids
-//    testDrawBoids();
-////	simulateBoidTransfer();
-////	testDrawBoids();
-////	testMoveBoids();
-////	testDrawBoids();
-
-    // Test BoidCPU #4 Failure -------------------------------------------------
-    testInitMode();
-    testPing();
+    // Test BoidCPU input ------------------------------------------------------
+    // First send the initialisation commands
     testSimulationSetup();
-    testNeighbourResponse();
-    testNeighbourSearch();
-    testDrawBoids();
-    // -------------------------------------------------------------------------
 
-////    // Then repeat these commands every time step
-//    testNeighbourSearch();
-//    testNeighbourResponse();
-//    testCalcNextBoidPos();
-//    testLoadBalance();
-//    testMoveBoids();
-////    simulateBoidTransfer();
-//    testDrawBoids();
+    // Then repeat these commands every time step
+    testNeighbourSearch();
+    simulateNeighbourResponse();
+    testCalcNextBoidPos();
+    testLoadBalance();
+    testMoveBoids();
+    simulateBoidTransfer();
+    testDrawBoids();
 
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -101,9 +80,6 @@ int main() {
 
         // Process data --------------------------------------------------------
         switch (tbInputData[tbInputCount][CMD_TYPE]) {
-            case CMD_PING_REPLY:
-                processPingResponse();
-                break;
             case CMD_NBR_REPLY:
                 processNeighbourReply();
                 break;
@@ -125,23 +101,6 @@ int main() {
     return 0;
 }
 
-void testInitMode() {
-	// 4, 0, 1, 1 || [seed]
-	uint32 randomSeed = 0x1871abc8;
-	to = CMD_BROADCAST;
-	dataLength = 1;
-	data[0] = (uint16)(randomSeed/2);
-	createCommand(dataLength, to, from, MODE_INIT, data);
-}
-
-void testPing() {
-    // Test ping response ----------------------------------------------------//
-    // 4, 0, 1, 2 ||
-    to = CMD_BROADCAST;
-    dataLength = 0;
-    createCommand(dataLength, to, from, CMD_PING, data);
-}
-
 // TODO: Need to send to broadcast during actual testing as random ID unknown
 void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
@@ -152,27 +111,8 @@ void testSimulationSetup() {
     uint32 initialBoidCount = 10;
     uint32 distinctNeighbourCount = 1;
 
-//    // BoidCPU #3
-//    newID = 3;
-//    to = 35;
-//
-//    coords[0] = 0;
-//    coords[1] = 0;
-//    coords[2] = 40;
-//    coords[3] = 40;
-//
-//    neighbours[0] = 4;
-//    neighbours[1] = 3;
-//    neighbours[2] = 4;
-//    neighbours[3] = 4;
-//    neighbours[4] = 4;
-//    neighbours[5] = 3;
-//    neighbours[6] = 4;
-//    neighbours[7] = 4;
-
     // BoidCPU #4
     newID = 4;
-    to = 10;
 
     coords[0] = 40;
 	coords[1] = 0;
@@ -201,7 +141,7 @@ void testSimulationSetup() {
         data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
     }
 
-    createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
+    createCommand(dataLength, CMD_BROADCAST, from, CMD_SIM_SETUP, data);
 }
 
 void testNeighbourSearch() {
@@ -215,7 +155,7 @@ void testNeighbourSearch() {
  * Simulates responses from neighbouring BoidCPUs to the BoidCPU under test
  * when the system is in the neighbour search mode.
  */
-void testNeighbourResponse() {
+void simulateNeighbourResponse() {
 	// For each neighbouring BoidCPU, create a list of boids and send this to
 	// the BoidCPU under test
 	// FIXME: This seems to be called before all other testbench stuff
@@ -358,10 +298,6 @@ void testDrawBoids() {
     dataLength = 0;
     to = CMD_BROADCAST;
     createCommand(dataLength, to, from, MODE_DRAW, data);
-}
-
-void processPingResponse() {
-    // TODO
 }
 
 /**
@@ -604,6 +540,9 @@ void tbPrintCommand(bool send, uint32 *data) {
         case CMD_DRAW_INFO:
             std::cout << "boid info heading to BoidGPU";
             break;
+        case CMD_ACK:
+        	std::cout << "ACK signal";
+        	break;
         case CMD_KILL:
             std::cout << "kill simulation";
             break;

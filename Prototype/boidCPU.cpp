@@ -133,6 +133,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #ifndef USING_TB
          inputData[CMD_LEN] = input.read();
 #endif
+
         // When there is input, read in the command
         inputLoop: for (int i = 1; i < inputData[CMD_LEN]; i++) {
             inputData[i] = input.read();
@@ -596,6 +597,8 @@ void acceptBoid() {
 }
 
 void commitAcceptedBoids() {
+	std::cout << "-Committing accepted boids..." << std::endl;
+
 	for (int i = 0; i < queuedBoidsCounter; i++) {
 		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
 		uint16 boidID = queuedBoids[i][0];
@@ -720,7 +723,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
 	if (outputCount > MAX_OUTPUT_CMDS - 1) {
 		std::cout << "Cannot send message, output buffer is full (" <<
-			outputCount << ")" << std::endl;
+			outputCount << "/" << MAX_OUTPUT_CMDS << ")" << std::endl;
 	} else {
 		outputData[outputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
 		outputData[outputCount][CMD_TO]   = to;
@@ -877,6 +880,9 @@ void printCommand(bool send, uint32 *data) {
         case CMD_DRAW_INFO:
             std::cout << "boid info heading to BoidGPU";
             break;
+        case CMD_ACK:
+			std::cout << "ACK signal";
+			break;
         case CMD_KILL:
             std::cout << "kill simulation";
             break;

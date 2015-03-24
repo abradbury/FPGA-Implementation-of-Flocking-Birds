@@ -14,15 +14,11 @@ u32 from = CONTROLLER_ID;
 u32 dataLength = 0;
 u32 coords[EDGE_COUNT];
 
-//u32 inputData[MAX_CMD_LEN];
-
 u16 boidCmdCount = 0;
+u16 boidCPUCount = 2;
 
-u16 boidCPUs[MAX_SYSTEM_BOIDCPUS];
-u16 boidCPUCount = 0;
-
-const char *commandDescriptions[CMD_COUNT] = { "Initialisation mode",
-		"Send ping to BoidCPUs", "Ping response from a BoidCPU",
+const char *commandDescriptions[CMD_COUNT] = { "",
+		"", "",
 		"User-inputed information for the BoidGPU",
 		"Simulation setup information for a BoidCPU",
 		"Calculate neighbours mode", "",
@@ -33,9 +29,6 @@ const char *commandDescriptions[CMD_COUNT] = { "Initialisation mode",
 void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel);
 void chooseCommand(u8 commandID);
 
-void testInitMode();
-void testPing();
-void testPingReply();
 void testUserInfo();
 void testSimulationSetup();
 void testNeighbourSearch();
@@ -49,7 +42,6 @@ void testDrawInfo();
 void testKillSwitch();
 
 void processResponse(u32 *data, u8 channel);
-void processPingReply(u32 *data);
 void processNeighbourReply(u32 *data);
 
 void printCommand(bool send, u32 *data, int channel);
@@ -58,8 +50,6 @@ void putData(u32 value, u32 channel);
 u32 getData(u32 *data, u32 channel);
 
 int main() {
-	// TODO: setup Ethernet
-
 	do {
 		print("--------------------------------------------------\n\r");
 		print("-------- FPGA Flocking Bird Test Harness ---------\n\r");
@@ -147,15 +137,6 @@ void chooseCommand(u8 commandID) {
 	from = CONTROLLER_ID;
 
 	switch (commandID) {
-	case MODE_INIT:
-		testInitMode();
-		break;
-	case CMD_PING:
-		testPing();
-		break;
-	case CMD_PING_REPLY:
-		testPingReply();
-		break;
 	case CMD_USER_INFO:
 		testUserInfo();
 		break;
@@ -195,39 +176,6 @@ void chooseCommand(u8 commandID) {
 	}
 }
 
-void testInitMode() {
-	// 4, 0, 1, 1 ||
-	u32 random_seed = 0x1871abc8;
-	to = CMD_BROADCAST;
-	dataLength = 1;
-
-	int i;
-	for(i = 0; i < 2; i++) {
-		data[0] = (u16)(random_seed/(i + 1));
-		createCommand(dataLength, to, from, MODE_INIT, data, i);
-	}
-}
-
-void testPing() {
-	// Test ping response ----------------------------------------------------//
-	// 4, 0, 1, 2 ||
-	to = CMD_BROADCAST;
-	dataLength = 0;
-	createCommand(dataLength, to, from, CMD_PING, data, -1);
-}
-
-void testPingReply() {
-	// 6, 1, 42, 3 || 21, 123
-	to = CONTROLLER_ID;
-	from = 42;
-
-	data[0] = 21;
-	data[1] = 123;
-	dataLength = 2;
-
-	createCommand(dataLength, to, from, CMD_PING_REPLY, data, -1);
-}
-
 void testUserInfo() {
 	// 7, 2, 1, 4 || 21 42 84
 	to = BOIDGPU_ID;
@@ -255,7 +203,7 @@ void testSimulationSetup() {
 
 	// BoidCPU1
 	if (boidCPUCount == 1) {
-		to = boidCPUs[0];
+		to = CMD_BROADCAST;
 		coords[0] = 0;
 		coords[1] = 0;
 		coords[2] = 40;
@@ -283,7 +231,7 @@ void testSimulationSetup() {
 
 	// BoidCPU2
 	if (boidCPUCount == 2) {
-		to = boidCPUs[0];
+		to = CMD_BROADCAST;
 		coords[0] = 0;
 		coords[1] = 0;
 		coords[2] = 40;
@@ -310,7 +258,7 @@ void testSimulationSetup() {
 
 		//--
 
-		to = boidCPUs[1];
+		to = CMD_BROADCAST;
 		coords[0] = 40;
 		coords[1] = 0;
 		coords[2] = 80;
@@ -539,9 +487,6 @@ void processResponse(u32 *data, u8 channel) {
 		}
 	} else {
 		switch (data[CMD_TYPE]) {
-		case CMD_PING_REPLY:
-			processPingReply(data);
-			break;
 		case CMD_NBR_REPLY:
 			processNeighbourReply(data);
 			break;
@@ -549,15 +494,6 @@ void processResponse(u32 *data, u8 channel) {
 			break;
 		}
 	}
-}
-
-/**
- * Get the ID of the responder and add it to a list of BoidCPUs
- * TODO: Store the FPGA ID as well
- */
-void processPingReply(u32 *data) {
-	boidCPUs[boidCPUCount] = data[CMD_FROM];
-	boidCPUCount++;
 }
 
 void processNeighbourReply(u32 *data) {
@@ -633,6 +569,9 @@ void printCommand(bool send, u32 *data, int channel) {
 		break;
 	case CMD_DRAW_INFO:
 		print("boid info heading to BoidGPU      ");
+		break;
+	case CMD_ACK:
+		print("ACK signal                        ");
 		break;
 	case CMD_KILL:
 		print("kill simulation                   ");
