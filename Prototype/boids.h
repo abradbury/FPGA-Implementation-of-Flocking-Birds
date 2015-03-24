@@ -50,6 +50,7 @@
 #define CMD_SETUP_NBCNT_IDX 	6	// Distinct BoidCPU neighbour index
 #define CMD_SETUP_NEWID_IDX 	0	// New BoidCPU ID index
 #define CMD_SETUP_BDCNT_IDX 	1	// Initial boid count index
+#define CMD_SETUP_SIMWH_IDX		15	// The simulation width/height start index
 
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has

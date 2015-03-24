@@ -67,12 +67,12 @@ int main() {
 			memset(keyPresses, 0, sizeof(keyPresses));
 
 			// Print options
-			print("Choose a command from the following list: \n\r");
 			int i = 0;
 			for (i = 0; i < CMD_COUNT; i++) {
 				xil_printf(" %3d: %s\n\r", i + 1, commandDescriptions[i]);
 			}
 			print("--------------------------------------------------\n\r");
+			print("Enter a command from the above list: ");
 
 			// Take keyboard input until the ENTER key is pressed
 			do {
@@ -109,14 +109,9 @@ int main() {
 
 			} while (keyPress != ENTER);     // Repeat while enter isn't pressed
 
-			print("Enter key press registered\n\r");
-
 			cID = (u8) atoi(keyPresses); // Convert the key pressed to int, 0 if not int
 
-			xil_printf("Received command %d\n\r", cID);
-
 			if ((cID >= 1) && (cID <= 16)) {
-				print("Command ID is valid\n\r");
 				cIDValid = true;
 				chooseCommand(cID);				// Send the command
 			} else {
@@ -193,13 +188,13 @@ void testSimulationSetup() {
 	u32 initialBoidCount = 10;
 	u32 neighbours[MAX_BOIDCPU_NEIGHBOURS];
 	int i = 0;
-	dataLength = 15;
+	dataLength = 17;
 
 	u32 distinctNeighbourCount = 1;
 	u32 newIDOne = 0 + FIRST_BOIDCPU_ID;
 	u32 newIDTwo = 1 + FIRST_BOIDCPU_ID;
 
-	xil_printf("%d BoidCPUs discovered\n\r", boidCPUCount);
+	xil_printf("Gatekeeper ? is responsible for %d BoidCPUs\n\r", boidCPUCount);
 
 	// BoidCPU1
 	if (boidCPUCount == 1) {
@@ -226,6 +221,8 @@ void testSimulationSetup() {
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			data[CMD_SETUP_BNBRS_IDX + i] = neighbours[i];
 		}
+		data[CMD_SETUP_SIMWH_IDX + 0] = 80;
+		data[CMD_SETUP_SIMWH_IDX + 1] = 40;
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
 	}
 
@@ -254,6 +251,8 @@ void testSimulationSetup() {
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
 		}
+		data[CMD_SETUP_SIMWH_IDX + 0] = 80;
+		data[CMD_SETUP_SIMWH_IDX + 1] = 40;
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
 
 		//--
@@ -281,6 +280,8 @@ void testSimulationSetup() {
 		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
 		}
+		data[CMD_SETUP_SIMWH_IDX + 0] = 80;
+		data[CMD_SETUP_SIMWH_IDX + 1] = 40;
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 1);
 	}
 }

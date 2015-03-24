@@ -8,7 +8,11 @@
 
 #define MAX_BOIDCPUS			32		// TODO: Decide on a suitable value
 
+#define SIMULATION_WIDTH		80		// The pixel width of the simulation
+#define SIMULATION_HEIGHT		40		// The pixel height of the simulation
+
 // Function headers ============================================================
+void processUserData();
 void processPingReply();
 void processAck();
 
@@ -96,43 +100,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		}
 		printCommand(false, inputData);
 		// ---------------------------------------------------------------------
-
-		/**
-		 * Power on system
-		 *
-		 * Controller waits for user information (from the MicroBlaze)
-		 * Stores this
-		 *
-		 * Pings boidCPUs
-		 * Processes ping replies as they arrive
-		 * Waits for a certain time - TODO: How does it know how long to wait?
-		 *
-		 * Calculates simulation setup information
-		 * Issues setup command to BoidGPU
-		 * Issues setup commands to each BoidCPU
-		 * Waits for a certain time - TODO: How does it know how long to wait?
-		 * 		Waits for all ACKs?
-		 *
-		 * Begins main simulation loop
-		 * - Issues calculate neighbours mode
-		 * - Waits for a certain time - TODO: How does it know how long to wait?
-		 *
-		 * - Issues position calculation mode
-		 * - Waits for a certain time - TODO: How does it know how long to wait?
-		 *
-		 * - Issues load balancing command
-		 * - Process load balancing replies
-		 * - Performs load balancing
-		 * - Waits for a certain time - TODO: How does it know how long to wait?
-		 *
-		 * - Issues transfer mode
-		 * - Waits for a certain time - TODO: How does it know how long to wait?
-		 *
-		 * - Issues draw command - TODO: Is this needed?
-		 * - Waits for a certain time - TODO: How does it know how long to wait?
-		 *
-		 * - Repeats
-		 */
 
 		// STATE CHANGE --------------------------------------------------------
 		if (inputData[CMD_TO] == CONTROLLER_ID) {
@@ -476,7 +443,10 @@ void issueSetupInformation() {
 			data[CMD_SETUP_BNBRS_IDX + j] = boidCPUs[i].neighbours[j];
 		}
 
-		dataLength = 15;
+		data[CMD_SETUP_SIMWH_IDX + 0] = SIMULATION_WIDTH;
+		data[CMD_SETUP_SIMWH_IDX + 1] = SIMULATION_HEIGHT;
+
+		dataLength = 17;
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 	}
 }

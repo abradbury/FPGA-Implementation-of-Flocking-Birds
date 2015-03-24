@@ -104,8 +104,8 @@ int main() {
 // TODO: Need to send to broadcast during actual testing as random ID unknown
 void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
-    // 19, 83, 1, 5 || 7, 10, 0, 0, 40, 40, [2], 3, 4, 5, 8, 11, 10, 9, 6, [100]
-    dataLength = 15;
+    // 21, 83, 1, 5 || 7, 10, 0, 0, 40, 40, [2], 3, 4, 5, 8, 11, 10, 9, 6, 80, 40
+    dataLength = 17;
 
     uint32 newID;
     uint32 initialBoidCount = 10;
@@ -128,18 +128,21 @@ void testSimulationSetup() {
     neighbours[6] = 3;
     neighbours[7] = 3;
 
-    data[0] = newID;
-    data[1] = initialBoidCount;
+    data[CMD_SETUP_NEWID_IDX] = newID;
+    data[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
 
     for (int i = 0; i < EDGE_COUNT; i++) {
-        data[2 + i] = coords[i];
+        data[CMD_SETUP_COORD_IDX + i] = coords[i];
     }
 
-    data[2 + EDGE_COUNT] = distinctNeighbourCount;
+    data[CMD_SETUP_NBCNT_IDX] = distinctNeighbourCount;
 
     for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-        data[2 + EDGE_COUNT + 1 + i] = neighbours[i];
+        data[CMD_SETUP_BNBRS_IDX + i] = neighbours[i];
     }
+
+    data[CMD_SETUP_SIMWH_IDX + 0] = 80;
+    data[CMD_SETUP_SIMWH_IDX + 1] = 40;
 
     createCommand(dataLength, CMD_BROADCAST, from, CMD_SIM_SETUP, data);
 }

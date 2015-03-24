@@ -13,7 +13,7 @@
 #define MAX_CMD_BODY_LEN        30  // The max length of the command body
 #define MAX_CMD_LEN             CMD_HEADER_LEN + MAX_CMD_BODY_LEN
 
-#define MAX_OUTPUT_CMDS         10  // The number of output commands to buffer
+#define MAX_OUTPUT_CMDS         12  // The number of output commands to buffer
 #define MAX_INPUT_CMDS          1   // The number of input commands to buffer
 
 #define CMD_LEN                 0   // The index of the command length
@@ -51,6 +51,7 @@
 #define CMD_SETUP_NBCNT_IDX 	6	// Distinct BoidCPU neighbour index
 #define CMD_SETUP_NEWID_IDX 	0	// New BoidCPU ID index
 #define CMD_SETUP_BDCNT_IDX 	1	// Initial boid count index
+#define CMD_SETUP_SIMWH_IDX		15	// The simulation width/height start index
 
 // Boid definitions ------------------------------------------------------------
 #define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU

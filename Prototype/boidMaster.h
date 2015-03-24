@@ -44,7 +44,6 @@
 #define MODE_DRAW               14  // Controller -> BoidCPU (B) TODO: Needed?
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
 #define CMD_KILL                16  // Controller -> All (B)
-
 #define CMD_ACK					17
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
@@ -52,6 +51,7 @@
 #define CMD_SETUP_NBCNT_IDX 	6	// Distinct BoidCPU neighbour index
 #define CMD_SETUP_NEWID_IDX 	0	// New BoidCPU ID index
 #define CMD_SETUP_BDCNT_IDX 	1	// Initial boid count index
+#define CMD_SETUP_SIMWH_IDX		15	// The simulation width/height start index
 
 // Boid definitions ------------------------------------------------------------
 #define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU

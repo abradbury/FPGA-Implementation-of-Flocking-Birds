@@ -49,6 +49,9 @@ void printStateOfBoidCPUBoids();
 int8 boidCPUID = FIRST_BOIDCPU_ID;
 int12 boidCPUCoords[4];
 
+uint8 simulationWidth  = 0;
+uint8 simulationHeight = 0;
+
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 bool neighbouringBoidCPUsSetup = false;	// True when neighbouring BoidCPUs setup
 
@@ -215,28 +218,35 @@ void simulationSetup() {
 
     // Set BoidCPU parameters (supplied by the controller)
     int8 oldBoidCPUID = boidCPUID;
-    boidCPUID = inputData[CMD_HEADER_LEN + 0];
-    boidCount = inputData[CMD_HEADER_LEN + 1];
+    boidCPUID = inputData[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
+    boidCount = inputData[CMD_HEADER_LEN + CMD_SETUP_BDCNT_IDX];
 
     edgeSetupLoop: for (int i = 0; i < EDGE_COUNT; i++) {
-        boidCPUCoords[i] = inputData[CMD_HEADER_LEN + 2 + i];
+        boidCPUCoords[i] = inputData[CMD_HEADER_LEN + CMD_SETUP_COORD_IDX + i];
     }
 
     // Get the number of distinct neighbours
-    distinctNeighbourCount = inputData[CMD_HEADER_LEN + 2 + EDGE_COUNT];
+    distinctNeighbourCount = inputData[CMD_HEADER_LEN + CMD_SETUP_NBCNT_IDX];
 
     // Get the list of neighbours on each edge
     neighbourSetupLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
         neighbouringBoidCPUs[i] =
-            inputData[CMD_HEADER_LEN + 2 + EDGE_COUNT + 1 + i];
+            inputData[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
     }
     neighbouringBoidCPUsSetup = true;
+
+    // Get the simulation width and height
+    simulationWidth  = inputData[CMD_HEADER_LEN + CMD_SETUP_SIMWH_IDX];
+    simulationHeight = inputData[CMD_HEADER_LEN + CMD_SETUP_SIMWH_IDX + 1];
 
     // Print out BoidCPU parameters
     std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" <<
         boidCPUID << std::endl;
     std::cout << "BoidCPU #" << boidCPUID << " initial boid count: " <<
         boidCount << std::endl;
+    std::cout << "BoidCPU #" << boidCPUID << " has " << distinctNeighbourCount
+    	<< " distinct neighbouring BoidCPUs" << std::endl;
+
     std::cout << "BoidCPU #" << boidCPUID << " coordinates: [";
     printEdgeLoop: for (int i = 0; i < EDGE_COUNT; i++) {
         std::cout << boidCPUCoords[i] << ", ";
@@ -245,6 +255,9 @@ void simulationSetup() {
     printNeighbourLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
         std::cout << neighbouringBoidCPUs[i] << ", ";
     } std::cout << "]" << std::endl;
+
+    std::cout << "The simulation is of width " << simulationWidth <<
+    	" and of height " << simulationHeight << std::endl;
 
     // Create the boids (actual implementation)
 //  uint16 boidID;
@@ -382,6 +395,19 @@ void calcNextBoidPositions() {
 
     updateBoidsLoop: for (int i = 0; i < boidCount; i++) {
         boids[i].update();
+
+        // Contain boid pixel position values to within the simulation area
+        if (boids[i].position.x > simulationWidth) {
+        	boids[i].position.x = 0;
+        } else if (boids[i].position.x < 0) {
+        	boids[i].position.x = simulationWidth;
+        }
+
+        if (boids[i].position.y > simulationHeight) {
+        	boids[i].position.y = 0;
+        } else if (boids[i].position.y < 0) {
+        	boids[i].position.y = simulationHeight;
+        }
     }
 
     // Send ACK signal
