@@ -6,20 +6,29 @@
 #include "stdlib.h"			// For rand()
 #include "xparameters.h"	// Xilinx definitions
 #include "xemaclite.h"		// Ethernet
+#include "xtmrctr.h"		// Timer - for timeout on waiting for ping replies
+#include "xuartlite_l.h"    // UART
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
 
+#define CONTROLLER_CHANNEL		0	// The ID of the channel of the controller
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
 #define ALL_CHANNELS			99	// When a message is sent to all channels
+//#define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
 
-// Setup Ethernet MAC addresses and transmit and receive buffers
-XEmacLite ether;
-
+// Setup Ethernet and its transmit and receive buffers
 // TODO: Determine maximum buffer size
 // TODO: Ethernet requires a u8 buffer, but FXL requires a u32...
+XEmacLite ether;
 u8 tmit_buffer[XEL_MAX_FRAME_SIZE];
 u8 recv_buffer[XEL_MAX_FRAME_SIZE];
 
+#ifdef MASTER_IS_RESIDENT
+// Setup the timer - http://forums.xilinx.com/xlnx/attachments/xlnx/EDK/27965/1/Timer_interrupt.pdf
+XTmrCtr timer;
+#endif
+
+// Setup other variables
 u8 initialisedBoidCPUCounter = 0;
 u8 residentNbrCounter = 0;
 u8 residentBoidCPUChannels[RESIDENT_BOIDCPU_COUNT];
@@ -43,44 +52,111 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
 		u8 channel);
 
+#ifdef MASTER_IS_RESIDENT
+void timerISR();
+#endif
+
 // TODO: Rename to main() when deployed
 int mainThree() {
-
-	// Set up the Ethernet
+	// Setup the Ethernet
 	XEmacLite_Config *etherconfig = XEmacLite_LookupConfig(
 			XPAR_EMACLITE_0_DEVICE_ID);
 	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
 
+#ifdef MASTER_IS_RESIDENT
+	// Setup the timer
+	microblaze_enable_interrupts();
+	XTmrCtr_Initialize(&timer, XPAR_AXI_TIMER_0_BASEADDR);
+	u8 timerCount = 1;
+
+	// Set the number of cycles before an interrupt is triggered
+	XTmrCtr_SetLoadReg(XPAR_AXI_TIMER_0_BASEADDR, 0, (timerCount * (timerCount + 1)) * 10000000);
+
+	// Reset the timer and clear the interrupts
+	XTmrCtr_SetControlStatusReg(XPAR_AXI_TIMER_0_BASEADDR, 0, XTC_CSR_INT_OCCURED_MASK | XTC_CSR_LOAD_MASK);
+#endif
+
 	// Generate random, temporary Gatekeeper ID
-	//	gatekeeperID = rand();
+//	gatekeeperID = rand();
 
 	// Main execution loop
 	do {
-		// Check for external (Ethernet) data ----------------------------------
-		volatile int recv_len = 0;
-		recv_len = XEmacLite_Recv(&ether, recv_buffer);
+#ifdef MASTER_IS_RESIDENT
+		// Start the user interface
+		print("---------------------------------------------------------\n\r");
+		print("----------FPGA Implementation of Flocking Birds----------\n\r");
+		print("---------------------------------------------------------\n\r");
 
-		// Process received external data --------------------------------------
-		if (recv_len != 0) {
-			processExternalMessage();
+		bool boidCountValid = false;	// True if the entered boid count is OK
+		u32 boidCount = 0;				// The number of simulation boids
+		u8 index = 0;           		// Index for keyPresses
+		char keyPress;          		// The key pressed
+		char keyPresses[] = ""; 		// An array containing the keys pressed
+
+		while(!boidCountValid) {
+			print("Enter boid count: ");
+
+			do {
+				keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
+				XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+
+				keyPresses[index] = keyPress;
+				index++;
+			} while (keyPress != ENTER);
+
+			// Check if entered boid count is valid
+			boidCount = (u32) atoi(keyPresses);
+
+			if (boidCount > 0) {
+				boidCountValid = true;
+			} else {
+				print("\n\r**Error: boid count must be greater than 0."\
+						" Please try again.\n\r");
+			}
 		}
 
-		// Check for internal (FXL/AXI) data -----------------------------------
-		u32 channelZeroData[MAX_CMD_LEN];
-		int channelZeroInvalid = getFSLData(channelZeroData, 0);
+		// If the user-entered data is valid, sent it to the controller
+		u32 data[1] = {1};
+		sendInternalMessage(1, CONTROLLER_ID, gatekeeperID, CMD_USER_INFO,
+				data, CONTROLLER_CHANNEL);
 
-		u32 channelOneData[MAX_CMD_LEN];
-		int channelOneInvalid = getFSLData(channelOneData, 1);
+		print("Searching for BoidCPUs...");
+		print("X BoidCPUs found.\n\r");
+		print("Setting up system...");
+		print("done.\n\r");
+		print("Starting simulation...\n\r");
+#endif
+		// Main simulation loop
+		do {
+			// Check for external (Ethernet) data ------------------------------
+			volatile int recv_len = 0;
+			recv_len = XEmacLite_Recv(&ether, recv_buffer);
 
-		// Process received internal data --------------------------------------
-		if (!channelZeroInvalid) {
-			processInternalMessage(channelZeroData, 0);
-		}
+			// Process received external data ----------------------------------
+			if (recv_len != 0) {
+				processExternalMessage();
+			}
 
-		if (!channelOneInvalid) {
-			processInternalMessage(channelOneData, 1);
-		}
+			// Check for internal (FXL/AXI) data -------------------------------
+			u32 channelZeroData[MAX_CMD_LEN];
+			int channelZeroInvalid = getFSLData(channelZeroData, 0);
 
+			u32 channelOneData[MAX_CMD_LEN];
+			int channelOneInvalid = getFSLData(channelOneData, 1);
+
+			// Process received internal data ----------------------------------
+			if (!channelZeroInvalid) {
+				processInternalMessage(channelZeroData, 0);
+			}
+
+			if (!channelOneInvalid) {
+				processInternalMessage(channelOneData, 1);
+			}
+		} while (1);	// Actually, do until pause or kill command entered
+#ifdef MASTER_IS_RESIDENT
+		print("Simulation paused. Press 'p' to resume.\n\r");
+		print("Simulation killed.\n\r");
+#endif
 	} while (1);
 
 	return 0;
@@ -166,6 +242,16 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
 void processExternalMessage() {
 	if (!boidCPUIDsFinalised) {
 		if (recv_buffer[CMD_TYPE] == CMD_PING) {
+#ifdef MASTER_IS_RESIDENT
+			// Start the timer (timer 0)
+			XTmrCtr_Start(&timer, 0);
+
+			// Or this method
+			XTmrCtr_SetControlStatusReg(XPAR_AXI_TIMER_0_BASEADDR, 0,
+					XTC_CSR_ENABLE_TMR_MASK | XTC_CSR_ENABLE_INT_MASK |
+					XTC_CSR_AUTO_RELOAD_MASK | XTC_CSR_DOWN_COUNT_MASK);
+#endif
+
 			// Reply to ping with random Gatekeeper ID and resident count
 			u32 data[1] = { RESIDENT_BOIDCPU_COUNT };
 
@@ -406,3 +492,19 @@ void putFSLData(u32 value, u32 channel) {
 	}
 }
 
+#ifdef MASTER_IS_RESIDENT
+/**
+ * Called when the timer triggers the interrupt (when the timer limit is
+ * reached). The Gatekeeper issues a command to the BoidMaster informing it
+ * that the ping wait time is up.
+ */
+void timerISR() {
+	u32 dataToForward[1] = {0};
+	sendExternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_END,
+			dataToForward);
+
+	// Clear the timer interrupt
+	XTmrCtr_SetControlStatusReg(XPAR_TMRCTR_0_BASEADDR, 0,
+			XTmrCtr_GetControlStatusReg(XPAR_AXI_TIMER_0_BASEADDR, 0));
+}
+#endif
