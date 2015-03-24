@@ -32,6 +32,7 @@
 #define CMD_USER_INFO           4   // Controller -> BoidGPU
 #define CMD_SIM_SETUP           5   // Controller -> Boid[CG]PU
 #define MODE_CALC_NBRS          6   //
+#define CMD_PING_END			7	// Gatekeeper -> Controller
 #define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU
 #define MODE_POS_BOIDS          9   //
 #define CMD_LOAD_BAL            10  // TODO: Decide on implementation
@@ -40,8 +41,9 @@
 #define MODE_DRAW               14  // TODO: Perhaps not needed?
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU
 #define CMD_KILL                16  // Controller -> All
+#define CMD_ACK					17	// All -> Controller
 
-#define CMD_COUNT               16
+#define CMD_COUNT               17
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
 #define CMD_SETUP_COORD_IDX 	2	// Coordinates start index

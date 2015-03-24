@@ -1,5 +1,5 @@
-#ifndef __BOIDCPU_H_
-#define __BOIDCPU_H_
+#ifndef __TOPLEVEL_H_
+#define __TOPLEVEL_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +44,7 @@
 #define MODE_DRAW               14  // Controller -> BoidCPU (B) TODO: Needed?
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
 #define CMD_KILL                16  // Controller -> All (B)
+
 #define CMD_ACK					17
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
@@ -106,62 +107,5 @@ typedef ap_int<4> int4;
 
 // Prototypes
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
-
-// Classes
-class Vector {
- public:
-    int12 x;
-    int12 y;
-
-    Vector();
-    Vector(int12 x_, int12 y_);
-
-    void add(Vector v);
-    void mul(int12 n);
-    void div(int12 n);
-
-    int12 mag();
-    void setMag(int12 mag);
-    void limit(int12 max);
-
-    void normalise();
-    void normaliseWithMag(int12 magnitude);
-
-    static Vector sub(Vector v1, Vector v2);
-    static uint12 squaredDistanceBetween(Vector v1, Vector v2);
-};
-
-class Boid {
- public:
-    Vector position;        	// The current pixel position of the boid
-    Vector velocity;        	// The current velocity of the boid
-    uint16 id;              	// TODO: Remove this on deployment - MAYBE
-
-    Boid();
-    Boid(uint16 _boidID, Vector initPosition, Vector initVelocity);
-
-    void update();                  // Calculate the boid's new position
-    void draw();                    // Draw the boid (send to BoidGPU)
-
-    void printBoidInfo();
-
-    // Tell the boid where its neighbours are located in the neighbouring boid
-    // list held by the BoidCPU and how many there are
-    void setNeighbourDetails(uint8 index, uint8 count);
-
- private:
-    Vector acceleration;
-
-    // Points to this boid's list of neighbouring boids in the list of boid
-    // neighbouring boids that is stored by the boid's BoidCPU
-    uint8 boidNeighbourIndex;
-    uint8 boidNeighbourCount;
-
-    Vector align();         // Calculate the alignment force
-    Vector separate();      // Calculate the separation force
-    Vector cohesion();      // Calculate the cohesion force
-
-    Vector seek(Vector);    // Seek a new position
-};
 
 #endif

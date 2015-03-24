@@ -10,6 +10,7 @@
 
 // Function headers ============================================================
 void processPingReply();
+void processAck();
 
 void issuePing();
 void issueSetupInformation();
@@ -51,6 +52,9 @@ struct BoidCPU {
 	uint8 y;
 };
 
+uint8 state = CMD_PING;
+uint8 ackCount = 0;
+uint8 gatekeeperCount = 0;
 uint8 boidCPUCount = 0;
 BoidCPU boidCPUs[MAX_BOIDCPUS];
 
@@ -133,18 +137,25 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// STATE CHANGE --------------------------------------------------------
 		if (inputData[CMD_TO] == CONTROLLER_ID) {
 			switch (inputData[CMD_TYPE]) {
+			case CMD_USER_INFO:
+				processUserData();
+				issuePing();
+				break;
 			case CMD_PING_REPLY:
 				processPingReply();
-
-				// TODO: Remove
-				setupSimulation();
-				//
-
 				break;
-//                case CMD_LOAD_BAL_REPLY:
-//                	// TODO: Implement load balancing
-//                    processLoadData();
-//                    break;
+			case CMD_PING_END:
+				state = CMD_SIM_SETUP;
+				setupSimulation();
+				issueSetupInformation();
+				break;
+//			case CMD_LOAD_BAL_REPLY:
+//				// TODO: Implement load balancing
+//				processLoadData();
+//				break;
+			case CMD_ACK:
+				processAck();
+				break;
 			default:
 				std::cout << "Command state " << inputData[CMD_TYPE]
 						<< " not recognised" << std::endl;
@@ -197,8 +208,10 @@ void processUserData() {
  * another matter), the simulation setup is calculated.
  */
 void processPingReply() {
-	uint8 gatekeeprBoidCPUCount = inputData[CMD_HEADER_LEN + 0];
-	pingResponseLoop: for (int i = 0; i < gatekeeprBoidCPUCount; i++) {
+	uint8 gatekeeperBoidCPUCount = inputData[CMD_HEADER_LEN + 0];
+	gatekeeperCount++;
+
+	pingResponseLoop: for (int i = 0; i < gatekeeperBoidCPUCount; i++) {
 		boidCPUs[boidCPUCount] = BoidCPU();
 
 		boidCPUs[boidCPUCount].gatekeeperID = inputData[CMD_FROM];
@@ -375,8 +388,8 @@ void setupSimulation() {
 	// TODO: This is a horrible way of doing it, find an alternative, if time
 	distNbrOuter: for (int i = 0; i < boidCPUCount; i++) {
 		uint8 distinctNeighbourCount = 0;
-		distNbrMiddle: for (int j = 0; j < MAX_NEIGHBOURING_BOIDS; j++) {
-			distNbrInner:for (int k = j + 1; k < MAX_NEIGHBOURING_BOIDS; k++) {
+		distNbrMiddle: for (int j = 0; j < MAX_BOIDCPU_NEIGHBOURS; j++) {
+			distNbrInner:for (int k = j + 1; k < MAX_BOIDCPU_NEIGHBOURS; k++) {
 				if (boidCPUs[i].neighbours[j] == boidCPUs[i].neighbours[k]) {
 					distinctNeighbourCount++;
 				}
@@ -406,6 +419,35 @@ void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
 				}
 			}
 		}
+	}
+}
+
+void processAck() {
+	ackCount++;
+
+	if (ackCount == gatekeeperCount) {
+		switch(state) {
+		case CMD_SIM_SETUP:
+			state = MODE_CALC_NBRS;
+			issueCalcNbrsMode();
+			break;
+		case MODE_CALC_NBRS:
+			state = MODE_POS_BOIDS;
+			issueCalcBoidMode();
+			break;
+		case MODE_POS_BOIDS:
+			state = MODE_TRAN_BOIDS;
+			issueTransferMode();
+			break;
+		case MODE_TRAN_BOIDS:
+			state = MODE_DRAW;
+			issueDrawMode();
+			break;
+		default:
+			break;
+		}
+
+		ackCount = 0;
 	}
 }
 
@@ -563,6 +605,9 @@ void printCommand(bool send, uint32 *data) {
 		break;
 	case CMD_DRAW_INFO:
 		std::cout << "boid info heading to BoidGPU      ";
+		break;
+	case CMD_ACK:
+		std::cout << "ACK signal                        ";
 		break;
 	case CMD_KILL:
 		std::cout << "kill simulation                   ";

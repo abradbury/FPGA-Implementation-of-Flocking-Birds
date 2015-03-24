@@ -13,6 +13,7 @@ static void loadBalance(void);
 static void calculateEscapedBoids(void);
 static void updateDisplay(void);
 
+void calculateBoidNeighbours(void);
 void sendBoidsToNeighbours(void);
 void processNeighbouringBoids(void);
 
@@ -284,6 +285,9 @@ void simulationSetup() {
         Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
         boids[i] = boid;
     }
+
+    // Send ACK signal
+	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 //uint multiply(uint value, uint multiplicand) {
@@ -333,6 +337,13 @@ void processNeighbouringBoids() {
 
     // Increment the boids received from neighbour counter
     distinctNeighbourCounter++;
+
+    if (distinctNeighbourCounter == distinctNeighbourCount) {
+		calculateBoidNeighbours();
+	}
+
+    // Send ACK signal
+	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 /**
@@ -368,16 +379,12 @@ void calculateBoidNeighbours() {
 void calcNextBoidPositions() {
     std::cout << "-Calculating next boid positions..." << std::endl;
 
-    if (distinctNeighbourCounter != distinctNeighbourCount) {
-    	std::cout << "WARNING: Boid neighbours have not been calculated"
-			<< " - not all neighbour responses have been received" << std::endl;
-    } else {
-    	calculateBoidNeighbours();
-    }
-
     updateBoidsLoop: for (int i = 0; i < boidCount; i++) {
         boids[i].update();
     }
+
+    // Send ACK signal
+	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 void loadBalance() {
@@ -422,6 +429,9 @@ void calculateEscapedBoids() {
 	if (counter > 0) {
 		transmitBoids(boidIDs, recipientIDs, counter);
 	}
+
+	// Send ACK signal
+	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 /**

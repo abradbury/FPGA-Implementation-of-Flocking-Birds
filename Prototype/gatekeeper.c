@@ -25,8 +25,9 @@ u8 residentNbrCounter = 0;
 u8 residentBoidCPUChannels[RESIDENT_BOIDCPU_COUNT];
 u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
 
-u32 tempGatekeeperID = 0;
+u32 gatekeeperID = 0;
 bool boidCPUIDsFinalised = false;
+u8 ackCount = 0;
 
 // Protocols
 u8 channelLookup(u32 to);
@@ -51,7 +52,7 @@ int mainThree() {
 	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
 
 	// Generate random, temporary Gatekeeper ID
-	//	tempGatekeeperID = rand();
+	//	gatekeeperID = rand();
 
 	// Main execution loop
 	do {
@@ -168,10 +169,10 @@ void processExternalMessage() {
 			// Reply to ping with random Gatekeeper ID and resident count
 			u32 data[1] = { RESIDENT_BOIDCPU_COUNT };
 
-			sendExternalMessage(1, CONTROLLER_ID, tempGatekeeperID,
+			sendExternalMessage(1, CONTROLLER_ID, gatekeeperID,
 					CMD_PING_REPLY, data);
 
-		} else if ((recv_buffer[CMD_TO] = tempGatekeeperID)
+		} else if ((recv_buffer[CMD_TO] = gatekeeperID)
 				&& (recv_buffer[CMD_TYPE] == CMD_SIM_SETUP)) {
 			// Create a copy of the data supplied with the message
 			int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
@@ -237,30 +238,42 @@ void processExternalMessage() {
  * internal or external and forward as appropriate.
  */
 void processInternalMessage(u32 *data, u8 channel) {
-	// Collate the data to forward
-	int dataLength = data[CMD_LEN] - CMD_HEADER_LEN;
-	u32 dataToForward[dataLength];
+	if (data[CMD_TYPE] == CMD_ACK) {
+		ackCount++;
 
-	int i = 0;
-	for (i = 0; i < dataLength; i++) {
-		dataToForward[i] = data[CMD_HEADER_LEN + i];
-	}
+		if (ackCount == RESIDENT_BOIDCPU_COUNT) {
+			u32 dataToForward[1] = {0};
+			sendExternalMessage(0, CONTROLLER_ID, gatekeeperID,
+					CMD_ACK, dataToForward);
 
-	// If the command is a multicast message, send it both internally and
-	// externally. Otherwise, check if the message recipient is external.
-	//
-	// TODO: Improve this so that a check is made as to whether all the
-	// 	neighbours are within the current BoidCPU.
-	if (data[CMD_TO] == CMD_MULTICAST) {
-		sendInternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-				data[CMD_TYPE], dataToForward, ALL_CHANNELS);
+			ackCount = 0;
+		}
+	} else {
+		// Collate the data to forward
+		int dataLength = data[CMD_LEN] - CMD_HEADER_LEN;
+		u32 dataToForward[dataLength];
 
-		sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-				data[CMD_TYPE], dataToForward);
+		int i = 0;
+		for (i = 0; i < dataLength; i++) {
+			dataToForward[i] = data[CMD_HEADER_LEN + i];
+		}
 
-	} else if (departureCheckPassed(data[CMD_TO])) {
-		sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-				data[CMD_TYPE], dataToForward);
+		// If the command is a multicast message, send it both internally and
+		// externally. Otherwise, check if the message recipient is external.
+		//
+		// TODO: Improve this so that a check is made as to whether all the
+		// 	neighbours are within the current BoidCPU.
+		if (data[CMD_TO] == CMD_MULTICAST) {
+			sendInternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
+					data[CMD_TYPE], dataToForward, ALL_CHANNELS);
+
+			sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
+					data[CMD_TYPE], dataToForward);
+
+		} else if (departureCheckPassed(data[CMD_TO])) {
+			sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
+					data[CMD_TYPE], dataToForward);
+		}
 	}
 }
 
