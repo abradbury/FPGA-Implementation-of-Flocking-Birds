@@ -6,7 +6,6 @@
 #include "stdlib.h"			// For rand()
 #include "xparameters.h"	// Xilinx definitions
 #include "xemaclite.h"		// Ethernet
-#include "xtmrctr.h"		// Timer - for timeout on waiting for ping replies
 #include "xuartlite_l.h"    // UART
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
@@ -14,7 +13,11 @@
 #define CONTROLLER_CHANNEL		0	// The ID of the channel of the controller
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
 #define ALL_CHANNELS			99	// When a message is sent to all channels
-//#define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
+
+#define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
+
+#define KILL_KEY				0x6B// 'k'
+#define PAUSE_KEY				0x70// 'p'
 
 // Setup Ethernet and its transmit and receive buffers
 // TODO: Determine maximum buffer size
@@ -23,22 +26,30 @@ XEmacLite ether;
 u8 tmit_buffer[XEL_MAX_FRAME_SIZE];
 u8 recv_buffer[XEL_MAX_FRAME_SIZE];
 
-#ifdef MASTER_IS_RESIDENT
-// Setup the timer - http://forums.xilinx.com/xlnx/attachments/xlnx/EDK/27965/1/Timer_interrupt.pdf
-XTmrCtr timer;
-#endif
-
 // Setup other variables
 u8 initialisedBoidCPUCounter = 0;
 u8 residentNbrCounter = 0;
 u8 residentBoidCPUChannels[RESIDENT_BOIDCPU_COUNT];
 u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
 
+u32 commandData[MAX_CMD_BODY_LEN];
 u32 gatekeeperID = 0;
 bool boidCPUIDsFinalised = false;
 u8 ackCount = 0;
 
+#ifdef MASTER_IS_RESIDENT
+u8 discoveredBoidCPUCount = 0;
+#endif
+
 // Protocols
+void checkForInput();
+void sendKillCommand();
+
+#ifdef MASTER_IS_RESIDENT
+void takeUserInput();
+void uiBoidCPUSearch();
+#endif
+
 u8 channelLookup(u32 to);
 bool arrivalCheckPassed(u32 from);
 bool departureCheckPassed(u32 to);
@@ -46,15 +57,18 @@ bool departureCheckPassed(u32 to);
 void putFSLData(u32 value, u32 channel);
 u32 getFSLData(u32 *data, u32 channel);
 
+void interceptPing();
+void interceptSetupInfo();
+
 void processExternalMessage();
 void processInternalMessage(u32 *data, u8 channel);
 void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
 		u8 channel);
 
-#ifdef MASTER_IS_RESIDENT
-void timerISR();
-#endif
+//============================================================================//
+//- Main Method --------------------------------------------------------------//
+//============================================================================//
 
 // TODO: Rename to main() when deployed
 int mainThree() {
@@ -63,103 +77,87 @@ int mainThree() {
 			XPAR_EMACLITE_0_DEVICE_ID);
 	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
 
-#ifdef MASTER_IS_RESIDENT
-	// Setup the timer
-	microblaze_enable_interrupts();
-	XTmrCtr_Initialize(&timer, XPAR_AXI_TIMER_0_BASEADDR);
-	u8 timerCount = 1;
-
-	// Set the number of cycles before an interrupt is triggered
-	XTmrCtr_SetLoadReg(XPAR_AXI_TIMER_0_BASEADDR, 0, (timerCount * (timerCount + 1)) * 10000000);
-
-	// Reset the timer and clear the interrupts
-	XTmrCtr_SetControlStatusReg(XPAR_AXI_TIMER_0_BASEADDR, 0, XTC_CSR_INT_OCCURED_MASK | XTC_CSR_LOAD_MASK);
-#endif
-
 	// Generate random, temporary Gatekeeper ID
 //	gatekeeperID = rand();
 
-	// Main execution loop
 	do {
-#ifdef MASTER_IS_RESIDENT
-		// Start the user interface
-		print("---------------------------------------------------------\n\r");
-		print("----------FPGA Implementation of Flocking Birds----------\n\r");
-		print("---------------------------------------------------------\n\r");
-
-		bool boidCountValid = false;	// True if the entered boid count is OK
-		u32 boidCount = 0;				// The number of simulation boids
-		u8 index = 0;           		// Index for keyPresses
-		char keyPress;          		// The key pressed
-		char keyPresses[] = ""; 		// An array containing the keys pressed
-
-		while(!boidCountValid) {
-			print("Enter boid count: ");
-
-			do {
-				keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
-				XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
-
-				keyPresses[index] = keyPress;
-				index++;
-			} while (keyPress != ENTER);
-
-			// Check if entered boid count is valid
-			boidCount = (u32) atoi(keyPresses);
-
-			if (boidCount > 0) {
-				boidCountValid = true;
-			} else {
-				print("\n\r**Error: boid count must be greater than 0."\
-						" Please try again.\n\r");
-			}
-		}
-
-		// If the user-entered data is valid, sent it to the controller
-		u32 data[1] = {1};
-		sendInternalMessage(1, CONTROLLER_ID, gatekeeperID, CMD_USER_INFO,
-				data, CONTROLLER_CHANNEL);
-
-		print("Searching for BoidCPUs...");
-		print("X BoidCPUs found.\n\r");
-		print("Setting up system...");
-		print("done.\n\r");
-		print("Starting simulation...\n\r");
-#endif
-		// Main simulation loop
+		bool simulationKilled = false;
 		do {
-			// Check for external (Ethernet) data ------------------------------
-			volatile int recv_len = 0;
-			recv_len = XEmacLite_Recv(&ether, recv_buffer);
-
-			// Process received external data ----------------------------------
-			if (recv_len != 0) {
-				processExternalMessage();
-			}
-
-			// Check for internal (FXL/AXI) data -------------------------------
-			u32 channelZeroData[MAX_CMD_LEN];
-			int channelZeroInvalid = getFSLData(channelZeroData, 0);
-
-			u32 channelOneData[MAX_CMD_LEN];
-			int channelOneInvalid = getFSLData(channelOneData, 1);
-
-			// Process received internal data ----------------------------------
-			if (!channelZeroInvalid) {
-				processInternalMessage(channelZeroData, 0);
-			}
-
-			if (!channelOneInvalid) {
-				processInternalMessage(channelOneData, 1);
-			}
-		} while (1);	// Actually, do until pause or kill command entered
 #ifdef MASTER_IS_RESIDENT
-		print("Simulation paused. Press 'p' to resume.\n\r");
-		print("Simulation killed.\n\r");
+			// Start the user interface
+			print("------------------------------------------------------\n\r");
+			print("---------FPGA Implementation of Flocking Birds--------\n\r");
+			print("------------------------------------------------------\n\r");
+
+			// Search for BoidCPUs
+			uiBoidCPUSearch();
+
+			// Take user input e.g. simulation boid count
+			takeUserInput();
 #endif
+			// Finally, begin main loop
+			do {
+				checkForInput();
+
+				// Handle a kill key or a pause key being pressed
+				if (!XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR)) {
+					if (XUartLite_RecvByte(
+							XPAR_RS232_UART_1_BASEADDR) == KILL_KEY) {
+						simulationKilled = true;
+						sendKillCommand();
+						print("Simulation killed, restarting...\n\r");
+					} else if (XUartLite_RecvByte(
+							XPAR_RS232_UART_1_BASEADDR) == PAUSE_KEY) {
+						print("Simulation paused, press 'P' to resume\n\r");
+						bool simulationUnpaused = false;
+						do {
+							if (XUartLite_RecvByte(
+									XPAR_RS232_UART_1_BASEADDR) == PAUSE_KEY) {
+								simulationUnpaused = true;
+							}
+						} while (!simulationUnpaused);
+					}
+				}
+			} while (!simulationKilled);
+		} while (!simulationKilled);
 	} while (1);
 
 	return 0;
+}
+
+//============================================================================//
+//- Message Transfer ---------------------------------------------------------//
+//============================================================================//
+
+/**
+ * The main method used to determine if there is any input available on either
+ * internal or external lines. If there is, it is processed accordingly.
+ */
+void checkForInput() {
+	// Check for external (Ethernet) data --------------------------------------
+	volatile int recv_len = 0;
+	recv_len = XEmacLite_Recv(&ether, recv_buffer);
+
+	// Process received external data ------------------------------------------
+	if (recv_len != 0) {
+		processExternalMessage();
+	}
+
+	// Check for internal (FXL/AXI) data ---------------------------------------
+	u32 channelZeroData[MAX_CMD_LEN];
+	int channelZeroInvalid = getFSLData(channelZeroData, 0);
+
+	u32 channelOneData[MAX_CMD_LEN];
+	int channelOneInvalid = getFSLData(channelOneData, 1);
+
+	// Process received internal data ------------------------------------------
+	if (!channelZeroInvalid) {
+		processInternalMessage(channelZeroData, 0);
+	}
+
+	if (!channelOneInvalid) {
+		processInternalMessage(channelOneData, 1);
+	}
 }
 
 /**
@@ -242,66 +240,19 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
 void processExternalMessage() {
 	if (!boidCPUIDsFinalised) {
 		if (recv_buffer[CMD_TYPE] == CMD_PING) {
-#ifdef MASTER_IS_RESIDENT
-			// Start the timer (timer 0)
-			XTmrCtr_Start(&timer, 0);
-
-			// Or this method
-			XTmrCtr_SetControlStatusReg(XPAR_AXI_TIMER_0_BASEADDR, 0,
-					XTC_CSR_ENABLE_TMR_MASK | XTC_CSR_ENABLE_INT_MASK |
-					XTC_CSR_AUTO_RELOAD_MASK | XTC_CSR_DOWN_COUNT_MASK);
-#endif
-
-			// Reply to ping with random Gatekeeper ID and resident count
-			u32 data[1] = { RESIDENT_BOIDCPU_COUNT };
-
-			sendExternalMessage(1, CONTROLLER_ID, gatekeeperID,
-					CMD_PING_REPLY, data);
-
+			interceptPing();
 		} else if ((recv_buffer[CMD_TO] = gatekeeperID)
 				&& (recv_buffer[CMD_TYPE] == CMD_SIM_SETUP)) {
-			// Create a copy of the data supplied with the message
-			int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
-			u32 dataToForward[dataLength];
-			int i = 0;
-			for (i = 0; i < dataLength; i++) {
-				dataToForward[i] = recv_buffer[CMD_HEADER_LEN + i];
-			}
-
-			// Forward the setup message one of the resident BoidCPUs
-			sendInternalMessage(recv_buffer[CMD_LEN], CMD_BROADCAST,
-					recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward,
-					initialisedBoidCPUCounter);
-
-			// Update the Gatekeeper's internal routing table
-			residentBoidCPUChannels[initialisedBoidCPUCounter] =
-					recv_buffer[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
-
-			// Update the Gatekeeper's list of neighbours to residents
-			for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-				u8 nbr = recv_buffer[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
-				bool neighbourAlreadyListed = false;
-				int j = 0;
-
-				for (j = 0; j < residentNbrCounter; j++) {
-					if (nbr == residentBoidCPUNeighbours[j]) {
-						neighbourAlreadyListed = true;
-						break;
-					}
-				}
-
-				if (!neighbourAlreadyListed) {
-					residentBoidCPUNeighbours[residentNbrCounter] = nbr;
-					residentNbrCounter++;
-				}
-			}
-
-			initialisedBoidCPUCounter++;
-			if (initialisedBoidCPUCounter == RESIDENT_BOIDCPU_COUNT) {
-				boidCPUIDsFinalised = true;
-			}
+			interceptSetupInfo();
 		}
 	} else if (arrivalCheckPassed(recv_buffer[CMD_FROM])) {
+
+#ifdef MASTER_IS_RESIDENT
+		if (recv_buffer[CMD_TYPE] == CMD_PING_REPLY) {
+			xil_printf("found %d..");
+			discoveredBoidCPUCount++;
+		}
+#endif
 		// Collate the data to forward
 		int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
 		u32 dataToForward[dataLength];
@@ -324,17 +275,33 @@ void processExternalMessage() {
  * internal or external and forward as appropriate.
  */
 void processInternalMessage(u32 *data, u8 channel) {
-	if (data[CMD_TYPE] == CMD_ACK) {
+	if (!boidCPUIDsFinalised) {
+		if (data[CMD_TYPE] == CMD_PING) {
+			interceptPing();
+		} else if ((data[CMD_TO] = gatekeeperID)
+				&& (data[CMD_TYPE] == CMD_SIM_SETUP)) {
+			interceptSetupInfo();
+		}
+	} else if (data[CMD_TYPE] == CMD_ACK) {
 		ackCount++;
 
 		if (ackCount == RESIDENT_BOIDCPU_COUNT) {
-			u32 dataToForward[1] = {0};
-			sendExternalMessage(0, CONTROLLER_ID, gatekeeperID,
-					CMD_ACK, dataToForward);
+			u32 dataToForward[1] = { 0 };
+			sendExternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_ACK,
+					dataToForward);
 
 			ackCount = 0;
 		}
-	} else {
+	}
+
+#ifdef MASTER_IS_RESIDENT
+	else if (data[CMD_TYPE] == CMD_PING_REPLY) {
+		xil_printf("found %d..");
+		discoveredBoidCPUCount++;
+	}
+#endif
+
+	else {
 		// Collate the data to forward
 		int dataLength = data[CMD_LEN] - CMD_HEADER_LEN;
 		u32 dataToForward[dataLength];
@@ -362,6 +329,161 @@ void processInternalMessage(u32 *data, u8 channel) {
 		}
 	}
 }
+
+//============================================================================//
+//- Message Intercept --------------------------------------------------------//
+//============================================================================//
+
+/**
+ * Intercepts a ping command from the BoidMaster and responds with the number
+ * of BoidCPUs that are resident. The command is not forwarded.
+ */
+void interceptPing() {
+	u32 data[1] = { RESIDENT_BOIDCPU_COUNT };
+	sendExternalMessage(1, CONTROLLER_ID, gatekeeperID, CMD_PING_REPLY, data);
+}
+
+/**
+ * Intercepts a setup command use using it to build a list of the IDs of the
+ * resident BoidCPUs and their neighbours. The commands are then forwarded to
+ * the BoidCPUs.
+ */
+void interceptSetupInfo() {
+	// Create a copy of the data supplied with the message
+	int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
+	u32 dataToForward[dataLength];
+	int i = 0;
+	for (i = 0; i < dataLength; i++) {
+		dataToForward[i] = recv_buffer[CMD_HEADER_LEN + i];
+	}
+
+	// Forward the setup message one of the resident BoidCPUs
+	sendInternalMessage(recv_buffer[CMD_LEN], CMD_BROADCAST,
+			recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward,
+			initialisedBoidCPUCounter);
+
+	// Update the Gatekeeper's internal routing table
+	residentBoidCPUChannels[initialisedBoidCPUCounter] =
+			recv_buffer[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
+
+	// Update the Gatekeeper's list of neighbours to residents
+	for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		u8 nbr = recv_buffer[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
+		bool neighbourAlreadyListed = false;
+		int j = 0;
+
+		for (j = 0; j < residentNbrCounter; j++) {
+			if (nbr == residentBoidCPUNeighbours[j]) {
+				neighbourAlreadyListed = true;
+				break;
+			}
+		}
+
+		if (!neighbourAlreadyListed) {
+			residentBoidCPUNeighbours[residentNbrCounter] = nbr;
+			residentNbrCounter++;
+		}
+	}
+
+	initialisedBoidCPUCounter++;
+	if (initialisedBoidCPUCounter == RESIDENT_BOIDCPU_COUNT) {
+		boidCPUIDsFinalised = true;
+	}
+}
+
+//============================================================================//
+//- BoidMaster Support -------------------------------------------------------//
+//============================================================================//
+
+/**
+ * Sends CMD_KILL to all entities in the system, on behalf of the BoidMaster.
+ * Called when the user pressed the KILL_KEY.
+ */
+void sendKillCommand() {
+	sendExternalMessage(0, CMD_BROADCAST, gatekeeperID, CMD_KILL, commandData);
+	sendInternalMessage(0, CMD_BROADCAST, gatekeeperID, CMD_KILL, commandData,
+			ALL_CHANNELS);
+}
+
+#ifdef MASTER_IS_RESIDENT
+
+/**
+ * Handles the process of taking user input for the simulation setup values
+ */
+void takeUserInput() {
+	bool boidCountValid = false;	// True if count is valid
+	u32 boidCount = 0;				// Number of simulation boids
+	u8 index = 0;           		// Index for keyPresses
+	char keyPress;          		// The key pressed
+	char keyPresses[] = ""; 		// An array of the keys pressed
+
+	while (!boidCountValid) {
+		print("Enter boid count: ");
+
+		do {
+			keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
+			XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+
+			keyPresses[index] = keyPress;
+			index++;
+		} while (keyPress != ENTER);
+
+		// Check if entered boid count is valid
+		boidCount = (u32) atoi(keyPresses);
+
+		if (boidCount > 0) {
+			boidCountValid = true;
+		} else {
+			print("\n\r**Error: boid count must be greater than 0."
+					" Please try again.\n\r");
+		}
+	}
+
+	// If the user-entered data is valid, sent it to the controller
+	sendInternalMessage(1, CONTROLLER_ID, gatekeeperID, CMD_USER_INFO,
+			commandData, CONTROLLER_CHANNEL);
+}
+
+/**
+ * Handles the process of searching for BoidCPUs and displaying it on the UI
+ */
+void uiBoidCPUSearch() {
+	bool boidCPUSearchComplete = false;
+	do {
+		print(" Searching for BoidCPUs (press ENTER to stop)...");
+		sendInternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_START,
+				commandData, CONTROLLER_CHANNEL);
+
+		bool enterKeyPressed = false;
+		do {
+			checkForInput();
+
+			// If the ENTER key is pressed, exit search
+			if (!XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR)) {
+				if (XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR) == ENTER) {
+					enterKeyPressed = true;
+				}
+			}
+		} while (!enterKeyPressed);
+
+		// If BoidCPUs have been found, exit search, else restart
+		if (discoveredBoidCPUCount > 0) {
+			boidCPUSearchComplete = true;
+		} else {
+			print("\n\rNo BoidCPUs found, trying again...\n\r");
+		}
+	} while (!boidCPUSearchComplete);
+
+	// When the ping search is complete, inform the BoidMaster
+	sendInternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_END,
+			commandData, CONTROLLER_CHANNEL);
+}
+
+#endif
+
+//============================================================================//
+//- Supporting Functions -----------------------------------------------------//
+//============================================================================//
 
 /**
  * Determines if external messages should be forwarded internally. Returns true
@@ -491,20 +613,3 @@ void putFSLData(u32 value, u32 channel) {
 		xil_printf("Error writing data to channel %d: %d\n\r", channel, value);
 	}
 }
-
-#ifdef MASTER_IS_RESIDENT
-/**
- * Called when the timer triggers the interrupt (when the timer limit is
- * reached). The Gatekeeper issues a command to the BoidMaster informing it
- * that the ping wait time is up.
- */
-void timerISR() {
-	u32 dataToForward[1] = {0};
-	sendExternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_END,
-			dataToForward);
-
-	// Clear the timer interrupt
-	XTmrCtr_SetControlStatusReg(XPAR_TMRCTR_0_BASEADDR, 0,
-			XTmrCtr_GetControlStatusReg(XPAR_AXI_TIMER_0_BASEADDR, 0));
-}
-#endif

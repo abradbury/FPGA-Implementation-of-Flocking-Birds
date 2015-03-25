@@ -1,6 +1,6 @@
 #include "boidMaster.h"
 
-#define USING_TB				true	// Defined when using VHLS test bench
+//#define USING_TB				true	// Defined when using VHLS test bench
 
 #define MAX_BOIDCPUS			32		// TODO: Decide on a suitable value
 
@@ -82,6 +82,8 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	inputData[CMD_LEN] = input.read();
 #endif
 
+	bool pingEnd = true;
+
 	mainWhileLoop: while (continueOperation) {
 		// INPUT ---------------------------------------------------------------
 		// Block until there is input available
@@ -98,17 +100,22 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		// STATE CHANGE --------------------------------------------------------
 		if (inputData[CMD_TO] == CONTROLLER_ID) {
 			switch (inputData[CMD_TYPE]) {
-			case CMD_USER_INFO:
-				processUserData();
+			case CMD_PING_START:
+				pingEnd = false;
 				issuePing();
 				break;
-			case CMD_PING_REPLY:
-				processPingReply();
-				break;
-			case CMD_PING_END:
+			case CMD_USER_INFO:
+				processUserData();
+
 				state = CMD_SIM_SETUP;
 				setupSimulation();
 				issueSetupInformation();
+				break;
+			case CMD_PING_REPLY:
+				if (!pingEnd) processPingReply();
+				break;
+			case CMD_PING_END:
+				pingEnd = true;
 				break;
 //			case CMD_LOAD_BAL_REPLY:
 //				// TODO: Implement load balancing
