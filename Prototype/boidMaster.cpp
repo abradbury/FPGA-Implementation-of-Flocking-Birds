@@ -1,15 +1,11 @@
 #include "boidMaster.h"
 
-#include <iostream>     // cout
-#include <math.h>       // sqrt, floor
-
 #define USING_TB				true	// Defined when using VHLS test bench
-#define NBR_CALC_OPTIMISE_TIME 	true	// Defined to optimise time, else space
 
 #define MAX_BOIDCPUS			32		// TODO: Decide on a suitable value
 
-#define SIMULATION_WIDTH		80		// The pixel width of the simulation
-#define SIMULATION_HEIGHT		40		// The pixel height of the simulation
+#define SIMULATION_WIDTH		1920	// The pixel width of the simulation
+#define SIMULATION_HEIGHT		1080	// The pixel height of the simulation
 
 // Function headers ============================================================
 void processUserData();
@@ -49,7 +45,7 @@ struct BoidCPU {
 	uint8 boidCPUID;
 	uint8 boidCount;
 	uint8 distinctNeighbourCount;
-	uint8 boidCPUCoords[EDGE_COUNT];
+	uint12 boidCPUCoords[EDGE_COUNT];
 	uint8 neighbours[MAX_BOIDCPU_NEIGHBOURS];
 	uint8 gatekeeperID;
 	uint8 x;
@@ -62,9 +58,7 @@ uint8 gatekeeperCount = 0;
 uint8 boidCPUCount = 0;
 BoidCPU boidCPUs[MAX_BOIDCPUS];
 
-#ifdef NBR_CALC_OPTIMISE_TIME
 uint8 gridAssignment[MAX_BOIDCPUS][MAX_BOIDCPUS];
-#endif
 
 uint32 boidCount = 100;
 
@@ -182,7 +176,7 @@ void processPingReply() {
 		boidCPUs[boidCPUCount] = BoidCPU();
 
 		boidCPUs[boidCPUCount].gatekeeperID = inputData[CMD_FROM];
-		boidCPUs[boidCPUCount].boidCPUID = boidCPUCount;
+		boidCPUs[boidCPUCount].boidCPUID = FIRST_BOIDCPU_ID + boidCPUCount;
 		boidCPUCount++;
 	}
 }
@@ -216,26 +210,27 @@ void setupSimulation() {
 		}
 	}
 
-	// Globals? -------------
-	uint16 simulationHeight = 0;
-	uint16 simulationWidth  = 0;
-	// ----------------------
-
 	// Determine simulation grid layout
 	uint8 simulationGridHeight = 0;
 	uint8 simulationGridWidth  = 0;
 
 	closestMultiples(&simulationGridHeight, &simulationGridWidth, boidCPUCount);
+	std::cout << "Simulation is " << simulationGridWidth << " BoidCPUs wide by "
+			<< simulationGridHeight << " BoidCPUs high" << std::endl;
 
 	// Calculate coordinates
 	// First, calculate the pixel width and height of one BoidCPU
-	uint16 boidCPUPixelWidth = simulationWidth / simulationGridWidth;
-	uint16 widthRemainder = (simulationWidth - (boidCPUPixelWidth *
+	uint16 boidCPUPixelWidth = SIMULATION_WIDTH / simulationGridWidth;
+	uint16 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
 			simulationGridWidth));
 
-	uint16 boidCPUPixelHeight = simulationHeight / simulationGridHeight;
-	uint16 heightRemainder = (simulationHeight - (boidCPUPixelHeight *
+	uint16 boidCPUPixelHeight = SIMULATION_HEIGHT / simulationGridHeight;
+	uint16 heightRemainder = (SIMULATION_HEIGHT - (boidCPUPixelHeight *
 			simulationGridHeight));
+
+	std::cout << "Typical BoidCPU dimensions: " << boidCPUPixelWidth <<
+			" pixels wide by " << boidCPUPixelHeight << " pixels high" <<
+			std::endl;
 
 	// Then calculate each BoidCPU's coordinates
 	uint16 count = 0;
@@ -268,10 +263,8 @@ void setupSimulation() {
 			// Store the grid position of the BoidCPU
 			boidCPUs[count].x = w;
 			boidCPUs[count].y = h;
-#ifdef NBR_CALC_OPTIMISE_TIME
-			gridAssignment[h][w] = boidCPUs[count].boidCPUID;
-#endif
 
+			gridAssignment[h][w] = boidCPUs[count].boidCPUID;
 			count++;
 			width += boidCPUPixelWidth;
 		}
@@ -284,85 +277,34 @@ void setupSimulation() {
 		uint8 x = boidCPUs[i].x;
 		uint8 y = boidCPUs[i].y;
 
-		uint8 xMinusOne = (x - 1) % simulationGridWidth;
-		uint8 xPlusOne  = (x + 1) % simulationGridWidth;
-		uint8 yMinusOne = (y - 1) % simulationGridHeight;
-		uint8 yPlusOne  = (y + 1) % simulationGridHeight;
+		uint8 xMinusOne = (x == 0) ? (simulationGridWidth - 1) : x - 1;
+		uint8 xPlusOne  = (x == (simulationGridWidth - 1)) ? 0 : x + 1;
+		uint8 yMinusOne = (y == 0) ? (simulationGridHeight - 1) : y - 1;
+		uint8 yPlusOne  = (y == (simulationGridHeight - 1)) ? 0 : y + 1;
 
-#ifdef NBR_CALC_OPTIMISE_TIME
-		boidCPUs[i].neighbours[0] =
-				boidCPUs[gridAssignment[yMinusOne][xMinusOne]].boidCPUID;
-
-		boidCPUs[i].neighbours[1] =
-				boidCPUs[gridAssignment[yMinusOne][x]].boidCPUID;
-
-		boidCPUs[i].neighbours[2] =
-				boidCPUs[gridAssignment[yMinusOne][xPlusOne]].boidCPUID;
-
-		boidCPUs[i].neighbours[3] =
-				boidCPUs[gridAssignment[y][xPlusOne]].boidCPUID;
-
-		boidCPUs[i].neighbours[4] =
-				boidCPUs[gridAssignment[yPlusOne][xPlusOne]].boidCPUID;
-
-		boidCPUs[i].neighbours[5] =
-				boidCPUs[gridAssignment[yPlusOne][x]].boidCPUID;
-
-		boidCPUs[i].neighbours[6] =
-				boidCPUs[gridAssignment[yPlusOne][xMinusOne]].boidCPUID;
-
-		boidCPUs[i].neighbours[7] =
-				boidCPUs[gridAssignment[y][xMinusOne]].boidCPUID;
-#else
-		neighbourCalcInnerLoop: for (int j = 0; j < boidCPUCount; j++) {
-			if ((boidCPUs[j].x == xMinusOne) && (boidCPUs[j].y == yMinusOne)) {
-				boidCPUs[i].neighbours[0] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == x) && (boidCPUs[j].y == yMinusOne)) {
-				boidCPUs[i].neighbours[1] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == xPlusOne) && (boidCPUs[j].y == yMinusOne)) {
-				boidCPUs[i].neighbours[2] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == xPlusOne) && (boidCPUs[j].y == y)) {
-				boidCPUs[i].neighbours[3] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == xPlusOne) && (boidCPUs[j].y == yPlusOne)) {
-				boidCPUs[i].neighbours[4] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == x) && (boidCPUs[j].y == yPlusOne)) {
-				boidCPUs[i].neighbours[5] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == xMinusOne) && (boidCPUs[j].y == yPlusOne)) {
-				boidCPUs[i].neighbours[6] = boidCPUs[j].boidCPUID;
-				break;
-
-			} else if ((boidCPUs[j].x == xMinusOne) && (boidCPUs[j].y == y)) {
-				boidCPUs[i].neighbours[7] = boidCPUs[j].boidCPUID;
-				break;
-			}
-		}
-#endif
+		boidCPUs[i].neighbours[0] = gridAssignment[yMinusOne][xMinusOne];
+		boidCPUs[i].neighbours[1] = gridAssignment[yMinusOne][x];
+		boidCPUs[i].neighbours[2] =	gridAssignment[yMinusOne][xPlusOne];
+		boidCPUs[i].neighbours[3] = gridAssignment[y][xPlusOne];
+		boidCPUs[i].neighbours[4] = gridAssignment[yPlusOne][xPlusOne];
+		boidCPUs[i].neighbours[5] = gridAssignment[yPlusOne][x];
+		boidCPUs[i].neighbours[6] = gridAssignment[yPlusOne][xMinusOne];
+		boidCPUs[i].neighbours[7] = gridAssignment[y][xMinusOne];
 	}
 
 	// Calculate the number of distinct neighbours for a BoidCPU
 	// TODO: This is a horrible way of doing it, find an alternative, if time
 	distNbrOuter: for (int i = 0; i < boidCPUCount; i++) {
-		uint8 distinctNeighbourCount = 0;
+		uint8 duplicatedNeighbourCount = 0;
 		distNbrMiddle: for (int j = 0; j < MAX_BOIDCPU_NEIGHBOURS; j++) {
-			distNbrInner:for (int k = j + 1; k < MAX_BOIDCPU_NEIGHBOURS; k++) {
+			distNbrInner: for (int k = j + 1; k < MAX_BOIDCPU_NEIGHBOURS; k++) {
 				if (boidCPUs[i].neighbours[j] == boidCPUs[i].neighbours[k]) {
-					distinctNeighbourCount++;
+					duplicatedNeighbourCount++;
 				}
 			}
 		}
-		boidCPUs[i].distinctNeighbourCount = distinctNeighbourCount;
+		boidCPUs[i].distinctNeighbourCount = MAX_BOIDCPU_NEIGHBOURS -
+				duplicatedNeighbourCount;
 	}
 
 	// TODO: Perhaps split this method into smaller ones?
@@ -376,7 +318,7 @@ void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
 	uint8 difference = -1;
 
 	incCloestMultLoop: for (int i = 1; i < number + 1; i++) {
-		decClosestMultLoop: for (int j = number; j > 0; j++) {
+		decClosestMultLoop: for (int j = number; j > 0; j--) {
 			if (i > j) break;
 			if ((i * j) == number) {
 				if ((j - i) < difference) {
@@ -447,6 +389,7 @@ void issueSetupInformation() {
 		data[CMD_SETUP_SIMWH_IDX + 1] = SIMULATION_HEIGHT;
 
 		dataLength = 17;
+		to = boidCPUs[i].gatekeeperID;
 		createCommand(dataLength, to, from, CMD_SIM_SETUP, data);
 	}
 }
@@ -512,31 +455,28 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type,
 void printCommand(bool send, uint32 *data) {
 	if (send) {
 		if (data[CMD_TO] == CMD_BROADCAST) {
-			std::cout << "-> TX, Controller sent broadcast:                  ";
+			std::cout << "-> TX, BoidMaster sent broadcast:                  ";
 		} else if (data[CMD_TO] == BOIDGPU_ID) {
-			std::cout << "-> TX, Controller sent command to BoidGPU:       ";
+			std::cout << "-> TX, BoidMaster sent command to BoidGPU:         ";
 		} else {
-			std::cout << "-> TX, Controller sent command to " << data[CMD_TO]
-					<< ":       ";
+			std::cout << "-> TX, BoidMaster sent command to " << data[CMD_TO]
+					<< ":              ";
 		}
 	} else {
 		if (data[CMD_TO] == CMD_BROADCAST) {
 			// This should never happen - only the controller can broadcast
-			std::cout << "<- RX, Controller received broadcast from "
-					<< data[CMD_FROM] << ": ";
+			std::cout << "<- RX, BoidMaster received broadcast from "
+					<< data[CMD_FROM] << ":      ";
 		} else if (data[CMD_FROM] == BOIDGPU_ID) {
 			// This should never happen - BoidGPU should just receive
-			std::cout << "<- RX, Controller received command from BoidGPU: ";
+			std::cout << "<- RX, BoidMaster received command from BoidGPU:   ";
 		} else {
-			std::cout << "<- RX, Controller received command from "
-					<< data[CMD_FROM] << ": ";
+			std::cout << "<- RX, BoidMaster received command from "
+					<< data[CMD_FROM] << ":        ";
 		}
 	}
 
 	switch (data[CMD_TYPE]) {
-	case 0:
-		std::cout << "do something                      ";
-		break;
 	case MODE_INIT:
 		std::cout << "initialise self                   ";
 		break;
@@ -547,7 +487,7 @@ void printCommand(bool send, uint32 *data) {
 		std::cout << "BoidCPU ping response             ";
 		break;
 	case CMD_USER_INFO:
-		std::cout << "output user info                  ";
+		std::cout << "user info                         ";
 		break;
 	case CMD_SIM_SETUP:
 		std::cout << "setup BoidCPU                     ";
@@ -579,11 +519,14 @@ void printCommand(bool send, uint32 *data) {
 	case CMD_ACK:
 		std::cout << "ACK signal                        ";
 		break;
+	case CMD_PING_END:
+		std::cout << "end of ping                       ";
+		break;
 	case CMD_KILL:
 		std::cout << "kill simulation                   ";
 		break;
 	default:
-		std::cout << "UNKNOWN COMMAND                   ";
+		std::cout << "UNKNOWN COMMAND: (" << data[CMD_TYPE] << ")             ";
 		break;
 	}
 
