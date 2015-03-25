@@ -6,13 +6,13 @@ uint32 tbInputData[MAX_INPUT_CMDS][MAX_CMD_LEN];
 uint32 tbOutputCount = 0;
 uint32 tbInputCount = 0;
 
-uint32 data[MAX_CMD_BODY_LEN];
-uint32 to;
-uint32 from = CONTROLLER_ID;
-uint32 dataLength = 0;
+uint32 tbData[MAX_CMD_BODY_LEN];
+uint32 tbTo;
+uint32 tbFrom = CONTROLLER_ID;
+uint32 tbDataLength = 0;
 
-uint32 coords[EDGE_COUNT];
-uint32 neighbours[MAX_BOIDCPU_NEIGHBOURS];
+uint32 tbCoords[EDGE_COUNT];
+uint32 tbNeighbours[MAX_BOIDCPU_NEIGHBOURS];
 
 bool drawBoids = false;
 
@@ -31,7 +31,7 @@ void processNeighbourReply();
 void processDrawInfo();
 
 void tbPrintCommand(bool send, uint32 *data);
-void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data);
+void tbCreateCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data);
 
 /**
  * This acts as the external interface to the BoidCPU
@@ -105,7 +105,7 @@ int main() {
 void testSimulationSetup() {
     // Test simulation setup ---------------------------------------------------
     // 21, 83, 1, 5 || 7, 10, 0, 0, 40, 40, [2], 3, 4, 5, 8, 11, 10, 9, 6, 80, 40
-    dataLength = 17;
+    tbDataLength = 17;
 
     uint32 newID;
     uint32 initialBoidCount = 10;
@@ -114,44 +114,44 @@ void testSimulationSetup() {
     // BoidCPU #4
     newID = 4;
 
-    coords[0] = 40;
-	coords[1] = 0;
-	coords[2] = 80;
-	coords[3] = 40;
+    tbCoords[0] = 40;
+	tbCoords[1] = 0;
+	tbCoords[2] = 80;
+	tbCoords[3] = 40;
 
-    neighbours[0] = 3;
-    neighbours[1] = 4;
-    neighbours[2] = 3;
-    neighbours[3] = 3;
-    neighbours[4] = 3;
-    neighbours[5] = 4;
-    neighbours[6] = 3;
-    neighbours[7] = 3;
+    tbNeighbours[0] = 3;
+    tbNeighbours[1] = 4;
+    tbNeighbours[2] = 3;
+    tbNeighbours[3] = 3;
+    tbNeighbours[4] = 3;
+    tbNeighbours[5] = 4;
+    tbNeighbours[6] = 3;
+    tbNeighbours[7] = 3;
 
-    data[CMD_SETUP_NEWID_IDX] = newID;
-    data[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
+    tbData[CMD_SETUP_NEWID_IDX] = newID;
+    tbData[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
 
     for (int i = 0; i < EDGE_COUNT; i++) {
-        data[CMD_SETUP_COORD_IDX + i] = coords[i];
+        tbData[CMD_SETUP_COORD_IDX + i] = tbCoords[i];
     }
 
-    data[CMD_SETUP_NBCNT_IDX] = distinctNeighbourCount;
+    tbData[CMD_SETUP_NBCNT_IDX] = distinctNeighbourCount;
 
     for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-        data[CMD_SETUP_BNBRS_IDX + i] = neighbours[i];
+        tbData[CMD_SETUP_BNBRS_IDX + i] = tbNeighbours[i];
     }
 
-    data[CMD_SETUP_SIMWH_IDX + 0] = 80;
-    data[CMD_SETUP_SIMWH_IDX + 1] = 40;
+    tbData[CMD_SETUP_SIMWH_IDX + 0] = 80;
+    tbData[CMD_SETUP_SIMWH_IDX + 1] = 40;
 
-    createCommand(dataLength, CMD_BROADCAST, from, CMD_SIM_SETUP, data);
+    tbCreateCommand(tbDataLength, CMD_BROADCAST, tbFrom, CMD_SIM_SETUP, tbData);
 }
 
 void testNeighbourSearch() {
     // 4 0 1 6 ||
-    dataLength = 0;
-    to = CMD_BROADCAST;
-    createCommand(dataLength, to, from, MODE_CALC_NBRS, data);
+    tbDataLength = 0;
+    tbTo = CMD_BROADCAST;
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, MODE_CALC_NBRS, tbData);
 }
 
 /**
@@ -221,86 +221,86 @@ void simulateNeighbourResponse() {
 //	}
 
 	// 34 99 3 8 || 12585728 5242880 21 19931904 -5242624 22 12590848 -3146240 23 36705792 1047808 24 4196608 -1048576 25 19927552 3144960 26 39850752 5241856 27 18875648 -1048064 28 15737088 3145216 29 3147776 -2097152 30
-	data[0] = 12585728;
-	data[1] = 5242880;
-	data[2] = 21;
-	data[3] = 19931904;
-	data[4] = -5242624;
-	data[5] = 22;
-	data[6] = 12590848;
-	data[7] = -3146240;
-	data[8] = 23;
-	data[9] = 36705792;
-	data[10] = 1047808;
-	data[11] = 24;
-	data[12] = 4196608;
-	data[13] = -1048576;
-	data[14] = 25;
-	data[15] = 19927552;
-	data[16] = 3144960;
-	data[17] = 26;
-	data[18] = 39850752;
-	data[19] = 5241856;
-	data[20] = 27;
-	data[21] = 18875648;
-	data[22] = -1048064;
-	data[23] = 28;
-	data[24] = 15737088;
-	data[25] = 3145216;
-	data[26] = 29;
-	data[27] = 3147776;
-	data[28] = -2097152;
-	data[29] = 30;
+	tbData[0] = 12585728;
+	tbData[1] = 5242880;
+	tbData[2] = 21;
+	tbData[3] = 19931904;
+	tbData[4] = -5242624;
+	tbData[5] = 22;
+	tbData[6] = 12590848;
+	tbData[7] = -3146240;
+	tbData[8] = 23;
+	tbData[9] = 36705792;
+	tbData[10] = 1047808;
+	tbData[11] = 24;
+	tbData[12] = 4196608;
+	tbData[13] = -1048576;
+	tbData[14] = 25;
+	tbData[15] = 19927552;
+	tbData[16] = 3144960;
+	tbData[17] = 26;
+	tbData[18] = 39850752;
+	tbData[19] = 5241856;
+	tbData[20] = 27;
+	tbData[21] = 18875648;
+	tbData[22] = -1048064;
+	tbData[23] = 28;
+	tbData[24] = 15737088;
+	tbData[25] = 3145216;
+	tbData[26] = 29;
+	tbData[27] = 3147776;
+	tbData[28] = -2097152;
+	tbData[29] = 30;
 
-	createCommand(30, 99, 3, CMD_NBR_REPLY, data);
+	tbCreateCommand(30, 99, 3, CMD_NBR_REPLY, tbData);
 }
 
 void testCalcNextBoidPos() {
     // 4 0 1 9 ||
-    dataLength = 0;
-    to = CMD_BROADCAST;
-    createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
+    tbDataLength = 0;
+    tbTo = CMD_BROADCAST;
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, MODE_POS_BOIDS, tbData);
 }
 
 void testLoadBalance() {
     // 4 0 1 10 ||
-    dataLength = 0;
-    to = CMD_BROADCAST;
-    createCommand(dataLength, to, from, CMD_LOAD_BAL, data);
+    tbDataLength = 0;
+    tbTo = CMD_BROADCAST;
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_LOAD_BAL, tbData);
 }
 
 void testMoveBoids() {
     // 4 0 1 11 ||
-    dataLength = 0;
-    to = CMD_BROADCAST;
-    createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data);
+    tbDataLength = 0;
+    tbTo = CMD_BROADCAST;
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, MODE_TRAN_BOIDS, tbData);
 }
 
 void simulateBoidTransfer() {
 	// 9 3 4 12 || 31 12 11 5 -1
-	dataLength = 5;
-	to = CMD_BROADCAST;
+	tbDataLength = 5;
+	tbTo = CMD_BROADCAST;
 
-	data[0] = 42;
-	data[1] = 48;
-	data[2] = 20;
-	data[3] = -1;
-	data[4] = -3;
-	createCommand(dataLength, to, from, CMD_BOID, data);
+	tbData[0] = 42;
+	tbData[1] = 48;
+	tbData[2] = 20;
+	tbData[3] = -1;
+	tbData[4] = -3;
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_BOID, tbData);
 
-	data[0] = 43;
-	data[1] = 53;
-	data[2] = 21;
-	data[3] = 0;
-	data[4] = 4;
-	createCommand(dataLength, to, from, CMD_BOID, data);
+	tbData[0] = 43;
+	tbData[1] = 53;
+	tbData[2] = 21;
+	tbData[3] = 0;
+	tbData[4] = 4;
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_BOID, tbData);
 }
 
 void testDrawBoids() {
     // 4 0 1 14 ||
-    dataLength = 0;
-    to = CMD_BROADCAST;
-    createCommand(dataLength, to, from, MODE_DRAW, data);
+    tbDataLength = 0;
+    tbTo = CMD_BROADCAST;
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, MODE_DRAW, tbData);
 }
 
 /**
@@ -343,8 +343,8 @@ void processDrawInfo() {
         char edge = '*';
 
         // Get the boid bounds
-        int boidCPUWidth =  coords[X_MAX] - coords[X_MIN];
-        int boidCPUHeight = coords[Y_MAX] - coords[Y_MIN];
+        int boidCPUWidth =  tbCoords[X_MAX] - tbCoords[X_MIN];
+        int boidCPUHeight = tbCoords[Y_MAX] - tbCoords[Y_MIN];
 
         // Get the number of boids
         int tbBoidCount = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 3;
@@ -461,7 +461,7 @@ void processDrawInfo() {
     }
 }
 
-void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {
+void tbCreateCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data) {
     tbOutputData[tbOutputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
     tbOutputData[tbOutputCount][CMD_TO]   = to;
     tbOutputData[tbOutputCount][CMD_FROM] = from;
@@ -480,91 +480,92 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
  * Parses the supplied command and prints it out to the terminal
  */
 void tbPrintCommand(bool send, uint32 *data) {
-    if (send) {
-        if (data[CMD_TO] == CMD_BROADCAST) {
-            std::cout << "-> TX, Controller sent broadcast: ";
-        } else if (data[CMD_TO] == BOIDGPU_ID) {
-            std::cout << "-> TX, Controller sent command to BoidGPU: ";
-        } else {
-            std::cout << "-> TX, Controller sent command to " << data[CMD_TO] << ": ";
-        }
-    } else {
-        if (data[CMD_TO] == CMD_BROADCAST) {
-            // This should never happen - BoidCPUs should not be able to broadcast
-            std::cout << "<- RX, Controller received broadcast from " << data[CMD_FROM] << ": ";
-        } else if (data[CMD_FROM] == BOIDGPU_ID) {
-            // This should never happen
-            std::cout << "<- RX, Controller received command from BoidGPU: ";
-        } else {
-            std::cout << "<- RX, Controller received command from " << data[CMD_FROM] << ": ";
-        }
-    }
+	if (send) {
+		if (data[CMD_TO] == CMD_BROADCAST) {
+			std::cout << "-> TX, TestBench sent broadcast:                   ";
+		} else if (data[CMD_TO] == BOIDGPU_ID) {
+			std::cout << "-> TX, TestBench sent command to BoidGPU:          ";
+		} else if (data[CMD_TO] == CONTROLLER_ID) {
+			std::cout << "-> TX, TestBench sent command to BoidMaster:       ";
+		} else {
+			std::cout << "-> TX, TestBench sent command to " << data[CMD_TO]
+					<< ":               ";
+		}
+	} else {
+		if (data[CMD_FROM] == BOIDGPU_ID) {
+			// This should never happen - BoidGPU should just receive
+			std::cout << "<- RX, TestBench received command from BoidGPU:    ";
+		} else if (data[CMD_FROM] == CONTROLLER_ID) {
+			std::cout << "<- RX, TestBench received command from BoidMaster: ";
+		} else {
+			std::cout << "<- RX, TestBench received command from "
+					<< data[CMD_FROM] << ":         ";
+		}
+	}
 
     switch (data[CMD_TYPE]) {
-        case 0:
-            std::cout << "do something";
-            break;
-        case MODE_INIT:
-            std::cout << "initialise self";
-            break;
-        case CMD_PING:
-            std::cout << "BoidCPU ping";
-            break;
-        case CMD_PING_REPLY:
-            std::cout << "BoidCPU ping response";
-            break;
-        case CMD_USER_INFO:
-            std::cout << "output user info";
-            break;
-        case CMD_SIM_SETUP:
-            std::cout << "setup BoidCPU";
-            break;
-        case MODE_CALC_NBRS:
-            std::cout << "calculate neighbours";
-            break;
-        case CMD_NBR_REPLY:
-            std::cout << "neighbouring boids from neighbour";
-            break;
-        case MODE_POS_BOIDS:
-            std::cout << "calculate new boid positions";
-            break;
-        case CMD_LOAD_BAL:
-            std::cout << "load balance";
-            break;
-        case MODE_TRAN_BOIDS:
-            std::cout << "transfer boids";
-            break;
-        case CMD_BOID:
-            std::cout << "boid";
-            break;
-        case MODE_DRAW:
-            std::cout << "send boids to BoidGPU";
-            break;
-        case CMD_DRAW_INFO:
-            std::cout << "boid info heading to BoidGPU";
-            break;
-        case CMD_ACK:
-        	std::cout << "ACK signal";
-        	break;
-        case CMD_KILL:
-            std::cout << "kill simulation";
-            break;
-        default:
-            std::cout << "UNKNOWN COMMAND";
-            break;
-    }
-    std::cout << std::endl;
+	case MODE_INIT:
+		std::cout << "initialise self                   ";
+		break;
+	case CMD_PING:
+		std::cout << "BoidCPU ping                      ";
+		break;
+	case CMD_PING_REPLY:
+		std::cout << "BoidCPU ping response             ";
+		break;
+	case CMD_USER_INFO:
+		std::cout << "user info                         ";
+		break;
+	case CMD_SIM_SETUP:
+		std::cout << "setup BoidCPU                     ";
+		break;
+	case MODE_CALC_NBRS:
+		std::cout << "calculate neighbours              ";
+		break;
+	case CMD_NBR_REPLY:
+		std::cout << "neighbouring boids from neighbour ";
+		break;
+	case MODE_POS_BOIDS:
+		std::cout << "calculate new boid positions      ";
+		break;
+	case CMD_LOAD_BAL:
+		std::cout << "load balance                      ";
+		break;
+	case MODE_TRAN_BOIDS:
+		std::cout << "transfer boids                    ";
+		break;
+	case CMD_BOID:
+		std::cout << "boid in transit                   ";
+		break;
+	case MODE_DRAW:
+		std::cout << "send boids to BoidGPU             ";
+		break;
+	case CMD_DRAW_INFO:
+		std::cout << "boid info heading to BoidGPU      ";
+		break;
+	case CMD_ACK:
+		std::cout << "ACK signal                        ";
+		break;
+	case CMD_PING_END:
+		std::cout << "end of ping                       ";
+		break;
+	case CMD_KILL:
+		std::cout << "kill simulation                   ";
+		break;
+	default:
+		std::cout << "UNKNOWN COMMAND: (" << data[CMD_TYPE] << ")             ";
+		break;
+	}
 
-    std::cout << "\t";
-    for (int i = 0; i < CMD_HEADER_LEN; i++) {
-        std::cout << data[i] << " ";
-    }
+	int i = 0;
+	for (i = 0; i < CMD_HEADER_LEN; i++) {
+		std::cout << data[i] << " ";
+	}
+	std::cout << "|| ";
 
-    std::cout << "|| ";
-
-    for (int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
-        std::cout << data[CMD_HEADER_LEN + i] << " ";
-    }
-    std::cout << std::endl;
+	for (i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		std::cout << data[CMD_HEADER_LEN + i] << " ";
+	}
+	std::cout << std::endl;
 }
 
