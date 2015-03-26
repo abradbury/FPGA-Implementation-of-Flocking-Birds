@@ -10,61 +10,70 @@
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
 
-#define CONTROLLER_CHANNEL		0	// The ID of the channel of the controller
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
-#define ALL_CHANNELS			99	// When a message is sent to all channels
+#define ALL_BOIDCPU_CHANNELS	99	// When a message is sent to all channels
 
 #define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
 
 #define KILL_KEY				0x6B// 'k'
 #define PAUSE_KEY				0x70// 'p'
 
+#define EXTERNAL_RECIPIENT				0
+#define INTERNAL_RECIPIENT				1
+#define INTERNAL_AND_EXTERNAL_RECIPIENT	2
+
 // Setup Ethernet and its transmit and receive buffers
 // TODO: Determine maximum buffer size
 // TODO: Ethernet requires a u8 buffer, but FXL requires a u32...
 XEmacLite ether;
-u8 tmit_buffer[XEL_MAX_FRAME_SIZE];
-u8 recv_buffer[XEL_MAX_FRAME_SIZE];
+u8 externalOutput[XEL_MAX_FRAME_SIZE];
+u8 externalInput[XEL_MAX_FRAME_SIZE];
 
 // Setup other variables
-u8 initialisedBoidCPUCounter = 0;
-u8 residentNbrCounter = 0;
-u8 residentBoidCPUChannels[RESIDENT_BOIDCPU_COUNT];
-u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
+#ifdef MASTER_IS_RESIDENT
+u8 channelSetupCounter = 1;
+u8 discoveredBoidCPUCount = 0;
+u8 channelIDList[RESIDENT_BOIDCPU_COUNT + 1];
+#else
+u8 channelSetupCounter = 0;
+u8 channelIDList[RESIDENT_BOIDCPU_COUNT];
+#endif
 
-u32 commandData[MAX_CMD_BODY_LEN];
+// If the BoidMaster is present, then it must be on channel 0
+
+u32 messageData[MAX_CMD_BODY_LEN];
 u32 gatekeeperID = 0;
-bool boidCPUIDsFinalised = false;
+bool boidCPUsSetup = false;
+bool fowardMessage = true;
 u8 ackCount = 0;
 
-#ifdef MASTER_IS_RESIDENT
-u8 discoveredBoidCPUCount = 0;
-#endif
+u8 residentNbrCounter = 0;
+u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
 
 // Protocols
 void checkForInput();
 void sendKillCommand();
+
+void respondToPing();
+void interceptSetupInfo(u32 *interceptedData);
+
+u8 internalChannelLookUp(u32 to);
+u8 recipientLookUp(u32 to);
+bool externalMessageRelevant();
+void interceptMessage(u32 *data);
+void processReceivedExternalMessage();
+void processReceivedInternalMessage(u32 *inputData);
+void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
+void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
+void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 
 #ifdef MASTER_IS_RESIDENT
 void takeUserInput();
 void uiBoidCPUSearch();
 #endif
 
-u8 channelLookup(u32 to);
-bool arrivalCheckPassed(u32 from);
-bool departureCheckPassed(u32 to);
-
 void putFSLData(u32 value, u32 channel);
 u32 getFSLData(u32 *data, u32 channel);
-
-void interceptPing();
-void interceptSetupInfo();
-
-void processExternalMessage();
-void processInternalMessage(u32 *data, u8 channel);
-void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
-void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
-		u8 channel);
 
 //============================================================================//
 //- Main Method --------------------------------------------------------------//
@@ -136,11 +145,11 @@ int mainThree() {
 void checkForInput() {
 	// Check for external (Ethernet) data --------------------------------------
 	volatile int recv_len = 0;
-	recv_len = XEmacLite_Recv(&ether, recv_buffer);
+	recv_len = XEmacLite_Recv(&ether, externalInput);
 
 	// Process received external data ------------------------------------------
 	if (recv_len != 0) {
-		processExternalMessage();
+		processReceivedExternalMessage();
 	}
 
 	// Check for internal (FXL/AXI) data ---------------------------------------
@@ -152,11 +161,161 @@ void checkForInput() {
 
 	// Process received internal data ------------------------------------------
 	if (!channelZeroInvalid) {
-		processInternalMessage(channelZeroData, 0);
+		processReceivedInternalMessage(channelZeroData);
 	}
 
 	if (!channelOneInvalid) {
-		processInternalMessage(channelOneData, 1);
+		processReceivedInternalMessage(channelOneData);
+	}
+}
+
+//============================================================================//
+//- Message Reception Functions ----------------------------------------------//
+//============================================================================//
+
+void processReceivedInternalMessage(u32 *inputData) {
+	fowardMessage = true;
+
+	if (!boidCPUsSetup) {
+		interceptMessage(inputData);
+	}
+
+	// Collect the ACKs for the recipient BoidCPUs and issue a collective one
+	if (inputData[CMD_TYPE] == CMD_ACK) {
+		fowardMessage = false;
+		ackCount++;
+
+#ifdef MASTER_IS_RESIDENT
+		if (ackCount == (RESIDENT_BOIDCPU_COUNT + 1)) {
+#else
+		if (ackCount == RESIDENT_BOIDCPU_COUNT) {
+#endif
+			sendMessage(0, CONTROLLER_ID, gatekeeperID, CMD_ACK, messageData);
+			ackCount = 0;
+		}
+	}
+
+	// Forward the message, if needed
+	if (fowardMessage) {
+		u32 inputDataBodyLength = inputData[CMD_LEN] - CMD_HEADER_LEN;
+		u32 inputDataBody[inputDataBodyLength];
+		int i = 0;
+		for (i = 0; i < inputDataBodyLength; i++) {
+			inputDataBody[i] = inputData[CMD_HEADER_LEN + i];
+		}
+
+		sendMessage(inputDataBodyLength, inputData[CMD_TO],
+				inputData[CMD_FROM], inputData[CMD_TYPE], inputDataBody);
+	}
+}
+
+void processReceivedExternalMessage() {
+	if (!boidCPUsSetup) {
+		interceptMessage((u32*) externalInput);
+	} else if (externalMessageRelevant()) {
+		// Forward the message
+		u32 dataBodyLength = externalInput[CMD_LEN] - CMD_HEADER_LEN;
+		u32 dataBody[dataBodyLength];
+		int i = 0;
+		for (i = 0; i < dataBodyLength; i++) {
+			dataBody[i] = externalInput[CMD_HEADER_LEN + i];
+		}
+
+		sendMessage(dataBodyLength, externalInput[CMD_TO],
+				externalInput[CMD_FROM], externalInput[CMD_TYPE], dataBody);
+	}
+}
+
+//============================================================================//
+//- Message Transmission Functions -------------------------------------------//
+//============================================================================//
+
+void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
+	u8 recipientLocation;
+
+	// If the BoidCPUs are not yet set up, a setup message is being sent and
+	// the message is addressed to this Gatekeeper, send internally. If it is
+	// not addressed to this Gatekeeper, send it externally.
+	if ((!boidCPUsSetup) && (type == CMD_SIM_SETUP)) {
+		if (to == gatekeeperID) {
+			recipientLocation = INTERNAL_RECIPIENT;
+		} else {
+			recipientLocation = EXTERNAL_RECIPIENT;
+		}
+	}
+#ifdef MASTER_IS_RESIDENT
+	// Don't forward a ping to internal BoidCPUs
+	else if (type == CMD_PING) {
+		recipientLocation = EXTERNAL_RECIPIENT;
+	}
+#endif
+	else {
+		recipientLocation = recipientLookUp(to);
+	}
+
+	// If MASTER_IS_PRESENT and CMD_PING
+	// 	Then recipient is EXTERNAL
+
+	// Send a message internally or externally, depending on the recipient
+	if (recipientLocation == EXTERNAL_RECIPIENT) {
+		sendExternalMessage(len, to, from, type, data);
+	} else if (recipientLocation == INTERNAL_RECIPIENT) {
+		sendInternalMessage(len, to, from, type, data);
+	} else if (recipientLocation == INTERNAL_AND_EXTERNAL_RECIPIENT) {
+		sendExternalMessage(len, to, from, type, data);
+		sendInternalMessage(len, to, from, type, data);
+	}
+}
+
+/**
+ * Sends a message internally, over the FSL/AXI bus/stream, to BoidCPUs that
+ * reside on the same FPGA that the MicroBlaze does.
+ */
+void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
+	u8 channel;
+
+	// If the BoidCPUs are not yet setup and a setup message is being sent,
+	// send the message down a specific channel
+	if ((!boidCPUsSetup) && (type == CMD_SIM_SETUP)) {
+		channel = channelSetupCounter;
+	} else {
+		channel = internalChannelLookUp(to);
+	}
+
+	// First, create the message
+	u32 command[MAX_CMD_LEN];
+	int i = 0;
+
+	command[CMD_LEN] = len + CMD_HEADER_LEN;
+	command[CMD_TO] = to;
+	command[CMD_FROM] = from;
+	command[CMD_TYPE] = type;
+
+	if (len > 0) {
+		for (i = 0; i < len; i++) {
+			command[CMD_HEADER_LEN + i] = data[i];
+		}
+	}
+
+	// Finally, send the message
+	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+		switch (channel) {
+		case 0:
+			putFSLData(command[i], 0);
+			break;
+		case 1:
+			putFSLData(command[i], 1);
+			break;
+		default:
+			// Otherwise, send to all BoidCPU channels
+#ifdef MASTER_IS_RESIDENT
+			putFSLData(command[i], 1);
+#else
+			putFSLData(command[i], 0);
+			putFSLData(command[i], 1);
+#endif
+			break;
+		}
 	}
 }
 
@@ -182,195 +341,140 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 
 	// Then, populate the transmit buffer
 	for (i = 0; i < command[CMD_LEN]; i++) {
-		tmit_buffer[i] = command[i];
+		externalOutput[i] = command[i];
 	}
 
 	// Finally, clear the receive buffer before sending
 	XEmacLite_FlushReceive(&ether);
-	XEmacLite_Send(&ether, tmit_buffer, command[CMD_LEN]);
+	XEmacLite_Send(&ether, externalOutput, command[CMD_LEN]);
 }
 
-/**
- * Sends a message internally, over the FSL/AXI bus/stream, to BoidCPUs that
- * reside on the same FPGA that the MicroBlaze does.
- */
-void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data,
-		u8 channel) {
-	// First, create the message
-	u32 command[MAX_CMD_LEN];
-	int i = 0;
-
-	command[CMD_LEN] = len + CMD_HEADER_LEN;
-	command[CMD_TO] = to;
-	command[CMD_FROM] = from;
-	command[CMD_TYPE] = type;
-
-	if (len > 0) {
-		for (i = 0; i < len; i++) {
-			command[CMD_HEADER_LEN + i] = data[i];
-		}
-	}
-
-	// Finally, send the message
-	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-		if (channel == 0) {
-			putFSLData(command[i], 0);
-		} else if (channel == 1) {
-			putFSLData(command[i], 1);
-		} else {
-			putFSLData(command[i], 0);
-			putFSLData(command[i], 1);
-		}
-	}
-}
+//============================================================================//
+//- Message Transceive Supporting Functions ----------------------------------//
+//============================================================================//
 
 /**
- * On receiving an external message, determine if it is addressed to any
- * internal BoidCPUs. If it is, then forward it internally, if not, ignore it.
- *
- * If the BoidCPUs have not been finalised yet and the Gatekeeper receives a
- * ping command from the controller, it intercepts the command and responds
- * with the number of BoidCPUs that it serves and a random Gatekeeper ID.
- *
- * The Gatekeeper will then receive a setup message, addressed to its temporary
- * ID, for each of the BoidCPUs that it serves. The Gatekeeper will then
- * forward the setup message (as a broadcast) to a resident BoidCPU. It will
- * then update its list of resident BoidCPU IDs and their resident channel.
+ * Determine if a received external message should be forwarded internally or
+ * ignored. It should be forwarded internally if:
+ *  - it is from the BoidMaster
+ *  - it is a broadcast command
+ *  - it is from a BoidCPU that is a neighbour of a resident BoidCPU
+ *  - it is addressed to the BoidMaster AND the BoidMaster is resident
  */
-void processExternalMessage() {
-	if (!boidCPUIDsFinalised) {
-		if (recv_buffer[CMD_TYPE] == CMD_PING) {
-			interceptPing();
-		} else if ((recv_buffer[CMD_TO] = gatekeeperID)
-				&& (recv_buffer[CMD_TYPE] == CMD_SIM_SETUP)) {
-			interceptSetupInfo();
-		}
-	} else if (arrivalCheckPassed(recv_buffer[CMD_FROM])) {
+bool externalMessageRelevant() {
+	bool result = false;
 
-#ifdef MASTER_IS_RESIDENT
-		if (recv_buffer[CMD_TYPE] == CMD_PING_REPLY) {
-			xil_printf("found %d..");
-			discoveredBoidCPUCount++;
-		}
-#endif
-		// Collate the data to forward
-		int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
-		u32 dataToForward[dataLength];
-
+	if (externalInput[CMD_FROM] == CONTROLLER_ID) {
+		result = true;
+	} else if (externalInput[CMD_TO] == CMD_BROADCAST) {
+		result = true;
+	} else if (externalInput[CMD_FROM] >= FIRST_BOIDCPU_ID) {
 		int i = 0;
-		for (i = 0; i < dataLength; i++) {
-			dataToForward[i] = recv_buffer[CMD_HEADER_LEN + i];
-		}
-
-		u8 channel = channelLookup(recv_buffer[CMD_TO]);
-
-		sendInternalMessage(recv_buffer[CMD_LEN], recv_buffer[CMD_TO],
-				recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward,
-				channel);
-	}
-}
-
-/**
- * On receiving an internal message, determine if the message recipient is
- * internal or external and forward as appropriate.
- */
-void processInternalMessage(u32 *data, u8 channel) {
-	if (!boidCPUIDsFinalised) {
-		if (data[CMD_TYPE] == CMD_PING) {
-			interceptPing();
-		} else if ((data[CMD_TO] = gatekeeperID)
-				&& (data[CMD_TYPE] == CMD_SIM_SETUP)) {
-			interceptSetupInfo();
-		}
-	} else if (data[CMD_TYPE] == CMD_ACK) {
-		ackCount++;
-
-		if (ackCount == RESIDENT_BOIDCPU_COUNT) {
-			u32 dataToForward[1] = { 0 };
-			sendExternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_ACK,
-					dataToForward);
-
-			ackCount = 0;
+		for (i = 0; i < residentNbrCounter; i++) {
+			if (externalInput[CMD_FROM] == residentBoidCPUNeighbours[i]) {
+				result = true;
+			}
 		}
 	}
 
 #ifdef MASTER_IS_RESIDENT
-	else if (data[CMD_TYPE] == CMD_PING_REPLY) {
-		xil_printf("found %d..");
-		discoveredBoidCPUCount++;
+	else if (externalInput[CMD_TO] == CONTROLLER_ID) {
+		result = true;
 	}
 #endif
 
-	else {
-		// Collate the data to forward
-		int dataLength = data[CMD_LEN] - CMD_HEADER_LEN;
-		u32 dataToForward[dataLength];
+	return result;
+}
 
+/**
+ * Determine whether the message recipient is internal or external to the
+ * Gatekeeper, or whether the message needs to be send both internally and
+ * externally.
+ */
+u8 recipientLookUp(u32 to) {
+	u8 recipientInterface;
+
+	if (to == CONTROLLER_ID) {
+#ifdef MASTER_IS_RESIDENT
+		recipientInterface = INTERNAL_RECIPIENT;
+#else
+		recipientInterface = EXTERNAL_RECIPIENT;
+#endif
+	} else if (to == CMD_BROADCAST) {
+		recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+	} else {
+		recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+	}
+
+	return recipientInterface;
+}
+
+//============================================================================//
+//- Message Interception Functions -------------------------------------------//
+//============================================================================//
+
+/**
+ * If the BoidCPUs are not yet setup, intercept certain messages. A ping
+ * message is intercepted and the Gatekeeper responds on behalf of the
+ * BoidCPUs. The BoidCPU setup information is intercepted in order for the
+ * Gatekeeper to know the IDs of its resident BoidCPUs. A ping reply is
+ * intercepted, if the BoidMaster is present, and outputted to the UI.
+ */
+void interceptMessage(u32 *interceptedData) {
+	if (interceptedData[CMD_TYPE] == CMD_PING) {
+		respondToPing();
+	} else if ((interceptedData[CMD_TO] == gatekeeperID)
+			&& (interceptedData[CMD_TYPE] == CMD_SIM_SETUP)) {
+		interceptSetupInfo(interceptedData);
+		fowardMessage = false;
+	}
+
+#ifdef MASTER_IS_RESIDENT
+	else if (interceptedData[CMD_TYPE] == CMD_PING_REPLY) {
+		xil_printf("found %d..", interceptedData[CMD_HEADER_LEN]);
+		discoveredBoidCPUCount += interceptedData[CMD_HEADER_LEN];
+
+		// Forward the data
 		int i = 0;
-		for (i = 0; i < dataLength; i++) {
-			dataToForward[i] = data[CMD_HEADER_LEN + i];
+		u32 dataBodyLength = interceptedData[CMD_LEN] - CMD_HEADER_LEN;
+		u32 dataBody[dataBodyLength];
+		for (i = 0; i < dataBodyLength; i++) {
+			dataBody[i] = interceptedData[CMD_HEADER_LEN + i];
 		}
 
-		// If the command is a multicast message, send it both internally and
-		// externally. Otherwise, check if the message recipient is external.
-		//
-		// TODO: Improve this so that a check is made as to whether all the
-		// 	neighbours are within the current BoidCPU.
-		if (data[CMD_TO] == CMD_MULTICAST) {
-			sendInternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-					data[CMD_TYPE], dataToForward, ALL_CHANNELS);
-
-			sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-					data[CMD_TYPE], dataToForward);
-
-		} else if (departureCheckPassed(data[CMD_TO])) {
-			sendExternalMessage(data[CMD_LEN], data[CMD_TO], data[CMD_FROM],
-					data[CMD_TYPE], dataToForward);
-		}
+		sendMessage(dataBodyLength, CMD_BROADCAST, interceptedData[CMD_FROM],
+				interceptedData[CMD_TYPE], dataBody);
 	}
-}
-
-//============================================================================//
-//- Message Intercept --------------------------------------------------------//
-//============================================================================//
-
-/**
- * Intercepts a ping command from the BoidMaster and responds with the number
- * of BoidCPUs that are resident. The command is not forwarded.
- */
-void interceptPing() {
-	u32 data[1] = { RESIDENT_BOIDCPU_COUNT };
-	sendExternalMessage(1, CONTROLLER_ID, gatekeeperID, CMD_PING_REPLY, data);
+#endif
 }
 
 /**
- * Intercepts a setup command use using it to build a list of the IDs of the
- * resident BoidCPUs and their neighbours. The commands are then forwarded to
- * the BoidCPUs.
+ * When the Gatekeeper detects a ping message, it responds on behalf of the
+ * resident BoidCPUs with the number of resident BoidCPUs.
  */
-void interceptSetupInfo() {
-	// Create a copy of the data supplied with the message
-	int dataLength = recv_buffer[CMD_LEN] - CMD_HEADER_LEN;
-	u32 dataToForward[dataLength];
-	int i = 0;
-	for (i = 0; i < dataLength; i++) {
-		dataToForward[i] = recv_buffer[CMD_HEADER_LEN + i];
-	}
+void respondToPing() {
+	messageData[0] = RESIDENT_BOIDCPU_COUNT;
+	sendMessage(1, CONTROLLER_ID, gatekeeperID, CMD_PING_REPLY, messageData);
 
-	// Forward the setup message one of the resident BoidCPUs
-	sendInternalMessage(recv_buffer[CMD_LEN], CMD_BROADCAST,
-			recv_buffer[CMD_FROM], recv_buffer[CMD_TYPE], dataToForward,
-			initialisedBoidCPUCounter);
+	xil_printf("found %d..", RESIDENT_BOIDCPU_COUNT);
+	discoveredBoidCPUCount += RESIDENT_BOIDCPU_COUNT;
+}
 
-	// Update the Gatekeeper's internal routing table
-	residentBoidCPUChannels[initialisedBoidCPUCounter] =
-			recv_buffer[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
+/**
+ * When the Gatekeeper detects a setup command addressed to it, it extracts
+ * the newly-assigned BoidCPU IDs and BoidCPU neighbours before forwarding the
+ * message to one of the resident BoidCPUs.
+ */
+void interceptSetupInfo(u32 * setupData) {
+	// Store the resident BoidCPU IDs and associated channel
+	channelIDList[channelSetupCounter] = setupData[CMD_HEADER_LEN
+			+ CMD_SETUP_NEWID_IDX];
 
-	// Update the Gatekeeper's list of neighbours to residents
+	// Update Gatekeeper's neighbour list
+	int i = 0, j = 0;
 	for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-		u8 nbr = recv_buffer[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
+		u8 nbr = setupData[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
 		bool neighbourAlreadyListed = false;
-		int j = 0;
 
 		for (j = 0; j < residentNbrCounter; j++) {
 			if (nbr == residentBoidCPUNeighbours[j]) {
@@ -385,9 +489,24 @@ void interceptSetupInfo() {
 		}
 	}
 
-	initialisedBoidCPUCounter++;
-	if (initialisedBoidCPUCounter == RESIDENT_BOIDCPU_COUNT) {
-		boidCPUIDsFinalised = true;
+	// Forward the data
+	u32 setupDataBodyLength = setupData[CMD_LEN] - CMD_HEADER_LEN;
+	u32 setupDataBody[setupDataBodyLength];
+	for (i = 0; i < setupDataBodyLength; i++) {
+		setupDataBody[i] = setupData[CMD_HEADER_LEN + i];
+	}
+
+	sendMessage(setupDataBodyLength, CMD_BROADCAST, setupData[CMD_FROM],
+			setupData[CMD_TYPE], setupDataBody);
+
+	// Update counters
+	channelSetupCounter++;
+#ifdef MASTER_IS_RESIDENT
+	if (channelSetupCounter == (RESIDENT_BOIDCPU_COUNT + 1)) {
+#else
+		if (channelSetupCounter == RESIDENT_BOIDCPU_COUNT) {
+#endif
+		boidCPUsSetup = true;
 	}
 }
 
@@ -398,11 +517,12 @@ void interceptSetupInfo() {
 /**
  * Sends CMD_KILL to all entities in the system, on behalf of the BoidMaster.
  * Called when the user pressed the KILL_KEY.
+ *
+ * TODO: Need to reset a load of variables...
  */
 void sendKillCommand() {
-	sendExternalMessage(0, CMD_BROADCAST, gatekeeperID, CMD_KILL, commandData);
-	sendInternalMessage(0, CMD_BROADCAST, gatekeeperID, CMD_KILL, commandData,
-			ALL_CHANNELS);
+	sendExternalMessage(0, CMD_BROADCAST, gatekeeperID, CMD_KILL, messageData);
+	sendInternalMessage(0, CMD_BROADCAST, gatekeeperID, CMD_KILL, messageData);
 }
 
 #ifdef MASTER_IS_RESIDENT
@@ -440,8 +560,9 @@ void takeUserInput() {
 	}
 
 	// If the user-entered data is valid, sent it to the controller
+	messageData[0] = boidCount;
 	sendInternalMessage(1, CONTROLLER_ID, gatekeeperID, CMD_USER_INFO,
-			commandData, CONTROLLER_CHANNEL);
+			messageData);
 }
 
 /**
@@ -452,7 +573,7 @@ void uiBoidCPUSearch() {
 	do {
 		print(" Searching for BoidCPUs (press ENTER to stop)...");
 		sendInternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_START,
-				commandData, CONTROLLER_CHANNEL);
+				messageData);
 
 		bool enterKeyPressed = false;
 		do {
@@ -476,7 +597,7 @@ void uiBoidCPUSearch() {
 
 	// When the ping search is complete, inform the BoidMaster
 	sendInternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_END,
-			commandData, CONTROLLER_CHANNEL);
+			messageData);
 }
 
 #endif
@@ -486,57 +607,27 @@ void uiBoidCPUSearch() {
 //============================================================================//
 
 /**
- * Determines if external messages should be forwarded internally. Returns true
- * when a message should be forwarded internally, false if it should not.
- *
- * Allow the external message in if:
- *  - It is from the controller (broadcast or direct)
- *  - It is from a neighbour of one of the resident BoidCPUs
- */
-bool arrivalCheckPassed(u32 from) {
-	if (from == CONTROLLER_ID) {
-		return true;
-	} else if (from >= FIRST_BOIDCPU_ID) {
-		int i = 0;
-		for (i = 0; i < residentNbrCounter; i++) {
-			if (from == residentBoidCPUNeighbours[i]) {
-				return true;
-			}
-		}
-	}
-
-	return false;
-}
-
-/**
- * Determine if an internal message should be forwarded externally. Return true
- * if it should and false if it should not be.
- *
- * Forward the message externally if:
- *  - It is to the controller
- *  - It is to the BoidGPU
- */
-bool departureCheckPassed(u32 to) {
-	if ((to == CONTROLLER_ID) || (to == BOIDGPU_ID)) {
-		return true;
-	} else {
-		return false;
-	}
-}
-
-/**
  * Determines the channel that at message should be sent down to reach the
  * recipient BoidCPU. If a suitable channel cannot be found, it is sent to all.
  */
-u8 channelLookup(u32 to) {
+u8 internalChannelLookUp(u32 to) {
 	int i = 0;
-	for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
-		if (residentBoidCPUChannels[i] == to) {
+
+#ifdef MASTER_IS_RESIDENT
+	if (to == CONTROLLER_ID) {
+		return 0;
+	}
+
+	for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
+#else
+		for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
+#endif
+		if (channelIDList[i] == to) {
 			return i;
 		}
 	}
 
-	return ALL_CHANNELS;
+	return ALL_BOIDCPU_CHANNELS;	// e.g. on broadcast
 }
 
 /**
