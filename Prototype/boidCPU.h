@@ -66,6 +66,8 @@
 #define MAX_BOIDCPU_NEIGHBOURS  8   // The maximum neighbours a BoidCPUs has
 #define MAX_QUEUED_BOIDS 		10	// The maximum queued boids that can be held
 
+#define BOID_THRESHOLD			30	// The number of boids to overload a BoidCPU
+
 #define X_MIN                   0   // Coordinate index of the min x position
 #define Y_MIN                   1   // Coordinate index of the min y position
 #define X_MAX                   2   // Coordinate index of the max x position

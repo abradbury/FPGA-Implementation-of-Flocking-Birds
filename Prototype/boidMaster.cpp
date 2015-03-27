@@ -226,6 +226,11 @@ void setupSimulation() {
 
 	// Calculate coordinates
 	// First, calculate the pixel width and height of one BoidCPU
+//	uint12 boidCPUPixelWidth = SIMULATION_WIDTH / 2;
+//	uint12 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
+//			2));
+	// FIXME: WHen the simulationGridWidth is 2, get incorrect values, when
+	//  a hard-coded 2 is used, get correct values!!!
 	uint12 boidCPUPixelWidth = SIMULATION_WIDTH / simulationGridWidth;
 	uint12 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
 			simulationGridWidth));
@@ -237,6 +242,17 @@ void setupSimulation() {
 	std::cout << "Typical BoidCPU dimensions: " << boidCPUPixelWidth <<
 			" pixels wide by " << boidCPUPixelHeight << " pixels high" <<
 			std::endl;
+
+	uint32 td[8];
+	td[0] = simulationGridWidth;
+	td[1] = simulationGridHeight;
+	td[2] = SIMULATION_WIDTH;
+	td[3] = SIMULATION_HEIGHT;
+	td[4] = boidCPUPixelWidth;
+	td[5] = boidCPUPixelHeight;
+	td[6] = widthRemainder;
+	td[7] = heightRemainder;
+	createCommand(8, 76, CONTROLLER_ID, 76, td);
 
 	// Then calculate each BoidCPU's coordinates
 	uint8 count = 0;

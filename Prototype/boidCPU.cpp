@@ -145,8 +145,10 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         // ---------------------------------------------------------------------
 
         // STATE CHANGE --------------------------------------------------------
-        if ((inputData[CMD_TO] == boidCPUID) || (inputData[CMD_TO] ==
-        	CMD_BROADCAST) || fromNeighbour()) {
+        if ((inputData[CMD_FROM] != boidCPUID) &&
+        		((inputData[CMD_TO] == boidCPUID) ||
+        				(inputData[CMD_TO] == CMD_BROADCAST) ||
+        				fromNeighbour())) {
 
             switch (inputData[CMD_TYPE]) {
                 case CMD_SIM_SETUP:
@@ -359,7 +361,9 @@ void processNeighbouringBoids() {
 
 	// Send ACK signal
 	outputBody[0] = MODE_CALC_NBRS;
-	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
+	outputBody[1] = distinctNeighbourCounter;
+	outputBody[2] = distinctNeighbourCount;
+	generateOutput(3, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 /**
