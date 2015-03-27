@@ -17,6 +17,7 @@ uint32 tbGatekeeperIDs[8];
 // Function headers ============================================================
 void simulateAck(uint32 from);
 
+void simulatePingStart();
 void simulateUserInfo();
 void issueEndOfPing();
 void simulatePingReplies();
@@ -38,9 +39,11 @@ int main() {
     hls::stream<uint32> to_hw, from_hw;
 
     // Test BoidMaster input ---------------------------------------------------
-    simulateUserInfo();
+    simulatePingStart();
     simulatePingReplies();
     issueEndOfPing();
+
+    simulateUserInfo();
     simulateSetupAck();
 
     simulateNbrSearchAck();
@@ -117,6 +120,14 @@ void simulateAck(uint32 from) {
 	tbTo = CONTROLLER_ID;
 	tbFrom = from;			// Just some random ID
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_ACK, tbData);
+}
+
+void simulatePingStart() {
+	std::cout << "Simulating ping start..." << std::endl;
+	tbDataLength = 0;
+	tbTo = CONTROLLER_ID;
+	tbFrom = 42;
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_START, tbData);
 }
 
 // 5 1 2 4 || 60
@@ -324,6 +335,9 @@ void tbPrintCommand(bool send, uint32 *data) {
 		break;
 	case CMD_PING_END:
 		std::cout << "end of ping                        ";
+		break;
+	case CMD_PING_START:
+		std::cout << "start of ping                      ";
 		break;
 	case CMD_KILL:
 		std::cout << "kill simulation                    ";
