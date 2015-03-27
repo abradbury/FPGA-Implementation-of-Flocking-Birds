@@ -300,25 +300,39 @@ void setupSimulation() {
 	}
 
 	// Calculate the number of distinct neighbours for a BoidCPU
-	// TODO: This is a horrible way of doing it, find an alternative, if time
-	distNbrOuter: for (int i = 0; i < boidCPUCount; i++) {
-		uint8 duplicatedNeighbourCount = 0;
-		distNbrMiddle: for (int j = 0; j < MAX_BOIDCPU_NEIGHBOURS; j++) {
-			distNbrInner: for (int k = j + 1; k < MAX_BOIDCPU_NEIGHBOURS; k++) {
-				if (boidCPUs[i].neighbours[j] == boidCPUs[i].neighbours[k]) {
-					duplicatedNeighbourCount++;
+	dNbrOut: for (int i = 0; i < boidCPUCount; i++) {
+		bool isOwnNeighbour = false;
+		uint8 duplicateCount = 0;
+		uint8 duplicateList[MAX_BOIDCPU_NEIGHBOURS];
+
+		// Initialise the duplicate list to 0
+		for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+			duplicateList[i] = 0;
+		}
+
+		// Find duplicates
+		dNbrMid: for (int j = 0; j < MAX_BOIDCPU_NEIGHBOURS; j++) {
+			if (duplicateList[j] == 0) {
+				dNbrIn: for (int k = j + 1; k < MAX_BOIDCPU_NEIGHBOURS; k++) {
+					if (boidCPUs[i].neighbours[j] == boidCPUs[i].neighbours[k]) {
+						duplicateList[k] = 1;
+						duplicateCount++;
+
+						if (boidCPUs[i].boidCPUID == boidCPUs[i].neighbours[j]) {
+							isOwnNeighbour = true;
+						}
+					}
 				}
 			}
 		}
-		boidCPUs[i].distinctNeighbourCount = MAX_BOIDCPU_NEIGHBOURS -
-				duplicatedNeighbourCount;
-	}
 
-	// TODO: Perhaps split this method into smaller ones?
-	//	calculateBoidCPUBoidCounts();
-	//	calculateBoidCPUCoordinates();
-	//	calculateBoidCPUNeighbours();
-	//	calculateBoidCPUDistinctNbrs();
+		// Calculate number of distinct neighbours
+		uint8 distinctNeighbourCount = MAX_BOIDCPU_NEIGHBOURS - duplicateCount;
+		if (isOwnNeighbour) {
+			distinctNeighbourCount--;
+		}
+		boidCPUs[i].distinctNeighbourCount = distinctNeighbourCount;
+	}
 }
 
 void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
@@ -528,6 +542,9 @@ void printCommand(bool send, uint32 *data) {
 		break;
 	case CMD_PING_END:
 		std::cout << "end of ping                       ";
+		break;
+	case CMD_PING_START:
+		std::cout << "start of ping                      ";
 		break;
 	case CMD_KILL:
 		std::cout << "kill simulation                   ";
