@@ -301,7 +301,8 @@ void simulationSetup() {
     }
 
     // Send ACK signal
-	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
+    outputBody[0] = CMD_SIM_SETUP;
+    generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 //uint multiply(uint value, uint multiplicand) {
@@ -356,8 +357,9 @@ void processNeighbouringBoids() {
 		calculateBoidNeighbours();
 	}
 
-    // Send ACK signal
-	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
+	// Send ACK signal
+	outputBody[0] = MODE_CALC_NBRS;
+	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 /**
@@ -411,12 +413,37 @@ void calcNextBoidPositions() {
     }
 
     // Send ACK signal
-	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
+    outputBody[0] = MODE_POS_BOIDS;
+	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 void loadBalance() {
-    std::cout << "-Load balancing..." << std::endl;
+//    if (boidCount > BOID_THRESHOLD) {
+    	std::cout << "-Load balancing..." << std::endl;
+//
+//    	// If overloaded, signal the controller
+//    	generateOutput(0, CONTROLLER_ID, CMD_LOAD_BAL_REQ, outputBody);
+//
+//
+//    } else {
+//    	std::cout << "-No need to load balance" << std::endl;
+//    	// Send ACK?
+//    }
 }
+
+//void processLoadBalanceCommand() {
+//
+//}
+//
+///**
+// * Change the bounds of the BoidCPU. Used during load balancing.
+// */
+//void changeBoidCPUBounds(int12 xMin, int12 yMin, int12 xMax, int12 yMax) {
+//	boidCPUCoords[X_MIN] = xMin;
+//	boidCPUCoords[Y_MIN] = yMin;
+//	boidCPUCoords[X_MAX] = xMax;
+//	boidCPUCoords[Y_MAX] = yMax;
+//}
 
 void updateDisplay() {
 
@@ -455,10 +482,11 @@ void calculateEscapedBoids() {
 
 	if (counter > 0) {
 		transmitBoids(boidIDs, recipientIDs, counter);
+	} else {
+		// Send ACK signal
+		outputBody[0] = MODE_TRAN_BOIDS;
+		generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 	}
-
-	// Send ACK signal
-	generateOutput(0, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 /**
@@ -588,6 +616,10 @@ void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 		}
 		boidCount--;
 	}
+
+	// Send ACK signal
+	outputBody[0] = MODE_TRAN_BOIDS;
+	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 void acceptBoid() {
@@ -642,9 +674,13 @@ void commitAcceptedBoids() {
 	queuedBoidsCounter = 0;
 }
 
-//==============================================================================
-// Supporting functions ========================================================
-//==============================================================================
+//============================================================================//
+//- Load Balancing Functions -------------------------------------------------//
+//============================================================================//
+
+//============================================================================//
+//- Supporting functions -----------------------------------------------------//
+//============================================================================//
 
 void printStateOfBoidCPUBoids() {
     boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {

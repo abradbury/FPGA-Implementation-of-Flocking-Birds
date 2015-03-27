@@ -63,7 +63,7 @@ int main() {
 	std::cout << "======TestBench finished sending======" << std::endl;
 
 	// Run the hardware --------------------------------------------------------
-	toplevel(to_hw, from_hw);
+	boidMaster(to_hw, from_hw);
 
 	// Receive data ------------------------------------------------------------
 	bool inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
@@ -126,17 +126,17 @@ void simulatePingStart() {
 	std::cout << "Simulating ping start..." << std::endl;
 	tbDataLength = 0;
 	tbTo = CONTROLLER_ID;
-	tbFrom = 42;
+	tbFrom = 1481765933;
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_START, tbData);
 }
 
 // 5 1 2 4 || 60
 void simulateUserInfo() {
 	std::cout << "Simulating user info..." << std::endl;
-	tbData[0] = 60;			// Number of boids
+	tbData[0] = 20;			// Number of boids
 	tbDataLength = 1;
 	tbTo = CONTROLLER_ID;
-	tbFrom = BOIDGPU_ID;
+	tbFrom = 1481765933;
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_USER_INFO, tbData);
 }
 
@@ -144,9 +144,9 @@ void simulateUserInfo() {
 // 5 1 66 3 || 4
 void simulatePingReplies() {
 	std::cout << "Simulating ping replies..." << std::endl;
-	tbGatekeeperCount = 2;
-	tbGatekeeperIDs[0] = 42;
-	tbGatekeeperIDs[1] = 66;
+	tbGatekeeperCount = 1;
+	tbGatekeeperIDs[0] = 1481765933;
+//	tbGatekeeperIDs[1] = 66;
 
 	tbData[0] = 2;					// Number of resident BoidCPUs
 	tbDataLength = 1;
@@ -154,11 +154,11 @@ void simulatePingReplies() {
 	tbFrom = tbGatekeeperIDs[0];	// Random Gatekeeper ID
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
 
-	tbData[0] = 4;					// Number of resident BoidCPUs
-	tbDataLength = 1;
-	tbTo = CONTROLLER_ID;
-	tbFrom = tbGatekeeperIDs[1];	// Random Gatekeeper ID
-	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
+//	tbData[0] = 4;					// Number of resident BoidCPUs
+//	tbDataLength = 1;
+//	tbTo = CONTROLLER_ID;
+//	tbFrom = tbGatekeeperIDs[1];	// Random Gatekeeper ID
+//	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
 
 	std::cout << "Responding to ping with 6 BoidCPUs (2/4)..." << std::endl;
 }
@@ -167,7 +167,7 @@ void issueEndOfPing() {
 	std::cout << "Simulating end of ping..." << std::endl;
 	tbDataLength = 0;
 	tbTo = CONTROLLER_ID;
-	tbFrom = 42;
+	tbFrom = 1481765933;
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_END, tbData);
 }
 

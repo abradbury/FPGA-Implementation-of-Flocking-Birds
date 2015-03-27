@@ -11,6 +11,10 @@
 #include "boids.h"			// Boid definitions
 
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
+
+#define BOIDMASTER_CHANNEL		0
+#define BOIDCPU_CHANNEL_1		1
+#define BOIDCPU_CHANNEL_2		2
 #define ALL_BOIDCPU_CHANNELS	99	// When a message is sent to all channels
 
 #define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
@@ -23,11 +27,10 @@
 #define INTERNAL_AND_EXTERNAL_RECIPIENT	2
 
 // Setup Ethernet and its transmit and receive buffers
-// TODO: Determine maximum buffer size
-// TODO: Ethernet requires a u8 buffer, but FXL requires a u32...
+// FIXME: Ethernet requires a u8 buffer, but FXL requires a u32...
 XEmacLite ether;
-u8 externalOutput[XEL_MAX_FRAME_SIZE];
-u8 externalInput[XEL_MAX_FRAME_SIZE];
+u8 externalOutput[MAX_CMD_LEN * MAX_OUTPUT_CMDS];
+u8 externalInput[MAX_CMD_LEN * MAX_INPUT_CMDS];
 
 // Setup other variables
 #ifdef MASTER_IS_RESIDENT
@@ -45,6 +48,7 @@ u32 messageData[MAX_CMD_BODY_LEN];
 u32 gatekeeperID = 0;
 bool boidCPUsSetup = false;
 bool fowardMessage = true;
+bool forwardingInterceptedSetup = false;
 u8 ackCount = 0;
 
 u8 residentNbrCounter = 0;
@@ -52,7 +56,6 @@ u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
 
 // Protocols
 void checkForInput();
-void sendKillCommand();
 
 void respondToPing();
 void interceptSetupInfo(u32 *interceptedData);
@@ -61,15 +64,20 @@ u8 internalChannelLookUp(u32 to);
 u8 recipientLookUp(u32 to);
 bool externalMessageRelevant();
 void interceptMessage(u32 *data);
+
 void processReceivedExternalMessage();
 void processReceivedInternalMessage(u32 *inputData);
+
 void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 
+void printMessage(bool send, u32 *data);
+
 #ifdef MASTER_IS_RESIDENT
 void takeUserInput();
 void uiBoidCPUSearch();
+void sendKillCommand();
 #endif
 
 void putFSLData(u32 value, u32 channel);
@@ -80,14 +88,15 @@ u32 getFSLData(u32 *data, u32 channel);
 //============================================================================//
 
 // TODO: Rename to main() when deployed
-int mainThree() {
+int main() {
 	// Setup the Ethernet
 	XEmacLite_Config *etherconfig = XEmacLite_LookupConfig(
 			XPAR_EMACLITE_0_DEVICE_ID);
 	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
 
 	// Generate random, temporary Gatekeeper ID
-//	gatekeeperID = rand();
+	// TODO: Ensure that this doesn't clash with the BoidIDs
+	gatekeeperID = rand();
 
 	do {
 		bool simulationKilled = false;
@@ -108,6 +117,7 @@ int mainThree() {
 			do {
 				checkForInput();
 
+#ifdef MASTER_IS_RESIDENT
 				// Handle a kill key or a pause key being pressed
 				if (!XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR)) {
 					if (XUartLite_RecvByte(
@@ -127,6 +137,7 @@ int mainThree() {
 						} while (!simulationUnpaused);
 					}
 				}
+#endif
 			} while (!simulationKilled);
 		} while (!simulationKilled);
 	} while (1);
@@ -154,10 +165,13 @@ void checkForInput() {
 
 	// Check for internal (FXL/AXI) data ---------------------------------------
 	u32 channelZeroData[MAX_CMD_LEN];
-	int channelZeroInvalid = getFSLData(channelZeroData, 0);
+	int channelZeroInvalid = getFSLData(channelZeroData, BOIDMASTER_CHANNEL);
 
 	u32 channelOneData[MAX_CMD_LEN];
-	int channelOneInvalid = getFSLData(channelOneData, 1);
+	int channelOneInvalid = getFSLData(channelOneData, BOIDCPU_CHANNEL_1);
+
+	u32 channelTwoData[MAX_CMD_LEN];
+	int channelTwoInvalid = getFSLData(channelTwoData, BOIDCPU_CHANNEL_2);
 
 	// Process received internal data ------------------------------------------
 	if (!channelZeroInvalid) {
@@ -166,6 +180,10 @@ void checkForInput() {
 
 	if (!channelOneInvalid) {
 		processReceivedInternalMessage(channelOneData);
+	}
+
+	if (!channelTwoInvalid) {
+		processReceivedInternalMessage(channelTwoData);
 	}
 }
 
@@ -176,7 +194,9 @@ void checkForInput() {
 void processReceivedInternalMessage(u32 *inputData) {
 	fowardMessage = true;
 
-	if (!boidCPUsSetup) {
+	printMessage(false, inputData);
+
+	if ((!boidCPUsSetup) && (inputData[CMD_TYPE] != CMD_ACK)) {
 		interceptMessage(inputData);
 	}
 
@@ -185,18 +205,22 @@ void processReceivedInternalMessage(u32 *inputData) {
 		fowardMessage = false;
 		ackCount++;
 
-#ifdef MASTER_IS_RESIDENT
-		if (ackCount == (RESIDENT_BOIDCPU_COUNT + 1)) {
-#else
 		if (ackCount == RESIDENT_BOIDCPU_COUNT) {
-#endif
+			print ("All ACKs received \n\r");
 			sendMessage(0, CONTROLLER_ID, gatekeeperID, CMD_ACK, messageData);
 			ackCount = 0;
+			print("-----------------------------------------------------------"
+					"---------------------------------------------------\n\r");
+		} else {
+			xil_printf("Waiting for ACKs (received %d of %d)...\n\r", ackCount,
+					RESIDENT_BOIDCPU_COUNT);
 		}
 	}
 
 	// Forward the message, if needed
 	if (fowardMessage) {
+//		print("Gatekeeper forwarding message...\n\r");
+
 		u32 inputDataBodyLength = inputData[CMD_LEN] - CMD_HEADER_LEN;
 		u32 inputDataBody[inputDataBodyLength];
 		int i = 0;
@@ -210,6 +234,8 @@ void processReceivedInternalMessage(u32 *inputData) {
 }
 
 void processReceivedExternalMessage() {
+	printMessage(false, (u32*)externalInput);
+
 	if (!boidCPUsSetup) {
 		interceptMessage((u32*) externalInput);
 	} else if (externalMessageRelevant()) {
@@ -237,7 +263,9 @@ void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 	// the message is addressed to this Gatekeeper, send internally. If it is
 	// not addressed to this Gatekeeper, send it externally.
 	if ((!boidCPUsSetup) && (type == CMD_SIM_SETUP)) {
-		if (to == gatekeeperID) {
+		print("BoidCPUs not setup and setup message being sent...\n\r");
+
+		if ((to == gatekeeperID) || (forwardingInterceptedSetup)) {
 			recipientLocation = INTERNAL_RECIPIENT;
 		} else {
 			recipientLocation = EXTERNAL_RECIPIENT;
@@ -297,19 +325,31 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		}
 	}
 
+	// Print out message details
+	if (channel == ALL_BOIDCPU_CHANNELS) {
+		print("INTERNAL - Sending to all BoidCPU channels...\n\r");
+	} else {
+		xil_printf("INTERNAL - Sending to channel %d...\n\r", channel);
+	}
+	printMessage(true, command);
+
 	// Finally, send the message
 	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
 		switch (channel) {
-		case 0:
-			putFSLData(command[i], 0);
+		case BOIDMASTER_CHANNEL:
+			putFSLData(command[i], BOIDMASTER_CHANNEL);
 			break;
-		case 1:
-			putFSLData(command[i], 1);
+		case BOIDCPU_CHANNEL_1:
+			putFSLData(command[i], BOIDCPU_CHANNEL_1);
+			break;
+		case BOIDCPU_CHANNEL_2:
+			putFSLData(command[i], BOIDCPU_CHANNEL_2);
 			break;
 		default:
 			// Otherwise, send to all BoidCPU channels
 #ifdef MASTER_IS_RESIDENT
-			putFSLData(command[i], 1);
+			putFSLData(command[i], BOIDCPU_CHANNEL_1);
+			putFSLData(command[i], BOIDCPU_CHANNEL_2);
 #else
 			putFSLData(command[i], 0);
 			putFSLData(command[i], 1);
@@ -338,6 +378,9 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 			command[CMD_HEADER_LEN + i] = data[i];
 		}
 	}
+
+	print("EXTERNAL - Sending...\n\r");
+	printMessage(true, command);
 
 	// Then, populate the transmit buffer
 	for (i = 0; i < command[CMD_LEN]; i++) {
@@ -394,16 +437,43 @@ bool externalMessageRelevant() {
 u8 recipientLookUp(u32 to) {
 	u8 recipientInterface;
 
-	if (to == CONTROLLER_ID) {
+	switch (to) {
+		case CMD_BROADCAST:
+			recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+			break;
+		case CONTROLLER_ID:
 #ifdef MASTER_IS_RESIDENT
-		recipientInterface = INTERNAL_RECIPIENT;
+			recipientInterface = INTERNAL_RECIPIENT;
 #else
-		recipientInterface = EXTERNAL_RECIPIENT;
+			recipientInterface = EXTERNAL_RECIPIENT;
 #endif
-	} else if (to == CMD_BROADCAST) {
-		recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
-	} else {
-		recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+			break;
+		case BOIDGPU_ID:
+			recipientInterface = EXTERNAL_RECIPIENT;
+			break;
+		case CMD_MULTICAST:
+			// TODO: Determine whether all the neighbours are internal or not
+			recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+			break;
+		default:
+			if (to >= FIRST_BOIDCPU_ID) {
+				int i = 0;
+#ifdef MASTER_IS_RESIDENT
+				for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
+#else
+				for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
+#endif
+					if (channelIDList[i] == to) {
+						recipientInterface = INTERNAL_RECIPIENT;
+					} else {
+						recipientInterface = EXTERNAL_RECIPIENT;
+					}
+				}
+			} else {
+				recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+			}
+
+			break;
 	}
 
 	return recipientInterface;
@@ -425,8 +495,10 @@ void interceptMessage(u32 *interceptedData) {
 		respondToPing();
 	} else if ((interceptedData[CMD_TO] == gatekeeperID)
 			&& (interceptedData[CMD_TYPE] == CMD_SIM_SETUP)) {
-		interceptSetupInfo(interceptedData);
 		fowardMessage = false;
+		forwardingInterceptedSetup = true;
+		interceptSetupInfo(interceptedData);
+		forwardingInterceptedSetup = false;
 	}
 
 #ifdef MASTER_IS_RESIDENT
@@ -453,11 +525,15 @@ void interceptMessage(u32 *interceptedData) {
  * resident BoidCPUs with the number of resident BoidCPUs.
  */
 void respondToPing() {
+	print("Gatekeeper generating ping response...\n\r");
+
 	messageData[0] = RESIDENT_BOIDCPU_COUNT;
 	sendMessage(1, CONTROLLER_ID, gatekeeperID, CMD_PING_REPLY, messageData);
 
+#ifdef MASTER_IS_RESIDENT
 	xil_printf("found %d..", RESIDENT_BOIDCPU_COUNT);
 	discoveredBoidCPUCount += RESIDENT_BOIDCPU_COUNT;
+#endif
 }
 
 /**
@@ -466,6 +542,8 @@ void respondToPing() {
  * message to one of the resident BoidCPUs.
  */
 void interceptSetupInfo(u32 * setupData) {
+	print("Gatekeeper intercepted setup data...\n\r");
+
 	// Store the resident BoidCPU IDs and associated channel
 	channelIDList[channelSetupCounter] = setupData[CMD_HEADER_LEN
 			+ CMD_SETUP_NEWID_IDX];
@@ -507,6 +585,7 @@ void interceptSetupInfo(u32 * setupData) {
 		if (channelSetupCounter == RESIDENT_BOIDCPU_COUNT) {
 #endif
 		boidCPUsSetup = true;
+		print("BoidCPUs now set up\n\r");
 	}
 }
 
@@ -542,7 +621,10 @@ void takeUserInput() {
 
 		do {
 			keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
-			XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+
+			if (!USING_VLAB) {
+				XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+			}
 
 			keyPresses[index] = keyPress;
 			index++;
@@ -571,7 +653,7 @@ void takeUserInput() {
 void uiBoidCPUSearch() {
 	bool boidCPUSearchComplete = false;
 	do {
-		print(" Searching for BoidCPUs (press ENTER to stop)...");
+		print(" Searching for BoidCPUs (press ENTER to stop)...\n\r");
 		sendInternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_START,
 				messageData);
 
@@ -615,7 +697,7 @@ u8 internalChannelLookUp(u32 to) {
 
 #ifdef MASTER_IS_RESIDENT
 	if (to == CONTROLLER_ID) {
-		return 0;
+		return BOIDMASTER_CHANNEL;
 	}
 
 	for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
@@ -637,10 +719,12 @@ u8 internalChannelLookUp(u32 to) {
 u32 getFSLData(u32 *data, u32 channel) {
 	int invalid, error, value = 0;
 
-	if (channel == 1)
-		getfslx(value, 1, FSL_NONBLOCKING);
-	else if (channel == 0)
-		getfslx(value, 0, FSL_NONBLOCKING);
+	if (channel == BOIDCPU_CHANNEL_1)
+		getfslx(value, BOIDCPU_CHANNEL_1, FSL_NONBLOCKING);
+	else if (channel == BOIDCPU_CHANNEL_2)
+		getfslx(value, BOIDCPU_CHANNEL_2, FSL_NONBLOCKING);
+	else if (channel == BOIDMASTER_CHANNEL)
+		getfslx(value, BOIDMASTER_CHANNEL, FSL_NONBLOCKING);
 
 	fsl_isinvalid(invalid);          	// Was there any data?
 	fsl_iserror(error);					// Was there an error?
@@ -652,7 +736,7 @@ u32 getFSLData(u32 *data, u32 channel) {
 
 	if (!invalid) {
 		data[CMD_LEN] = value;
-		xil_printf("Received data (Channel %d)\n\r", channel);
+//		xil_printf("Received data (Channel %d)\n\r", channel);
 		int i = 0;
 
 		// Handle invalid length values
@@ -662,10 +746,12 @@ u32 getFSLData(u32 *data, u32 channel) {
 		}
 
 		for (i = 0; i < data[CMD_LEN] - 1; i++) {
-			if (channel == 1)
-				getfslx(value, 1, FSL_NONBLOCKING);
-			else if (channel == 0)
-				getfslx(value, 0, FSL_NONBLOCKING);
+			if (channel == BOIDCPU_CHANNEL_1)
+				getfslx(value, BOIDCPU_CHANNEL_1, FSL_NONBLOCKING);
+			else if (channel == BOIDCPU_CHANNEL_2)
+				getfslx(value, BOIDCPU_CHANNEL_2, FSL_NONBLOCKING);
+			else if (channel == BOIDMASTER_CHANNEL)
+				getfslx(value, BOIDMASTER_CHANNEL, FSL_NONBLOCKING);
 
 			fsl_iserror(error);				// Was there an error?
 			if (error) {
@@ -688,10 +774,12 @@ void putFSLData(u32 value, u32 channel) {
 	int error = 0, invalid = 0;
 
 	// TODO: Ensure that writes use FSL_DEFAULT (blocking write)
-	if (channel == 1)
-		putfslx(value, 1, FSL_DEFAULT);
-	else if (channel == 0)
-		putfslx(value, 0, FSL_DEFAULT);
+	if (channel == BOIDCPU_CHANNEL_1)
+		putfslx(value, BOIDCPU_CHANNEL_1, FSL_DEFAULT);
+	else if (channel == BOIDCPU_CHANNEL_2)
+		putfslx(value, BOIDCPU_CHANNEL_2, FSL_DEFAULT);
+	else if (channel == BOIDMASTER_CHANNEL)
+		putfslx(value, BOIDMASTER_CHANNEL, FSL_DEFAULT);
 
 	fsl_isinvalid(invalid);
 	fsl_iserror(error);
@@ -704,3 +792,106 @@ void putFSLData(u32 value, u32 channel) {
 		xil_printf("Error writing data to channel %d: %d\n\r", channel, value);
 	}
 }
+
+void printMessage(bool send, u32 *data) {
+	if (send) {
+		if (data[CMD_TO] == CONTROLLER_ID) {
+			print("-> TX, Gatekeeper sent command to BoidMaster:       ");
+		} else if (data[CMD_TO] == CMD_BROADCAST) {
+			print("-> TX, Gatekeeper sent broadcast:                   ");
+		} else if (data[CMD_TO] == BOIDGPU_ID) {
+			print("-> TX, Gatekeeper sent command to BoidGPU:          ");
+		} else if (data[CMD_TO] == CMD_MULTICAST) {
+			print("-> TX, Gatekeeper sent command to MULTICAST:        ");
+		} else {
+			xil_printf("-> TX, Gatekeeper sent command to %d:                ",
+					data[CMD_TO]);
+		}
+	} else {
+		if (data[CMD_FROM] == CONTROLLER_ID) {
+			print("<- RX, Gatekeeper received command from BoidMaster: ");
+		} else if (data[CMD_TO] == CMD_BROADCAST) {
+			// This should never happen - BoidCPUs should not be able to broadcast
+			xil_printf("<- RX, Gatekeeper received broadcast from %d:       ",
+					data[CMD_FROM]);
+		} else if (data[CMD_FROM] == BOIDGPU_ID) {
+			// This should never happen
+			print("<- RX, Gatekeeper received command from BoidGPU:    ");
+		} else {
+			xil_printf("<- RX, Gatekeeper received command from %d:          ",
+					data[CMD_FROM]);
+		}
+	}
+
+	switch (data[CMD_TYPE]) {
+	case 0:
+		print("do something                      ");
+		break;
+	case MODE_INIT:
+		print("initialise self                   ");
+		break;
+	case CMD_PING:
+		print("BoidCPU ping                      ");
+		break;
+	case CMD_PING_REPLY:
+		print("BoidCPU ping response             ");
+		break;
+	case CMD_USER_INFO:
+		print("output user info                  ");
+		break;
+	case CMD_SIM_SETUP:
+		print("setup BoidCPU                     ");
+		break;
+	case MODE_CALC_NBRS:
+		print("calculate neighbours              ");
+		break;
+	case CMD_NBR_REPLY:
+		print("neighbouring boids from neighbour ");
+		break;
+	case MODE_POS_BOIDS:
+		print("calculate new boid positions      ");
+		break;
+	case CMD_LOAD_BAL:
+		print("load balance                      ");
+		break;
+	case MODE_TRAN_BOIDS:
+		print("transfer boids                    ");
+		break;
+	case CMD_BOID:
+		print("boid in transit                   ");
+		break;
+	case MODE_DRAW:
+		print("send boids to BoidGPU             ");
+		break;
+	case CMD_DRAW_INFO:
+		print("boid info heading to BoidGPU      ");
+		break;
+	case CMD_ACK:
+		print("ACK signal                        ");
+		break;
+	case CMD_PING_END:
+		print("end of ping                       ");
+		break;
+	case CMD_PING_START:
+		print("start of ping                     ");
+		break;
+	case CMD_KILL:
+		print("kill simulation                   ");
+		break;
+	default:
+		print("UNKNOWN COMMAND                   ");
+		break;
+	}
+
+	int i = 0;
+	for (i = 0; i < CMD_HEADER_LEN; i++) {
+		xil_printf("%d ", data[i]);
+	}
+	print("|| ");
+
+	for (i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		xil_printf("%d ", data[CMD_HEADER_LEN + i]);
+	}
+	print("\n\r");
+}
+

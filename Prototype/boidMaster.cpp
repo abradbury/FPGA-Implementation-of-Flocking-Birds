@@ -47,7 +47,7 @@ struct BoidCPU {
 	uint8 distinctNeighbourCount;
 	uint12 boidCPUCoords[EDGE_COUNT];
 	uint8 neighbours[MAX_BOIDCPU_NEIGHBOURS];
-	uint8 gatekeeperID;
+	uint32 gatekeeperID;
 	uint8 x;
 	uint8 y;
 };
@@ -64,7 +64,7 @@ uint32 boidCount = 100;
 
 bool continueOperation = true;
 
-void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
+void boidMaster(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port = input
 #pragma HLS INTERFACE ap_fifo port = output
 #pragma HLS RESOURCE variable = input core = AXI4Stream
@@ -106,10 +106,6 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 				break;
 			case CMD_USER_INFO:
 				processUserData();
-
-				state = CMD_SIM_SETUP;
-				setupSimulation();
-				issueSetupInformation();
 				break;
 			case CMD_PING_REPLY:
 				if (!pingEnd) processPingReply();
@@ -161,6 +157,9 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 void processUserData() {
 	// TODO: Create user -> boidMaster process
 	boidCount = inputData[CMD_HEADER_LEN + 0];
+
+	state = CMD_SIM_SETUP;
+	setupSimulation();
 }
 
 /**
@@ -206,8 +205,8 @@ void processPingReply() {
  */
 void setupSimulation() {
 	// Define initial boids counts
-	uint16 boidsPerBoidCPU = boidCount / boidCPUCount;
-	uint16 remainingBoids = (boidCount - (boidsPerBoidCPU * boidCPUCount));
+	uint12 boidsPerBoidCPU = boidCount / boidCPUCount;
+	uint12 remainingBoids = (boidCount - (boidsPerBoidCPU * boidCPUCount));
 
 	setupBoidCountLoop: for (int i = 0; i < boidCPUCount; i++) {
 		if (i == (boidCPUCount - 1)) {
@@ -227,12 +226,12 @@ void setupSimulation() {
 
 	// Calculate coordinates
 	// First, calculate the pixel width and height of one BoidCPU
-	uint16 boidCPUPixelWidth = SIMULATION_WIDTH / simulationGridWidth;
-	uint16 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
+	uint12 boidCPUPixelWidth = SIMULATION_WIDTH / simulationGridWidth;
+	uint12 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
 			simulationGridWidth));
 
-	uint16 boidCPUPixelHeight = SIMULATION_HEIGHT / simulationGridHeight;
-	uint16 heightRemainder = (SIMULATION_HEIGHT - (boidCPUPixelHeight *
+	uint12 boidCPUPixelHeight = SIMULATION_HEIGHT / simulationGridHeight;
+	uint12 heightRemainder = (SIMULATION_HEIGHT - (boidCPUPixelHeight *
 			simulationGridHeight));
 
 	std::cout << "Typical BoidCPU dimensions: " << boidCPUPixelWidth <<
@@ -240,10 +239,11 @@ void setupSimulation() {
 			std::endl;
 
 	// Then calculate each BoidCPU's coordinates
-	uint16 count = 0;
-	uint16 height = 0;
+	uint8 count = 0;
+	uint12 height = 0;
+	uint12 width = 0;
 	coordHeightLoop: for (int h = 0; h < simulationGridHeight; h++) {
-		uint16 width = 0;
+		width = 0;
 
 		coordWidthLoop: for (int w = 0; w < simulationGridWidth; w++) {
 			boidCPUs[count].boidCPUCoords[0] = width;
@@ -306,8 +306,8 @@ void setupSimulation() {
 		uint8 duplicateList[MAX_BOIDCPU_NEIGHBOURS];
 
 		// Initialise the duplicate list to 0
-		for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-			duplicateList[i] = 0;
+		for (int d = 0; d < MAX_BOIDCPU_NEIGHBOURS; d++) {
+			duplicateList[d] = 0;
 		}
 
 		// Find duplicates
@@ -333,6 +333,8 @@ void setupSimulation() {
 		}
 		boidCPUs[i].distinctNeighbourCount = distinctNeighbourCount;
 	}
+
+	issueSetupInformation();
 }
 
 void closestMultiples(uint8 *height, uint8 *width, uint8 number) {

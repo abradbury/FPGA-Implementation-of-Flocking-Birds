@@ -107,6 +107,6 @@ typedef ap_uint<4> uint4;
 typedef ap_int<4> int4;
 
 // Prototypes
-void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
+void boidMaster(hls::stream<uint32> &input, hls::stream<uint32> &output);
 
 #endif
