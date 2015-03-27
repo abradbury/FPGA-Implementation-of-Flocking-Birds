@@ -5,8 +5,11 @@
 #include <string.h>                 // For memset()
 #include "xuartlite_l.h"            // UART
 #include "fsl.h"                    // AXI Steam
-
 #include "boids.h"
+
+#define BOIDCPU_CHANNEL_1		1
+#define BOIDCPU_CHANNEL_2		2
+#define ALL_BODICPU_CHANNELS	-1
 
 u32 data[MAX_CMD_BODY_LEN];
 u32 to;
@@ -14,11 +17,11 @@ u32 from = CONTROLLER_ID;
 u32 dataLength = 0;
 u32 coords[EDGE_COUNT];
 
+u32 gatekeeperID;
 u16 boidCmdCount = 0;
 u16 boidCPUCount = 2;
 
-const char *commandDescriptions[CMD_COUNT] = { "",
-		"", "",
+const char *commandDescriptions[CMD_COUNT] = { "", "", "",
 		"User-inputed information for the BoidGPU",
 		"Simulation setup information for a BoidCPU",
 		"Calculate neighbours mode", "",
@@ -42,7 +45,6 @@ void testDrawInfo();
 void testKillSwitch();
 
 void processResponse(u32 *data, u8 channel);
-void processNeighbourReply(u32 *data);
 
 void printCommand(bool send, u32 *data, int channel);
 
@@ -55,6 +57,7 @@ int main() {
 		print("-------- FPGA Flocking Bird Test Harness ---------\n\r");
 		print("--------------------------------------------------\n\r");
 
+		gatekeeperID = rand();	// Random ID of the Gatekeeper
 		bool cIDValid = false;	// True if the command ID entered is valid
 		u8 cID = 0;             // The ID of the command to issue
 
@@ -78,44 +81,48 @@ int main() {
 			do {
 				// While there is no keyboard input, check for received messages
 				do {
-					// Channel 0 -----------------------------------------------
-					u32 channelZeroData[MAX_CMD_LEN];
-					int channelZeroInvalid = getData(channelZeroData, 0);
-					// ---------------------------------------------------------
-
 					// Channel 1 -----------------------------------------------
 					u32 channelOneData[MAX_CMD_LEN];
-					int channelOneInvalid = getData(channelOneData, 1);
+					int channelOneInvalid = getData(channelOneData,
+							BOIDCPU_CHANNEL_1);
+					// ---------------------------------------------------------
+
+					// Channel 2 -----------------------------------------------
+					u32 channelTwoData[MAX_CMD_LEN];
+					int channelTwoInvalid = getData(channelTwoData,
+							BOIDCPU_CHANNEL_2);
 					// ---------------------------------------------------------
 
 					// Process received data -----------------------------------
-					if (!channelZeroInvalid) {
-						processResponse(channelZeroData, 0);
+					if (!channelOneInvalid) {
+						processResponse(channelOneData, BOIDCPU_CHANNEL_1);
 					}
 
-					if (!channelOneInvalid) {
-						processResponse(channelOneData, 1);
+					if (!channelTwoInvalid) {
+						processResponse(channelTwoData, BOIDCPU_CHANNEL_2);
 					}
 					// ---------------------------------------------------------
 
 				} while (XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR));
 
 				keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
-				if (USING_VLAB)
+				if (USING_VLAB) {
 					XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
+				}
 
 				keyPresses[index] = keyPress;
 				index++;
 
 			} while (keyPress != ENTER);     // Repeat while enter isn't pressed
 
-			cID = (u8) atoi(keyPresses); // Convert the key pressed to int, 0 if not int
+			// Convert the key pressed to int, 0 if not int
+			cID = (u8) atoi(keyPresses);
 
 			if ((cID >= 1) && (cID <= 16)) {
 				cIDValid = true;
 				chooseCommand(cID);				// Send the command
 			} else {
-				print("\n\r**Error: Command ID must be between 1 and "\
+				print("\n\r**Error: Command ID must be between 1 and "
 						"16 inclusive. Please try again.\n\r");
 			}
 		}
@@ -179,7 +186,8 @@ void testUserInfo() {
 	data[2] = 84;
 	dataLength = 3;
 
-	createCommand(dataLength, to, from, CMD_USER_INFO, data, -1);
+	createCommand(dataLength, to, from, CMD_USER_INFO, data,
+			ALL_BODICPU_CHANNELS);
 }
 
 // TODO: Re-do this to make it actually extendible
@@ -194,37 +202,8 @@ void testSimulationSetup() {
 	u32 newIDOne = 0 + FIRST_BOIDCPU_ID;
 	u32 newIDTwo = 1 + FIRST_BOIDCPU_ID;
 
-	xil_printf("Gatekeeper ? is responsible for %d BoidCPUs\n\r", boidCPUCount);
-
-	// BoidCPU1
-	if (boidCPUCount == 1) {
-		to = CMD_BROADCAST;
-		coords[0] = 0;
-		coords[1] = 0;
-		coords[2] = 40;
-		coords[3] = 40;
-		neighbours[0] = newIDTwo;
-		neighbours[1] = newIDOne;
-		neighbours[2] = newIDTwo;
-		neighbours[3] = newIDTwo;
-		neighbours[4] = newIDTwo;
-		neighbours[5] = newIDOne;
-		neighbours[6] = newIDTwo;
-		neighbours[7] = newIDTwo;
-
-		data[CMD_SETUP_NEWID_IDX] = newIDOne;
-		data[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
-		for (i = 0; i < EDGE_COUNT; i++) {
-			data[CMD_SETUP_COORD_IDX + i] = coords[i];
-		}
-		data[CMD_SETUP_NBCNT_IDX] = distinctNeighbourCount;
-		for (i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-			data[CMD_SETUP_BNBRS_IDX + i] = neighbours[i];
-		}
-		data[CMD_SETUP_SIMWH_IDX + 0] = 80;
-		data[CMD_SETUP_SIMWH_IDX + 1] = 40;
-		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
-	}
+	xil_printf("Gatekeeper %d is responsible for %d BoidCPUs\n\r", gatekeeperID,
+			boidCPUCount);
 
 	// BoidCPU2
 	if (boidCPUCount == 2) {
@@ -253,7 +232,8 @@ void testSimulationSetup() {
 		}
 		data[CMD_SETUP_SIMWH_IDX + 0] = 80;
 		data[CMD_SETUP_SIMWH_IDX + 1] = 40;
-		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 0);
+		createCommand(dataLength, to, from, CMD_SIM_SETUP, data,
+				BOIDCPU_CHANNEL_1);
 
 		//--
 
@@ -282,7 +262,8 @@ void testSimulationSetup() {
 		}
 		data[CMD_SETUP_SIMWH_IDX + 0] = 80;
 		data[CMD_SETUP_SIMWH_IDX + 1] = 40;
-		createCommand(dataLength, to, from, CMD_SIM_SETUP, data, 1);
+		createCommand(dataLength, to, from, CMD_SIM_SETUP, data,
+				BOIDCPU_CHANNEL_2);
 	}
 }
 
@@ -290,7 +271,8 @@ void testNeighbourSearch() {
 	// 4 0 1 6 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_CALC_NBRS, data, -1);
+	createCommand(dataLength, to, from, MODE_CALC_NBRS, data,
+			ALL_BODICPU_CHANNELS);
 }
 
 void testNeighbourReply() {
@@ -304,28 +286,32 @@ void testNeighbourReply() {
 	data[4] = 3144448;
 	data[5] = 102;
 
-	createCommand(dataLength, to, from, CMD_NBR_REPLY, data, -1);
+	createCommand(dataLength, to, from, CMD_NBR_REPLY, data,
+			ALL_BODICPU_CHANNELS);
 }
 
 void testCalcNextBoidPos() {
 	// 4 0 1 9 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_POS_BOIDS, data, -1);
+	createCommand(dataLength, to, from, MODE_POS_BOIDS, data,
+			ALL_BODICPU_CHANNELS);
 }
 
 void testLoadBalance() {
 	// 4 0 1 10 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, CMD_LOAD_BAL, data, -1);
+	createCommand(dataLength, to, from, CMD_LOAD_BAL, data,
+			ALL_BODICPU_CHANNELS);
 }
 
 void testMoveBoids() {
 	// 4 0 1 11 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data, -1);
+	createCommand(dataLength, to, from, MODE_TRAN_BOIDS, data,
+			ALL_BODICPU_CHANNELS);
 }
 
 void testBoidCommand() {
@@ -338,7 +324,7 @@ void testBoidCommand() {
 	data[3] = -1;	// x vel
 	data[4] = -3;	// y vel
 
-	createCommand(dataLength, to, from, CMD_BOID, data, -1);
+	createCommand(dataLength, to, from, CMD_BOID, data, ALL_BODICPU_CHANNELS);
 
 	data[0] = 43 + boidCmdCount;	// ID
 	data[1] = 53;	// x pos
@@ -346,7 +332,7 @@ void testBoidCommand() {
 	data[3] = 0;	// x vel
 	data[4] = 4;	// y vel
 
-	createCommand(dataLength, to, from, CMD_BOID, data, -1);
+	createCommand(dataLength, to, from, CMD_BOID, data, ALL_BODICPU_CHANNELS);
 
 	boidCmdCount++;
 }
@@ -355,7 +341,7 @@ void testDrawBoids() {
 	// 4 0 1 14 ||
 	dataLength = 0;
 	to = CMD_BROADCAST;
-	createCommand(dataLength, to, from, MODE_DRAW, data, -1);
+	createCommand(dataLength, to, from, MODE_DRAW, data, ALL_BODICPU_CHANNELS);
 }
 
 void testDrawInfo() {
@@ -385,13 +371,17 @@ void createCommand(u32 len, u32 to, u32 from, u32 type, u32 *data, int channel) 
 	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
 		// FSLX ID cannot be a variable - currently transmitting on all
 		// channels without checking if the addressee is on that channel
-		if(channel == 0) {
-			putData(command[i], 0);
-		} else if(channel == 1) {
-			putData(command[i], 1);
+		if (channel == 0) {
+			print("WARNING: Channel 0 is now the controller...\n\r");
+//			putData(command[i], 0);
+		} else if (channel == BOIDCPU_CHANNEL_1) {
+			putData(command[i], BOIDCPU_CHANNEL_1);
+		} else if (channel == BOIDCPU_CHANNEL_2) {
+			putData(command[i], BOIDCPU_CHANNEL_2);
 		} else {
-			putData(command[i], 0);
-			putData(command[i], 1);
+//			putData(command[i], 0);
+			putData(command[i], BOIDCPU_CHANNEL_1);
+			putData(command[i], BOIDCPU_CHANNEL_2);
 		}
 	}
 
@@ -402,8 +392,11 @@ void putData(u32 value, u32 channel) {
 	int error = 0, invalid = 0;
 
 	// TODO: Ensure that writes use FSL_DEFAULT (blocking write)
-	if (channel == 1) putfslx(value, 1, FSL_DEFAULT);
-	else if (channel == 0) putfslx(value, 0, FSL_DEFAULT);
+	if (channel == BOIDCPU_CHANNEL_2)
+		putfslx(value, BOIDCPU_CHANNEL_2, FSL_DEFAULT);
+	else if (channel == BOIDCPU_CHANNEL_1)
+		putfslx(value, BOIDCPU_CHANNEL_1, FSL_DEFAULT);
+//	else if (channel == 0) putfslx(value, 0, FSL_DEFAULT);
 
 	fsl_isinvalid(invalid);
 	fsl_iserror(error);
@@ -415,23 +408,23 @@ void putData(u32 value, u32 channel) {
 	if (error) {
 		xil_printf("Error writing data to channel %d: %d\n\r", channel, value);
 	}
-
-//	if (!invalid && !error) {
-//		xil_printf("Data written to channel %d successfully: %d\n\r", channel, value);
-//	}
 }
 
 u32 getData(u32 *data, u32 channel) {
 	int invalid, error, value = 0;
 
-	if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
-	else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
+	if (channel == BOIDCPU_CHANNEL_2)
+		getfslx(value, BOIDCPU_CHANNEL_2, FSL_NONBLOCKING);
+	else if (channel == BOIDCPU_CHANNEL_1)
+		getfslx(value, BOIDCPU_CHANNEL_1, FSL_NONBLOCKING);
+//	else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
 
-	fsl_isinvalid(invalid);          	// Was there any data?
+	fsl_isinvalid(invalid);// Was there any data?
 	fsl_iserror(error);					// Was there an error?
 
 	if (error) {
-		xil_printf("Error receiving data on Channel %d: %d\n\r", channel, error);
+		xil_printf("Error receiving data on Channel %d: %d\n\r", channel,
+				error);
 	}
 
 	if (!invalid) {
@@ -446,12 +439,16 @@ u32 getData(u32 *data, u32 channel) {
 		}
 
 		for (i = 0; i < data[CMD_LEN] - 1; i++) {
-			if (channel == 1) getfslx(value, 1, FSL_NONBLOCKING);
-			else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
+			if (channel == BOIDCPU_CHANNEL_2)
+				getfslx(value, BOIDCPU_CHANNEL_2, FSL_NONBLOCKING);
+			else if (channel == BOIDCPU_CHANNEL_1)
+				getfslx(value, BOIDCPU_CHANNEL_1, FSL_NONBLOCKING);
+			//	else if (channel == 0) getfslx(value, 0, FSL_NONBLOCKING);
 
-			fsl_iserror(error);				// Was there an error?
+			fsl_iserror(error);// Was there an error?
 			if (error) {
-				xil_printf("Error receiving data on Channel %d: %d\n\r", channel, error);
+				xil_printf("Error receiving data on Channel %d: %d\n\r",
+						channel, error);
 			}
 
 			data[i + 1] = value;
@@ -468,37 +465,33 @@ u32 getData(u32 *data, u32 channel) {
 void processResponse(u32 *data, u8 channel) {
 	printCommand(false, data, channel);
 
-	if((data[CMD_TO] >= FIRST_BOIDCPU_ID) && (data[CMD_TYPE] <= CMD_COUNT)) {
+	if ((data[CMD_TO] >= FIRST_BOIDCPU_ID) && (data[CMD_TYPE] <= CMD_COUNT)) {
 		int dataLength = data[CMD_LEN] - CMD_HEADER_LEN;
 		u32 dataToForward[dataLength];
 
 		int i = 0;
-		for(i = 0; i < dataLength; i++) {
+		for (i = 0; i < dataLength; i++) {
 			dataToForward[i] = data[CMD_HEADER_LEN + i];
 		}
 
-//		xil_printf("Controller forwarding command to BoidCPU #%d\n\r", data[CMD_TO]);
-
 		if (channel == 0) {
+			print("WARNING: Received message from channel 0...\n\r");
+		} else if (channel == BOIDCPU_CHANNEL_1) {
 			createCommand(dataLength, data[CMD_TO], data[CMD_FROM],
-				data[CMD_TYPE], dataToForward, 1);
-		} else if (channel == 1) {
+					data[CMD_TYPE], dataToForward, BOIDCPU_CHANNEL_2);
+		} else if (channel == BOIDCPU_CHANNEL_2) {
 			createCommand(dataLength, data[CMD_TO], data[CMD_FROM],
-				data[CMD_TYPE], dataToForward, 0);
+					data[CMD_TYPE], dataToForward, BOIDCPU_CHANNEL_1);
 		}
-	} else {
-		switch (data[CMD_TYPE]) {
-		case CMD_NBR_REPLY:
-			processNeighbourReply(data);
-			break;
-		default:
-			break;
-		}
-	}
-}
-
-void processNeighbourReply(u32 *data) {
-	//TODO
+	} // else {
+//		switch (data[CMD_TYPE]) {
+//		case CMD_NBR_REPLY:
+//			processNeighbourReply(data);
+//			break;
+//		default:
+//			break;
+//		}
+//	}
 }
 
 //============================================================================//
@@ -512,17 +505,20 @@ void printCommand(bool send, u32 *data, int channel) {
 		} else if (data[CMD_TO] == BOIDGPU_ID) {
 			print("-> TX, Controller sent command to BoidGPU      ");
 		} else {
-			xil_printf("-> TX, Controller sent command to %d      ", data[CMD_TO]);
+			xil_printf("-> TX, Controller sent command to %d      ",
+					data[CMD_TO]);
 		}
 	} else {
 		if (data[CMD_TO] == CMD_BROADCAST) {
-			// This should never happen - BoidCPUs should not be able to broadcast
-			xil_printf("<- RX, Controller received broadcast from %d", data[CMD_FROM]);
+			// This should never happen - BoidCPUs cannot broadcast
+			xil_printf("<- RX, Controller received broadcast from %d",
+					data[CMD_FROM]);
 		} else if (data[CMD_FROM] == BOIDGPU_ID) {
 			// This should never happen
 			print("<- RX, Controller received command from BoidGPU");
 		} else {
-			xil_printf("<- RX, Controller received command from %d", data[CMD_FROM]);
+			xil_printf("<- RX, Controller received command from %d",
+					data[CMD_FROM]);
 		}
 	}
 
@@ -593,5 +589,4 @@ void printCommand(bool send, u32 *data, int channel) {
 	}
 	print("\n\r");
 }
-
 
