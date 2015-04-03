@@ -356,7 +356,14 @@ void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
 }
 
 void processAck() {
-	ackCount++;
+
+	if (inputData[CMD_FROM] == BOIDGPU_ID) {
+		state = MODE_CALC_NBRS;
+		issueCalcNbrsMode();
+		ackCount = 0;
+	} else {
+		ackCount++;
+	}
 
 	if (ackCount == gatekeeperCount) {
 		switch(state) {
@@ -379,7 +386,6 @@ void processAck() {
 		default:
 			break;
 		}
-
 		ackCount = 0;
 	}
 }

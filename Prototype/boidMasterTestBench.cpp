@@ -25,6 +25,7 @@ void simulateSetupAck();
 void simulateNbrSearchAck();
 void simulatePositionBoidsAck();
 void simulateBoidTransferAck();
+void simulateBoidGPUAck();
 
 void processSetupInfo();
 void processDrawMode();
@@ -49,6 +50,8 @@ int main() {
     simulateNbrSearchAck();
     simulatePositionBoidsAck();
     simulateBoidTransferAck();
+
+    simulateBoidGPUAck();
 
     // Send data ---------------------------------------------------------------
 	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -236,6 +239,11 @@ void simulateBoidTransferAck() {
 	for (int i = 0; i < tbGatekeeperCount; i++) {
 		simulateAck(tbGatekeeperIDs[i]);
 	}
+}
+
+void simulateBoidGPUAck() {
+	std::cout << "Simulating BoidGPU ACK..." << std::endl;
+	simulateAck(BOIDGPU_ID);
 }
 
 void processDrawMode() {

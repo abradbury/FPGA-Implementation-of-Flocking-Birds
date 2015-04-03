@@ -120,14 +120,14 @@ int main() {
 #ifdef MASTER_IS_RESIDENT
 				// Handle a kill key or a pause key being pressed
 				if (!XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR)) {
-					if (XUartLite_RecvByte(
-							XPAR_RS232_UART_1_BASEADDR) == KILL_KEY) {
+					int key = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
+
+					if (key == KILL_KEY) {
 						simulationKilled = true;
 						sendKillCommand();
 						print("Simulation killed, restarting...\n\r");
-					} else if (XUartLite_RecvByte(
-							XPAR_RS232_UART_1_BASEADDR) == PAUSE_KEY) {
-						print("Simulation paused, press 'P' to resume\n\r");
+					} else if (key == PAUSE_KEY) {
+						print("Simulation paused, press 'p' to resume\n\r");
 						bool simulationUnpaused = false;
 						do {
 							if (XUartLite_RecvByte(
@@ -135,6 +135,14 @@ int main() {
 								simulationUnpaused = true;
 							}
 						} while (!simulationUnpaused);
+						print("Simulation resumed\n\r");
+					} else if (key == 0x67) {
+						print("Issuing BoidGPU ACK...\n\r");
+						sendInternalMessage(0, CONTROLLER_ID, BOIDGPU_ID,
+								CMD_ACK, messageData);
+						print("----------------------------------------------"
+							"------------------------------------------------"
+							"----------------\n\r");
 					}
 				}
 #endif
@@ -219,8 +227,6 @@ void processReceivedInternalMessage(u32 *inputData) {
 
 	// Forward the message, if needed
 	if (fowardMessage) {
-//		print("Gatekeeper forwarding message...\n\r");
-
 		u32 inputDataBodyLength = inputData[CMD_LEN] - CMD_HEADER_LEN;
 		u32 inputDataBody[inputDataBodyLength];
 		int i = 0;
