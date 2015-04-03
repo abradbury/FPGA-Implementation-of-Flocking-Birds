@@ -457,6 +457,7 @@ u8 recipientLookUp(u32 to) {
 			break;
 		default:
 			if (to >= FIRST_BOIDCPU_ID) {
+				bool internal = false;
 				int i = 0;
 #ifdef MASTER_IS_RESIDENT
 				for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
@@ -465,10 +466,12 @@ u8 recipientLookUp(u32 to) {
 #endif
 					if (channelIDList[i] == to) {
 						recipientInterface = INTERNAL_RECIPIENT;
-					} else {
-						recipientInterface = EXTERNAL_RECIPIENT;
+						internal = true;
+						break;
 					}
 				}
+				if(!internal) recipientInterface = EXTERNAL_RECIPIENT;
+
 			} else {
 				recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
 			}
@@ -877,6 +880,9 @@ void printMessage(bool send, u32 *data) {
 		break;
 	case CMD_KILL:
 		print("kill simulation                   ");
+		break;
+	case CMD_DEBUG:
+		print("debug information                 ");
 		break;
 	default:
 		print("UNKNOWN COMMAND                   ");
