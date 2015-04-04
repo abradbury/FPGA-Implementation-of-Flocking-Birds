@@ -143,6 +143,9 @@ int main() {
 						print("----------------------------------------------"
 							"------------------------------------------------"
 							"----------------\n\r");
+						print("\n\r------------------------------------------"
+							"------------------------------------------------"
+							"--------------------\n\r");
 					}
 				}
 #endif
@@ -201,7 +204,7 @@ void checkForInput() {
 
 void processReceivedInternalMessage(u32 *inputData) {
 	fowardMessage = true;
-
+	print("INTERNAL: ");
 	printMessage(false, inputData);
 
 	if ((!boidCPUsSetup) && (inputData[CMD_TYPE] != CMD_ACK)) {
@@ -240,6 +243,7 @@ void processReceivedInternalMessage(u32 *inputData) {
 }
 
 void processReceivedExternalMessage() {
+	print("EXTERNAL: ");
 	printMessage(false, (u32*)externalInput);
 
 	if (!boidCPUsSetup) {
@@ -318,7 +322,7 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 
 	// First, create the message
 	u32 command[MAX_CMD_LEN];
-	int i = 0;
+	int i = 0, j = 0;
 
 	command[CMD_LEN] = len + CMD_HEADER_LEN;
 	command[CMD_TO] = to;
@@ -331,37 +335,97 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		}
 	}
 
-	// Print out message details
-	if (channel == ALL_BOIDCPU_CHANNELS) {
-		print("INTERNAL - Sending to all BoidCPU channels...\n\r");
-	} else {
-		xil_printf("INTERNAL - Sending to channel %d...\n\r", channel);
-	}
-	printMessage(true, command);
-
-	// Finally, send the message
-	for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-		switch (channel) {
-		case BOIDMASTER_CHANNEL:
-			putFSLData(command[i], BOIDMASTER_CHANNEL);
-			break;
-		case BOIDCPU_CHANNEL_1:
-			putFSLData(command[i], BOIDCPU_CHANNEL_1);
-			break;
-		case BOIDCPU_CHANNEL_2:
-			putFSLData(command[i], BOIDCPU_CHANNEL_2);
-			break;
-		default:
-			// Otherwise, send to all BoidCPU channels
+	// Multicast messages - don't send back to self
+	// For each channel, if the multicast message is not from that channel then
+	// send the message down that channel.
+	if (to == CMD_MULTICAST) {
 #ifdef MASTER_IS_RESIDENT
-			putFSLData(command[i], BOIDCPU_CHANNEL_1);
-			putFSLData(command[i], BOIDCPU_CHANNEL_2);
+		for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
 #else
-			putFSLData(command[i], 0);
-			putFSLData(command[i], 1);
+		for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
 #endif
-			break;
+			if (channelIDList[i] != from) {
+//				xil_printf("INTERNAL - Sending to %d (channel %d)...\n\r", channelIDList[i], i);
+				print("INTERNAL: ");
+				printMessage(true, command);
+				for (j = 0; j < CMD_HEADER_LEN + len; j++) {
+					putFSLData(command[j], i);
+				}
+			}
 		}
+	} else {
+		// Print out message details
+		if (channel == ALL_BOIDCPU_CHANNELS) {
+//			print("INTERNAL - Sending to all BoidCPU channels...\n\r");
+		} else {
+//			xil_printf("INTERNAL - Sending to channel %d...\n\r", channel);
+		}
+		print("INTERNAL: ");
+		printMessage(true, command);
+
+		// Finally, send the message
+		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+			switch (channel) {
+			case BOIDMASTER_CHANNEL:
+				putFSLData(command[i], BOIDMASTER_CHANNEL);
+				break;
+			case BOIDCPU_CHANNEL_1:
+				putFSLData(command[i], BOIDCPU_CHANNEL_1);
+				break;
+			case BOIDCPU_CHANNEL_2:
+				putFSLData(command[i], BOIDCPU_CHANNEL_2);
+				break;
+			default:
+				// Otherwise, send to all BoidCPU channels
+	#ifdef MASTER_IS_RESIDENT
+				putFSLData(command[i], BOIDCPU_CHANNEL_1);
+				putFSLData(command[i], BOIDCPU_CHANNEL_2);
+	#else
+				putFSLData(command[i], 0);
+				putFSLData(command[i], 1);
+	#endif
+				break;
+			}
+		}
+
+
+	//	switch (channel) {
+	//	case BOIDMASTER_CHANNEL:
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], BOIDMASTER_CHANNEL);
+	//		}
+	//		break;
+	//	case BOIDCPU_CHANNEL_1:
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], BOIDCPU_CHANNEL_1);
+	//		}
+	//		break;
+	//	case BOIDCPU_CHANNEL_2:
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], BOIDCPU_CHANNEL_2);
+	//		}
+	//		break;
+	//	default:
+	//		// Otherwise, send to all BoidCPU channels
+	//#ifdef MASTER_IS_RESIDENT
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], BOIDCPU_CHANNEL_1);
+	//		}
+	//
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], BOIDCPU_CHANNEL_2);
+	//		}
+	//#else
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], 0);
+	//		}
+	//
+	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
+	//			putFSLData(command[i], 1);
+	//		}
+	//#endif
+	//		break;
+	//	}
 	}
 }
 
@@ -385,7 +449,7 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		}
 	}
 
-	print("EXTERNAL - Sending...\n\r");
+	print("EXTERNAL: ");
 	printMessage(true, command);
 
 	// Then, populate the transmit buffer
