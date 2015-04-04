@@ -25,7 +25,7 @@ void issueDrawMode();
 void killSimulation();
 
 void setupSimulation();
-void closestMultiples(uint8 *height, uint8 *width, uint8 number);
+void closestMultiples(uint12 *height, uint12 *width, uint8 number);
 
 void printCommand(bool send, uint32 *data);
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type,
@@ -338,7 +338,7 @@ void setupSimulation() {
 	issueSetupInformation();
 }
 
-void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
+void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
 	uint8 difference = -1;
 
 	incCloestMultLoop: for (int i = 1; i < number + 1; i++) {

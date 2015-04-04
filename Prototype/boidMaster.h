@@ -46,6 +46,7 @@
 #define CMD_KILL                16  // Controller -> All (B)
 #define CMD_ACK					17
 #define CMD_PING_START			18
+#define CMD_DEBUG				76
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
 #define CMD_SETUP_COORD_IDX 	2	// Coordinates start index

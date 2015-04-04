@@ -52,6 +52,8 @@ int main() {
     simulateBoidTransfer();
     testDrawBoids();
 
+    testNeighbourSearch();
+
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
         tbPrintCommand(true, tbOutputData[i]);
@@ -72,9 +74,9 @@ int main() {
     bool inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
 
     while (inputAvailable) {
-        inLp: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - 1; i++) {
-            tbInputData[tbInputCount][i + 1] = from_hw.read();
-        }
+    	inLp: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] -1 ; i++) {
+    		tbInputData[tbInputCount][i+1] = from_hw.read();
+    	}
 
         tbPrintCommand(false, tbInputData[tbInputCount]);
 
@@ -111,22 +113,22 @@ void testSimulationSetup() {
     uint32 initialBoidCount = 10;
     uint32 distinctNeighbourCount = 1;
 
-    // BoidCPU #4
-    newID = 4;
+    // BoidCPU #3
+    newID = 3;
 
-    tbCoords[0] = 40;
+    tbCoords[0] = 0;
 	tbCoords[1] = 0;
-	tbCoords[2] = 80;
+	tbCoords[2] = 40;
 	tbCoords[3] = 40;
 
-    tbNeighbours[0] = 3;
-    tbNeighbours[1] = 4;
-    tbNeighbours[2] = 3;
-    tbNeighbours[3] = 3;
-    tbNeighbours[4] = 3;
-    tbNeighbours[5] = 4;
-    tbNeighbours[6] = 3;
-    tbNeighbours[7] = 3;
+    tbNeighbours[0] = 4;
+    tbNeighbours[1] = 3;
+    tbNeighbours[2] = 4;
+    tbNeighbours[3] = 4;
+    tbNeighbours[4] = 4;
+    tbNeighbours[5] = 3;
+    tbNeighbours[6] = 4;
+    tbNeighbours[7] = 4;
 
     tbData[CMD_SETUP_NEWID_IDX] = newID;
     tbData[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
@@ -221,38 +223,43 @@ void simulateNeighbourResponse() {
 //	}
 
 	// 34 99 3 8 || 12585728 5242880 21 19931904 -5242624 22 12590848 -3146240 23 36705792 1047808 24 4196608 -1048576 25 19927552 3144960 26 39850752 5241856 27 18875648 -1048064 28 15737088 3145216 29 3147776 -2097152 30
-	tbData[0] = 12585728;
-	tbData[1] = 5242880;
-	tbData[2] = 21;
-	tbData[3] = 19931904;
-	tbData[4] = -5242624;
-	tbData[5] = 22;
-	tbData[6] = 12590848;
-	tbData[7] = -3146240;
-	tbData[8] = 23;
-	tbData[9] = 36705792;
-	tbData[10] = 1047808;
-	tbData[11] = 24;
-	tbData[12] = 4196608;
-	tbData[13] = -1048576;
-	tbData[14] = 25;
-	tbData[15] = 19927552;
-	tbData[16] = 3144960;
-	tbData[17] = 26;
-	tbData[18] = 39850752;
-	tbData[19] = 5241856;
-	tbData[20] = 27;
-	tbData[21] = 18875648;
-	tbData[22] = -1048064;
-	tbData[23] = 28;
-	tbData[24] = 15737088;
-	tbData[25] = 3145216;
-	tbData[26] = 29;
-	tbData[27] = 3147776;
-	tbData[28] = -2097152;
-	tbData[29] = 30;
+	tbData[0] = 1;
+	tbData[1] = 12585728;
+	tbData[2] = 5242880;
+	tbData[3] = 21 + 10;
+	tbData[4] = 19931904;
+	tbData[5] = -5242624;
+	tbData[6] = 22 + 10;
+	tbData[7] = 12590848;
+	tbData[8] = -3146240;
+	tbData[9] = 23 + 10;
+	tbData[10] = 36705792;
+	tbData[11] = 1047808;
+	tbData[12] = 24 + 10;
+	tbData[13] = 4196608;
+	tbData[14] = -1048576;
+	tbData[15] = 25 + 10;
+	tbData[16] = 19927552;
+	tbData[17] = 3144960;
+	tbData[18] = 26 + 10;
+	tbData[19] = 39850752;
+	tbData[20] = 5241856;
+	tbData[21] = 27 + 10;
+	tbData[22] = 18875648;
+	tbData[23] = -1048064;
+	tbData[24] = 28 + 10;
+	tbData[25] = 15737088;
+	tbData[26] = 3145216;
+	tbData[27] = 29 + 10;
 
-	tbCreateCommand(30, 99, 3, CMD_NBR_REPLY, tbData);
+	tbCreateCommand(28, 99, 4, CMD_NBR_REPLY, tbData);
+
+	tbData[0] = 0;
+	tbData[1] = 3147776;
+	tbData[2] = -2097152;
+	tbData[3] = 30 + 10;
+
+	tbCreateCommand(4, 99, 4, CMD_NBR_REPLY, tbData);
 }
 
 void testCalcNextBoidPos() {
@@ -308,15 +315,15 @@ void testDrawBoids() {
  * BoidCPU. Used when calculating the neighbours for a particular boid.
  */
 void processNeighbourReply() {
-    int count = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 
+    int count = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN - 1) /
         BOID_DATA_LENGTH;
     Boid tbBoids[MAX_BOIDS];
 
     std::cout << "Dummy BoidCPU received " << count << " boids" << std::endl;
 
     for (int i = 0; i < count; i++) {
-        uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
-        uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+        uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+        uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
 
         Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
                 (int12)((position & (uint32)0xFFF00) >> 8));
@@ -324,7 +331,7 @@ void processNeighbourReply() {
         Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
                 (int12)((velocity & (uint32)0xFFF00) >> 8));
 
-        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v);
+        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3], p, v);
         tbBoids[i] = b;
 //      b.printBoidInfo();
     }

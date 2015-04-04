@@ -1,7 +1,7 @@
 #include "boidCPU.h"
 
 #include <iostream>     // cout
-#include <math.h>       // sqrt, floor
+#include <math.h>       // sqrt
 
 //#define USING_TB	true
 
@@ -28,9 +28,6 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 bool fromNeighbour();
 
 int12 divide(int12 numerator, int12 denominator, uint4 mode);
-
-int16 getRandom(int16 min, int16 max);
-uint16 shiftLSFR(uint16 *lsfr, uint16 mask);
 
 void commitAcceptedBoids();
 
@@ -77,13 +74,6 @@ Boid *boidNeighbourList[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
 Boid possibleBoidNeighbours[MAX_NEIGHBOURING_BOIDS];
 uint8 possibleNeighbourCount = 0;	// Number of possible boid neighbours
 
-// True when this BoidCPU has received a boid list from neighbouring BoidCPUs
-//bool receivedBoidCPUNbrList[MAX_BOIDCPU_NEIGHBOURS] = { false };
-
-// Supporting variables --------------------------------------------------------
-uint16 lfsr16 = 0xF429;     // LSFR seed - 16 bit binary (62505)
-uint16 lfsr15 = 0x51D1;     // LSFR seed - 15 bit binary (20945)
-
 // Debugging variables ---------------------------------------------------------
 bool continueOperation = true;
 
@@ -109,11 +99,6 @@ bool continueOperation = true;
  *  typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
  */
 
-/**
- * TODO: Random generator needs random seeds - FPGA clock?
- * TODO: Programmatically calculate the length of the commands
- * TODO: Split data that is too long over multiple packets
- */
 
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port = input
@@ -202,7 +187,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
         continueOperation = input.read_nb(inputData[0]);
 #endif
     }
-    std::cout << "=========BoidCPU has finished=========" << std::endl;
+    std::cout << "=============BoidCPU has finished==============" << std::endl;
 }
 
 //==============================================================================
@@ -341,7 +326,8 @@ void processNeighbouringBoids() {
 	}
 
     // Calculate the number of boids per message TODO: Remove division
-	uint8 boidsPerMsg = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
+	uint8 boidsPerMsg = (inputData[CMD_LEN] - CMD_HEADER_LEN - 1) /
+			BOID_DATA_LENGTH;
 
     std::cout << "-BoidCPU #" << boidCPUID << " received " << boidsPerMsg <<
         " boids from BoidCPU #" << inputData[CMD_FROM] << std::endl;
@@ -352,18 +338,23 @@ void processNeighbouringBoids() {
         possibleNeighbourCount++;
     }
 
-    // Increment the boids received from neighbour counter
-    distinctNeighbourCounter++;
+    // If no further messages are expected, then process it
+    if (inputData[CMD_HEADER_LEN + 0] == 0) {
+    	distinctNeighbourCounter++;
 
-    if (distinctNeighbourCounter == distinctNeighbourCount) {
-		calculateBoidNeighbours();
-	}
+    	if (distinctNeighbourCounter == distinctNeighbourCount) {
+			calculateBoidNeighbours();
 
-	// Send ACK signal
-	outputBody[0] = MODE_CALC_NBRS;
-	outputBody[1] = distinctNeighbourCounter;
-	outputBody[2] = distinctNeighbourCount;
-	generateOutput(3, CONTROLLER_ID, CMD_ACK, outputBody);
+			// Send ACK signal
+			outputBody[0] = MODE_CALC_NBRS;
+			outputBody[1] = distinctNeighbourCounter;
+			outputBody[2] = distinctNeighbourCount;
+			generateOutput(3, CONTROLLER_ID, CMD_ACK, outputBody);
+		}
+    } else {
+    	std::cout << "Expecting " << inputData[CMD_HEADER_LEN + 0] << \
+    			" further message(s) from " << inputData[CMD_FROM] << std::endl;
+    }
 }
 
 /**
@@ -375,7 +366,7 @@ void processNeighbouringBoids() {
 void calculateBoidNeighbours() {
 	outerCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
 		uint8 boidNeighbourCount = 0;
-		innerCalcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
+		inCalcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
 			if (possibleBoidNeighbours[j].id != boids[i].id) {
 				uint12 boidSeparation = Vector::squaredDistanceBetween(
 					boids[i].position, possibleBoidNeighbours[j].position);
@@ -450,13 +441,15 @@ void loadBalance() {
 //}
 
 void updateDisplay() {
-
 	if (queuedBoidsCounter > 0) {
 		commitAcceptedBoids();
-	}
 
-    std::cout << "-Updating display" << std::endl;
-    packBoidsForSending(BOIDGPU_ID, CMD_DRAW_INFO);
+		std::cout << "-Updating display" << std::endl;
+		packBoidsForSending(BOIDGPU_ID, CMD_DRAW_INFO);
+	} else {
+		std::cout << "-Updating display" << std::endl;
+		packBoidsForSending(BOIDGPU_ID, CMD_DRAW_INFO);
+	}
 }
 
 //==============================================================================
@@ -473,7 +466,7 @@ void calculateEscapedBoids() {
 	// For each boid
 	moveBoidsLoop: for (int i = 0; i < boidCount; i++) {
 		// For each bearing (from NORTHWEST (0) to WEST (7))
-		bearingLoop: for (int bearing = NORTHWEST; bearing < WEST + 1; bearing++) {
+		bearLoop: for (int bearing = NORTHWEST; bearing < WEST + 1; bearing++) {
 			// If a BoidCPU is at the bearing & boid is beyond the bearing limit
 			if (isNeighbourTo(bearing) && isBoidBeyond(boids[i], bearing)) {
 				// Mark boid as to be transferred
@@ -698,9 +691,9 @@ void printStateOfBoidCPUBoids() {
 Boid parsePackedBoid(uint8 offset) {
 	uint8 index = CMD_HEADER_LEN + (BOID_DATA_LENGTH * offset);
 
-	uint32 pos = inputData[index + 0];
-	uint32 vel = inputData[index + 1];
-	uint16 bID = inputData[index + 2];		// boid ID
+	uint32 pos = inputData[index + 1];
+	uint32 vel = inputData[index + 2];
+	uint16 bID = inputData[index + 3];		// boid ID
 
 	Vector position = Vector((int12)((pos & (~(uint32)0xFFFFF)) >> 20),
 			(int12)((pos & (uint32)0xFFF00) >> 8));
@@ -715,18 +708,21 @@ Boid parsePackedBoid(uint8 offset) {
 }
 
 void packBoidsForSending(uint32 to, uint32 msg_type) {
-	if(boidCount > 0) {
+	if (boidCount > 0) {
+		//
+		uint16 partialMaxCmdBodyLen = MAX_CMD_BODY_LEN - 1;
+
 		// First, calculate how many messages need to be sent
 		// For some reason this performs better when not using divide() method
 		int16 numerator = boidCount * BOID_DATA_LENGTH;
 		uint16 msgCount = 0;
 		nbrMsgCountCalcLoop: for (msgCount = 0; numerator > 0; msgCount++) {
-			numerator -= MAX_CMD_BODY_LEN;
+			numerator -= partialMaxCmdBodyLen;
 		}
 
 		// Then calculate the number of boids that can be sent per message
-		uint16 boidsPerMsg = (uint16)divide(MAX_CMD_BODY_LEN, BOID_DATA_LENGTH, \
-				ROUND_TOWARDS_ZERO);
+		uint16 boidsPerMsg = (uint16)divide(partialMaxCmdBodyLen, \
+				BOID_DATA_LENGTH, ROUND_TOWARDS_ZERO);
 
 		// Determine the initial boid indexes for this message
 		uint8 startBoidIndex = 0;
@@ -739,8 +735,11 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 				endBoidIndex = boidCount;
 			}
 
+			// Put the number of subsequent messages in the first field of the body
+			outputBody[0] = msgCount - i - 1;
+
 			// The next step is to create the message data
-			uint8 index = 0;
+			uint8 index = 1;
 			NMClp: for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
 				uint32 position = 0;
 				uint32 velocity = 0;
@@ -774,7 +773,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 			}
 
 			// Finally send the message
-			uint32 dataLength = ((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH;
+			uint32 dataLength = (((endBoidIndex - startBoidIndex)) * BOID_DATA_LENGTH) + 1;
 			generateOutput(dataLength, to, msg_type, outputBody);
 
 			// Update the boid indexes for the next message
@@ -782,7 +781,8 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 			endBoidIndex = startBoidIndex + boidsPerMsg;
 		}
 	} else {
-		std::cout << "No boids to send" << std::endl;
+		std::cout << "No boids to send, sending empty message" << std::endl;
+		generateOutput(0, to, msg_type, outputBody);
 	}
 }
 
@@ -969,34 +969,6 @@ void printCommand(bool send, uint32 *data) {
         std::cout << data[CMD_HEADER_LEN + i] << " ";
     }
     std::cout << std::endl;
-}
-
-//==============================================================================
-// Random ======================================================================
-//==============================================================================
-
-// Removing random doesn't have a huge effect on resource utilisation, but
-// takes 18 cycles to do - so is costly in time
-
-// TODO: Try with 32 bits
-// http://en.wikipedia.org/wiki/Linear_feedback_shift_register#Galois_LFSRs
-// http://stackoverflow.com/q/17764587
-// http://stackoverflow.com/a/5009006
-int16 getRandom(int16 min, int16 max) {
-    shiftLSFR(&lfsr16, POLY_MASK_16);
-    int result = (shiftLSFR(&lfsr16, POLY_MASK_16) ^
-        shiftLSFR(&lfsr15, POLY_MASK_15));
-
-    return (min + (result % (int16)(max - min + 1)));
-}
-
-uint16 shiftLSFR(uint16 *lfsr, uint16 mask) {
-    uint16 lsb = *lfsr & 1;     // Get LSB (i.e., the output bit)
-    *lfsr >>= 1;                // Shift register
-    if (lsb == 1)               // Only apply toggle mask if output bit is 1
-        *lfsr ^= 0xB400u;       // Apply toggle mask, value has 1 at bits
-                                //  corresponding to taps, 0 elsewhere
-    return *lfsr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
