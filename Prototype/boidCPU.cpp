@@ -782,7 +782,8 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 		}
 	} else {
 		std::cout << "No boids to send, sending empty message" << std::endl;
-		generateOutput(0, to, msg_type, outputBody);
+		outputBody[0] = 0;
+		generateOutput(1, to, msg_type, outputBody);
 	}
 }
 
