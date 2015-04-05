@@ -100,6 +100,7 @@ typedef ap_uint<16> uint16;
 typedef ap_int<16> int16;
 
 typedef ap_int<12> int12;   // Used to represent position and negative velocity
+typedef ap_uint<11> uint11;	// For simulation width and height
 
 typedef ap_uint<8> uint8;
 typedef ap_int<8> int8;

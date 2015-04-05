@@ -41,8 +41,8 @@ void printStateOfBoidCPUBoids();
 int8 boidCPUID = FIRST_BOIDCPU_ID;
 int12 boidCPUCoords[4];
 
-uint8 simulationWidth  = 0;
-uint8 simulationHeight = 0;
+uint11 simulationWidth  = 0;
+uint11 simulationHeight = 0;
 
 uint8 neighbouringBoidCPUs[MAX_BOIDCPU_NEIGHBOURS];
 bool neighbouringBoidCPUsSetup = false;	// True when neighbouring BoidCPUs setup
