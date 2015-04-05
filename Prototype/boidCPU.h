@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <iostream>     			// For cout
 #include <ap_int.h>                 // For arbitrary precision types
 #include <ap_fixed.h>               // For fixed point data types
 #include <hls_stream.h>

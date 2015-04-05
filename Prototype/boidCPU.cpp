@@ -1,8 +1,5 @@
 #include "boidCPU.h"
 
-#include <iostream>     // cout
-#include <math.h>       // sqrt
-
 //#define USING_TB	true
 
 // Function headers ============================================================
@@ -26,8 +23,6 @@ Boid parsePackedBoid(uint8 offset);
 
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 bool fromNeighbour();
-
-int16_fp divide(int16_fp numerator, int16_fp denominator, uint4 mode);
 
 void commitAcceptedBoids();
 
@@ -257,8 +252,6 @@ void simulationSetup() {
     	baseBoidID += boidCount;
     }
 
-//    uint16 baseBoidID = multiply(boidCount, (boidCPUID - 1));
-
     testBoidCreationLoop: for (int i = 0; i < boidCount; i++) {
         uint16 boidID = baseBoidID + i + 1;
         Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
@@ -269,14 +262,6 @@ void simulationSetup() {
     outputBody[0] = CMD_SIM_SETUP;
     generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
-
-//uint multiply(uint value, uint multiplicand) {
-//	uint result = 0;
-//	multLoop: for (int i = 0; i < multiplicand; i++) {
-//		result += value;
-//	}
-//	return result;
-//}
 
 /**
  * Send this BoidCPU's boids to its neighbouring BoidCPUs so they can use them
@@ -604,29 +589,6 @@ void acceptBoid() {
 	}
 
 	queuedBoidsCounter++;
-
-//	uint16 boidID = inputData[CMD_HEADER_LEN + 0];
-//	Vector boidPosition = Vector(inputData[CMD_HEADER_LEN + 1],
-//			inputData[CMD_HEADER_LEN + 2]);
-//	Vector boidVelocity = Vector(inputData[CMD_HEADER_LEN + 3],
-//			inputData[CMD_HEADER_LEN + 4]);
-//	Boid b = Boid(boidID, boidPosition, boidVelocity, boidCount);
-//
-//	boids[boidCount] = b;
-//	boidCount++;
-
-//	std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID <<
-//		" from boidCPU #" << inputData[CMD_FROM] << std::endl;
-//
-//	// TODO: Remove divide
-//	uint8 count = (inputData[CMD_LEN] - CMD_HEADER_LEN) / BOID_DATA_LENGTH;
-//
-//	// Then, create a boid object for each listed boid and add to the list of
-//	// possible neighbouring boids for this BoidCPU
-//	rxNbrBoidLoop: for (int i = 0; i < count; i++) {
-//		boids[boidCount] = parsePackedBoid(i);
-//		boidCount++;
-//	}
 }
 
 void commitAcceptedBoids() {
@@ -692,7 +654,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 		uint16 partialMaxCmdBodyLen = MAX_CMD_BODY_LEN - 1;
 
 		// First, calculate how many messages need to be sent
-		// For some reason this performs better when not using divide() method
+		// Doing this division saves a DSP at the expense of about 100 LUTs
 		int16 numerator = boidCount * BOID_DATA_LENGTH;
 		uint16 msgCount = 0;
 		nbrMsgCountCalcLoop: for (msgCount = 0; numerator > 0; msgCount++) {
@@ -700,8 +662,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 		}
 
 		// Then calculate the number of boids that can be sent per message
-		uint16 boidsPerMsg = (uint16)divide(partialMaxCmdBodyLen, \
-				BOID_DATA_LENGTH, ROUND_TOWARDS_ZERO);
+		uint16 boidsPerMsg = (uint16)(partialMaxCmdBodyLen / BOID_DATA_LENGTH);
 
 		// Determine the initial boid indexes for this message
 		uint8 startBoidIndex = 0;
@@ -817,60 +778,6 @@ bool fromNeighbour() {
 	}
 
 	return result;
-}
-
-/**
- * Divide a numerator by repeated subtraction of a denominator.
- * Mode 1: Round towards 0 (default) e.g. divide(20, 30, 1) = 0
- * Mode 2: Round away from 0 e.g. divide(20, 30, 2) = 1
- * Mode 3: Use mode 1 and return the remainder instead of the quotient
- */
-int16_fp divide(int16_fp numerator, int16_fp denominator, uint4 mode) {
-	bool numeratorNegative = false;
-	bool denominatorNegative = false;
-
-	if (denominator == 0) {
-		std::cerr << "Cannot divide by zero" << std::endl;
-		return numerator;
-	}
-
-	if (denominator < 0) {
-		denominator = 0 - denominator;
-		denominatorNegative = true;
-	}
-
-	if (numerator < 0) {
-		numerator = 0 - numerator;
-		numeratorNegative = true;
-	}
-
-	int16_fp quotient = 0;
-	int16_fp remainder = numerator;
-	manualDivisionLoop: while (remainder >= denominator) {
-		quotient = quotient + 1;
-		remainder = remainder - denominator;
-	}
-
-	if ((mode == 2) && (remainder != 0)) {
-		quotient = quotient + 1;
-	}
-
-	if (numeratorNegative) {
-		quotient = 0 - quotient;
-		if (remainder != 0) {
-			remainder = denominator - remainder;
-		}
-	}
-
-	if (denominatorNegative) {
-		quotient = 0 - quotient;
-	}
-
-	if (mode == 3) {
-		return remainder;
-	} else {
-		return quotient;
-	}
 }
 
 /**
@@ -1016,7 +923,7 @@ Vector Boid::align(void) {
     Vector total;
 
     alignBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
-        total.add(boidNeighbourList[boidNeighbourIndex][i]->velocity);
+    	total.add(boidNeighbourList[boidNeighbourIndex][i]->velocity);
     }
 
     total.div(boidNeighbourCount);
@@ -1101,33 +1008,20 @@ void Vector::add(Vector v) {
 }
 
 void Vector::mul(int16_fp n) {
-//    x = x * n;
-//    y = y * n;
-
-	// Assumes n is not negative
-	if (n == 0) {
-		x = 0;
-		y = 0;
-	} else {
-		int16_fp oldX = x;
-		int16_fp oldY = y;
-		vectorMultLoop: for (int i = 0; i < n; i++) {
-			x += oldX;
-			y += oldY;
-		}
-	}
+    x = x * n;
+    y = y * n;
 }
 
 void Vector::div(int16_fp n) {
     if (n != 0) {
-    	x = divide(x, n, 1);
-    	y = divide(y, n, 1);
+    	x = x / n;
+    	y = y / n;
     }
 }
 
 // Static Operations /////////////////////////////////////////////////////////
 Vector Vector::sub(Vector v1, Vector v2) {
-    Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
+	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
     return v3;
 }
 
@@ -1145,11 +1039,8 @@ int16_fp Vector::squaredDistanceBetween(Vector v1, Vector v2) {
 
 // Advanced Operations /////////////////////////////////////////////////////////
 int16_fp Vector::mag() {
-    // Could also use hls::sqrt() - in newer HLS version
-	// FIXME: This really has to be removed - it is a killer
-	// Removed round function - slightly lowers overall utilisation on average
-//	return sqrt(double(x*x + y*y));
-	return (x*x + y*y);
+	int16_fp result = (x*x + y*y);
+	return hls::sqrt(result);
 }
 
 // TODO: setMag and limit are similar - perhaps combine?
