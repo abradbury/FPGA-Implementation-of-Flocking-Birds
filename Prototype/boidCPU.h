@@ -99,7 +99,6 @@ typedef ap_uint<16> uint16;
 typedef ap_int<16> int16;
 
 typedef ap_int<12> int12;   // Used to represent position and negative velocity
-typedef ap_int<12> uint12;
 
 typedef ap_uint<8> uint8;
 typedef ap_int<8> int8;
@@ -107,31 +106,37 @@ typedef ap_int<8> int8;
 typedef ap_uint<4> uint4;
 typedef ap_int<4> int4;
 
+// 16-bit signed word with 4 fractional bits, truncation and saturation
+typedef ap_fixed<16,12, AP_TRN, AP_SAT> int16_fp;
+
+// 32-bit signed word with 8 fractional bits, truncation and saturation
+typedef ap_fixed<32,24, AP_TRN, AP_SAT> int32_fp;
+
 // Prototypes
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
 
 // Classes
 class Vector {
  public:
-    int12 x;
-    int12 y;
+	int16_fp x;
+	int16_fp y;
 
     Vector();
-    Vector(int12 x_, int12 y_);
+    Vector(int16_fp x_, int16_fp y_);
 
     void add(Vector v);
-    void mul(int12 n);
-    void div(int12 n);
+    void mul(int16_fp n);
+    void div(int16_fp n);
 
-    int12 mag();
-    void setMag(int12 mag);
-    void limit(int12 max);
+    int16_fp mag();
+    void setMag(int16_fp mag);
+    void limit(int16_fp max);
 
     void normalise();
-    void normaliseWithMag(int12 magnitude);
+    void normaliseWithMag(int16_fp magnitude);
 
     static Vector sub(Vector v1, Vector v2);
-    static uint12 squaredDistanceBetween(Vector v1, Vector v2);
+    static int16_fp squaredDistanceBetween(Vector v1, Vector v2);
 };
 
 class Boid {

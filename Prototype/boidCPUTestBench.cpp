@@ -195,23 +195,23 @@ void simulateNeighbourResponse() {
 //			uint32 position = 0;
 //			uint32 velocity = 0;
 //
-//			position |= ((uint32)(boidsFromNbrs[i][j].position.x) << 20);
-//			position |= ((uint32)(boidsFromNbrs[i][j].position.y) << 8);
+//			// Encode position
+//			position |= ((uint32)(((int32_fp)(boidsFromNbrs[i][j].position.x)) << 4) << 16);
 //
-//			// Despite being of type int12, the velocity (and position) seem to
-//			// be represented using 16 bits. Therefore, negative values need to
-//			// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
-//			if (boidsFromNbrs[i][j].velocity.x < 0) {
-//				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.x) & ~((int16)0x0F << 12)) << 20);
-//			} else {
-//				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.x) << 20);
+//			if (boidsFromNbrs[i][j].position.y < 0) {
+//				position |= ((~(((uint32)0xFFFF) << 16)) &
+//						((uint32)((int32_fp)(boidsFromNbrs[i][j].position.y) << 4)));
 //			}
+//			else position |= ((uint32)((int32_fp)(boidsFromNbrs[i][j].position.y) << 4));
+//
+//			// Encode velocity
+//			velocity |= ((uint32)(((int32_fp)(boidsFromNbrs[i][j].velocity.x)) << 4) << 16);
 //
 //			if (boidsFromNbrs[i][j].velocity.y < 0) {
-//				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.y) & ~((int16)0x0F << 12)) << 8);
-//			} else {
-//				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.y) << 8);
+//				velocity |= ((~(((uint32)0xFFFF) << 16)) &
+//						((uint32)((int32_fp)(boidsFromNbrs[i][j].velocity.y) << 4)));
 //			}
+//			else velocity |= ((uint32)((int32_fp)(boidsFromNbrs[i][j].velocity.y) << 4));
 //
 //			data[(k * BOID_DATA_LENGTH) + 0] = position;
 //			data[(k * BOID_DATA_LENGTH) + 1] = velocity;
@@ -222,41 +222,42 @@ void simulateNeighbourResponse() {
 //		createCommand(dataLength, 7, neighbours[i], CMD_NBR_REPLY, data);
 //	}
 
-	// 34 99 3 8 || 12585728 5242880 21 19931904 -5242624 22 12590848 -3146240 23 36705792 1047808 24 4196608 -1048576 25 19927552 3144960 26 39850752 5241856 27 18875648 -1048064 28 15737088 3145216 29 3147776 -2097152 30
+	// 32 99 3 8 || 1 12583088 5242880 21 20185648 4289724444 22 12583408 4290838496 23 36700512 65488 24 4194448 4293918720 25 19923232 2162640 26 39846192 4259776 27 18874448 4293918752 28 15729168 2162656 29
+	// 8  99 3 8 || 0 3145856 4292870144 30
 	tbData[0] = 1;
-	tbData[1] = 12585728;
+	tbData[1] = 12583088;
 	tbData[2] = 5242880;
 	tbData[3] = 21 + 10;
-	tbData[4] = 19931904;
-	tbData[5] = -5242624;
+	tbData[4] = 20185648;
+	tbData[5] = 4289724444;
 	tbData[6] = 22 + 10;
-	tbData[7] = 12590848;
-	tbData[8] = -3146240;
+	tbData[7] = 12583408;
+	tbData[8] = 4290838496;
 	tbData[9] = 23 + 10;
-	tbData[10] = 36705792;
-	tbData[11] = 1047808;
+	tbData[10] = 36700512;
+	tbData[11] = 65488;
 	tbData[12] = 24 + 10;
-	tbData[13] = 4196608;
-	tbData[14] = -1048576;
+	tbData[13] = 4194448;
+	tbData[14] = 4293918720;
 	tbData[15] = 25 + 10;
-	tbData[16] = 19927552;
-	tbData[17] = 3144960;
+	tbData[16] = 19923232;
+	tbData[17] = 2162640;
 	tbData[18] = 26 + 10;
-	tbData[19] = 39850752;
-	tbData[20] = 5241856;
+	tbData[19] = 39846192;
+	tbData[20] = 4259776;
 	tbData[21] = 27 + 10;
-	tbData[22] = 18875648;
-	tbData[23] = -1048064;
+	tbData[22] = 18874448;
+	tbData[23] = 4293918752;
 	tbData[24] = 28 + 10;
-	tbData[25] = 15737088;
-	tbData[26] = 3145216;
+	tbData[25] = 15729168;
+	tbData[26] = 2162656;
 	tbData[27] = 29 + 10;
 
 	tbCreateCommand(28, 99, 4, CMD_NBR_REPLY, tbData);
 
 	tbData[0] = 0;
-	tbData[1] = 3147776;
-	tbData[2] = -2097152;
+	tbData[1] = 3145856;
+	tbData[2] = 4292870144;
 	tbData[3] = 30 + 10;
 
 	tbCreateCommand(4, 99, 4, CMD_NBR_REPLY, tbData);
@@ -325,11 +326,12 @@ void processNeighbourReply() {
         uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
         uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
 
-        Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
-                (int12)((position & (uint32)0xFFF00) >> 8));
+        // Decode position and velocity
+		Vector p = Vector(((int32_fp)((int32)position >> 16)) >> 4,
+				((int32_fp)((int16)position)) >> 4);
 
-        Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
-                (int12)((velocity & (uint32)0xFFF00) >> 8));
+		Vector v = Vector(((int32_fp)((int32)velocity >> 16)) >> 4,
+				((int32_fp)((int16)velocity)) >> 4);
 
         Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3], p, v);
         tbBoids[i] = b;

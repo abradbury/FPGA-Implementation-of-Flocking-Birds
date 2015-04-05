@@ -27,7 +27,7 @@ Boid parsePackedBoid(uint8 offset);
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 bool fromNeighbour();
 
-int12 divide(int12 numerator, int12 denominator, uint4 mode);
+int16_fp divide(int16_fp numerator, int16_fp denominator, uint4 mode);
 
 void commitAcceptedBoids();
 
@@ -55,7 +55,7 @@ bool neighbouringBoidCPUsSetup = false;	// True when neighbouring BoidCPUs setup
 uint8 distinctNeighbourCount = 0;		// The number of distinct neighbouring BoidCPUs
 uint8 distinctNeighbourCounter = 0;		// A counter to the above
 
-uint16 queuedBoids[MAX_QUEUED_BOIDS][5];// Holds boids received from neighbours
+int16 queuedBoids[MAX_QUEUED_BOIDS][5];// Holds boids received from neighbours
 uint8 queuedBoidsCounter = 0;			// A counter for queued boids
 
 uint32 inputData[MAX_CMD_LEN];
@@ -76,28 +76,6 @@ uint8 possibleNeighbourCount = 0;	// Number of possible boid neighbours
 
 // Debugging variables ---------------------------------------------------------
 bool continueOperation = true;
-
-
-/**
- * Fixed-point arithmetic attempt (failed)
- * --------------------------------------
- * Tried using HLS's fixed point library (ap_fixed.h) but it did not make sense.
- * For example:
- *  ap_fixed<6,3, AP_RND, AP_WRAP> Val = 3.25;
- *  std::cout << Val << std::endl;              // Gives 3.25
- * However, this one didn't work for some reason:
- *  din1_t a = -345.8;
- *  std::cout << a << std::endl;                // Gives 0
- *  fint12 b = -345.8;
- *  std::cout << b << std::endl;                // Gives -346
- *
- *  Aleks: <0, 1>, <0, 1>, <1, 2>, <2, 1>
- *  Tom:   scale by 10000
- *
- * Where the types were defined in the header:
- *  typedef ap_fixed<22,22, AP_RND, AP_SAT> fint12;
- *  typedef ap_ufixed<10,8, AP_RND, AP_SAT> din1_t;
- */
 
 
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
@@ -264,7 +242,7 @@ void simulationSetup() {
     // Create the boids (testing implementation)
 //    uint8 testBoidCount = boidCount;
     Vector knownSetup[10][2] = {{Vector(12, 11), Vector(5, 0)},
-            {Vector(19, 35), Vector(-5, 1)},
+            {Vector(19.3, 35), Vector(-5, 1.76)},
             {Vector(12, 31), Vector(-4, -2)},
             {Vector(35, 22), Vector(0, -3)},
             {Vector(4, 9), Vector(-1, 0)},
@@ -368,7 +346,7 @@ void calculateBoidNeighbours() {
 		uint8 boidNeighbourCount = 0;
 		inCalcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
 			if (possibleBoidNeighbours[j].id != boids[i].id) {
-				uint12 boidSeparation = Vector::squaredDistanceBetween(
+				int16_fp boidSeparation = Vector::squaredDistanceBetween(
 					boids[i].position, possibleBoidNeighbours[j].position);
 
 				if (boidSeparation < VISION_RADIUS_SQUARED) {
@@ -519,7 +497,7 @@ bool isBoidBeyond(Boid boid, uint8 edge) {
  * handle singular edge bearings e.g. NORTH.
  */
 bool isBoidBeyondSingle(Boid boid, uint8 edge) {
-	int12 coordinate;
+	int16_fp coordinate;
 	bool result;
 
 	switch (edge){
@@ -695,11 +673,12 @@ Boid parsePackedBoid(uint8 offset) {
 	uint32 vel = inputData[index + 2];
 	uint16 bID = inputData[index + 3];		// boid ID
 
-	Vector position = Vector((int12)((pos & (~(uint32)0xFFFFF)) >> 20),
-			(int12)((pos & (uint32)0xFFF00) >> 8));
+	// Decode position and velocity
+	Vector position = Vector(((int32_fp)((int32)pos >> 16)) >> 4,
+			((int32_fp)((int16)pos)) >> 4);
 
-	Vector velocity = Vector((int12)((vel & (~(uint32)0xFFFFF)) >> 20),
-			(int12)((vel & (uint32)0xFFF00) >> 8));
+	Vector velocity = Vector(((int32_fp)((int32)vel >> 16)) >> 4,
+			((int32_fp)((int16)vel)) >> 4);
 
 	std::cout << "-BoidCPU #" << boidCPUID << " received boid #" << bID <<
 			" from BoidCPU #" << inputData[CMD_FROM] << std::endl;
@@ -709,7 +688,7 @@ Boid parsePackedBoid(uint8 offset) {
 
 void packBoidsForSending(uint32 to, uint32 msg_type) {
 	if (boidCount > 0) {
-		//
+		// The first bit of the body is used to indicate the number of messages
 		uint16 partialMaxCmdBodyLen = MAX_CMD_BODY_LEN - 1;
 
 		// First, calculate how many messages need to be sent
@@ -735,7 +714,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 				endBoidIndex = boidCount;
 			}
 
-			// Put the number of subsequent messages in the first field of the body
+			// Put the number of subsequent messages in the first body field
 			outputBody[0] = msgCount - i - 1;
 
 			// The next step is to create the message data
@@ -744,24 +723,37 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 				uint32 position = 0;
 				uint32 velocity = 0;
 
-				position |= ((uint32)(boids[j].position.x) << 20);
-				position |= ((uint32)(boids[j].position.y) << 8);
+				// Encode the boid position and velocity -----------------------
+				// First, cast the int16_fp value to an int32_fp value. This
+				// enables up to 24 bits of integer values (and 8 fractional
+				// bits). Then, shift the value left by 4 bits to bring the
+				// fractional bits into the integer bit range. This is needed
+				// because casting an int16_fp straight to an integer causes
+				// the fractional bits to be lost. After casting to a uint32
+				// (the transmission data type) shift the x value to the top
+				// 16 bits of the variable. The y value is placed in the bottom
+				// 16 bits of the variable, but if this is negative a mask
+				// needs to be applied to clear the 1s in the top 16 bits that
+				// are there due to the 2s complement notation for negatives.
 
-				// Despite being of type int12, the velocity (and position) seem to
-				// be represented using 16 bits. Therefore, negative values need to
-				// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
-				if (boids[j].velocity.x < 0) {
-					velocity |= ((uint32)((boids[j].velocity.x) & ~((int16)0x0F \
-							<< 12)) << 20);
+				// Encode position
+				position |= ((uint32)(((int32_fp)(boids[j].position.x)) << 4) << 16);
+
+				if (boids[j].position.y < 0) {
+					position |= ((~(((uint32)0xFFFF) << 16)) &
+							((uint32)((int32_fp)(boids[j].position.y) << 4)));
 				} else {
-					velocity |= ((uint32)(boids[j].velocity.x) << 20);
+					position |= ((uint32)((int32_fp)(boids[j].position.y) << 4));
 				}
 
+				// Encode velocity
+				velocity |= ((uint32)(((int32_fp)(boids[j].velocity.x)) << 4) << 16);
+
 				if (boids[j].velocity.y < 0) {
-					velocity |= ((uint32)((boids[j].velocity.y) & ~((int16)0x0F \
-							<< 12)) << 8);
+					velocity |= ((~(((uint32)0xFFFF) << 16)) &
+							((uint32)((int32_fp)(boids[j].velocity.y) << 4)));
 				} else {
-					velocity |= ((uint32)(boids[j].velocity.y) << 8);
+					velocity |= ((uint32)((int32_fp)(boids[j].velocity.y) << 4));
 				}
 
 				outputBody[index + 0] = position;
@@ -833,7 +825,7 @@ bool fromNeighbour() {
  * Mode 2: Round away from 0 e.g. divide(20, 30, 2) = 1
  * Mode 3: Use mode 1 and return the remainder instead of the quotient
  */
-int12 divide(int12 numerator, int12 denominator, uint4 mode) {
+int16_fp divide(int16_fp numerator, int16_fp denominator, uint4 mode) {
 	bool numeratorNegative = false;
 	bool denominatorNegative = false;
 
@@ -852,8 +844,8 @@ int12 divide(int12 numerator, int12 denominator, uint4 mode) {
 		numeratorNegative = true;
 	}
 
-	int12 quotient = 0;
-	int12 remainder = numerator;
+	int16_fp quotient = 0;
+	int16_fp remainder = numerator;
 	manualDivisionLoop: while (remainder >= denominator) {
 		quotient = quotient + 1;
 		remainder = remainder - denominator;
@@ -1097,7 +1089,7 @@ Vector::Vector() {
     y = 0;
 }
 
-Vector::Vector(int12 x_, int12 y_) {
+Vector::Vector(int16_fp x_, int16_fp y_) {
     x = x_;
     y = y_;
 }
@@ -1108,7 +1100,7 @@ void Vector::add(Vector v) {
     y = y + v.y;
 }
 
-void Vector::mul(int12 n) {
+void Vector::mul(int16_fp n) {
 //    x = x * n;
 //    y = y * n;
 
@@ -1117,8 +1109,8 @@ void Vector::mul(int12 n) {
 		x = 0;
 		y = 0;
 	} else {
-		int12 oldX = x;
-		int12 oldY = y;
+		int16_fp oldX = x;
+		int16_fp oldY = y;
 		vectorMultLoop: for (int i = 0; i < n; i++) {
 			x += oldX;
 			y += oldY;
@@ -1126,7 +1118,7 @@ void Vector::mul(int12 n) {
 	}
 }
 
-void Vector::div(int12 n) {
+void Vector::div(int16_fp n) {
     if (n != 0) {
     	x = divide(x, n, 1);
     	y = divide(y, n, 1);
@@ -1141,9 +1133,9 @@ Vector Vector::sub(Vector v1, Vector v2) {
 
 // Calculate the squared distance between two vectors - used to avoid use of
 // doubles and square roots, which are expensive in hardware.
-uint12 Vector::squaredDistanceBetween(Vector v1, Vector v2) {
-	uint12 xPart = v1.x - v2.x;
-	uint12 yPart = v1.y - v2.y;
+int16_fp Vector::squaredDistanceBetween(Vector v1, Vector v2) {
+	int16_fp xPart = v1.x - v2.x;
+	int16_fp yPart = v1.y - v2.y;
 
 	xPart *= xPart;
 	yPart *= yPart;
@@ -1152,7 +1144,7 @@ uint12 Vector::squaredDistanceBetween(Vector v1, Vector v2) {
 }
 
 // Advanced Operations /////////////////////////////////////////////////////////
-int12 Vector::mag() {
+int16_fp Vector::mag() {
     // Could also use hls::sqrt() - in newer HLS version
 	// FIXME: This really has to be removed - it is a killer
 	// Removed round function - slightly lowers overall utilisation on average
@@ -1161,13 +1153,13 @@ int12 Vector::mag() {
 }
 
 // TODO: setMag and limit are similar - perhaps combine?
-void Vector::setMag(int12 mag) {
+void Vector::setMag(int16_fp mag) {
     normalise();
     mul(mag);
 }
 
-void Vector::limit(int12 max) {
-	int12 m = mag();
+void Vector::limit(int16_fp max) {
+	int16_fp m = mag();
     if (m > max) {
         normaliseWithMag(m);
         mul(max);
@@ -1178,7 +1170,7 @@ void Vector::normalise() {
 	normaliseWithMag(mag());
 }
 
-void Vector::normaliseWithMag(int12 magnitude) {
+void Vector::normaliseWithMag(int16_fp magnitude) {
 	if (magnitude != 0) {
 		div(magnitude);
 	} else {
