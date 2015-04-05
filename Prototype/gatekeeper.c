@@ -20,6 +20,7 @@
 #define ALL_BOIDCPU_CHANNELS	99	// When a message is sent to all channels
 
 #define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
+//#define DEBUG					1	// Undefined to show only BoidGPU messages
 
 #define KILL_KEY				0x6B// 'k'
 #define PAUSE_KEY				0x70// 'p'
@@ -74,7 +75,9 @@ void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 
+#ifdef DEBUG
 void printMessage(bool send, u32 *data);
+#endif
 void decodeAndPrintBoids(u32 *data);
 
 #ifdef MASTER_IS_RESIDENT
@@ -140,7 +143,6 @@ int main() {
 						} while (!simulationUnpaused);
 						print("Simulation resumed\n\r");
 					} else if (key == 0x67) {
-						print("Issuing BoidGPU ACK...\n\r");
 						sendInternalMessage(0, CONTROLLER_ID, BOIDGPU_ID,
 								CMD_ACK, messageData);
 						print("----------------------------------------------"
@@ -207,8 +209,11 @@ void checkForInput() {
 
 void processReceivedInternalMessage(u32 *inputData) {
 	fowardMessage = true;
+#ifdef DEBUG
 	print("INTERNAL: ");
 	printMessage(false, inputData);
+#endif
+	decodeAndPrintBoids(inputData);
 
 	if ((!boidCPUsSetup) && (inputData[CMD_TYPE] != CMD_ACK)) {
 		interceptMessage(inputData);
@@ -220,15 +225,22 @@ void processReceivedInternalMessage(u32 *inputData) {
 		ackCount++;
 
 		if (ackCount == RESIDENT_BOIDCPU_COUNT) {
+#ifdef DEBUG
 			print ("All ACKs received \n\r");
+#endif
 			sendMessage(0, CONTROLLER_ID, gatekeeperID, CMD_ACK, messageData);
 			ackCount = 0;
+#ifdef DEBUG
 			print("-----------------------------------------------------------"
 					"---------------------------------------------------\n\r");
-		} else {
+#endif
+		}
+#ifdef DEBUG
+		else {
 			xil_printf("Waiting for ACKs (received %d of %d)...\n\r", ackCount,
 					RESIDENT_BOIDCPU_COUNT);
 		}
+#endif
 	}
 
 	// Forward the message, if needed
@@ -246,8 +258,11 @@ void processReceivedInternalMessage(u32 *inputData) {
 }
 
 void processReceivedExternalMessage() {
+#ifdef DEBUG
 	print("EXTERNAL: ");
 	printMessage(false, (u32*)externalInput);
+#endif
+	decodeAndPrintBoids((u32*)externalInput);
 
 	if (!boidCPUsSetup) {
 		interceptMessage((u32*) externalInput);
@@ -276,7 +291,9 @@ void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 	// the message is addressed to this Gatekeeper, send internally. If it is
 	// not addressed to this Gatekeeper, send it externally.
 	if ((!boidCPUsSetup) && (type == CMD_SIM_SETUP)) {
+#ifdef DEBUG
 		print("BoidCPUs not setup and setup message being sent...\n\r");
+#endif
 
 		if ((to == gatekeeperID) || (forwardingInterceptedSetup)) {
 			recipientLocation = INTERNAL_RECIPIENT;
@@ -348,9 +365,10 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
 #endif
 			if (channelIDList[i] != from) {
-//				xil_printf("INTERNAL - Sending to %d (channel %d)...\n\r", channelIDList[i], i);
+#ifdef DEBUG
 				print("INTERNAL: ");
 				printMessage(true, command);
+#endif
 				for (j = 0; j < CMD_HEADER_LEN + len; j++) {
 					putFSLData(command[j], i);
 				}
@@ -363,8 +381,10 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		} else {
 //			xil_printf("INTERNAL - Sending to channel %d...\n\r", channel);
 		}
+#ifdef DEBUG
 		print("INTERNAL: ");
 		printMessage(true, command);
+#endif
 
 		// Finally, send the message
 		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
@@ -390,45 +410,6 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 				break;
 			}
 		}
-
-
-	//	switch (channel) {
-	//	case BOIDMASTER_CHANNEL:
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], BOIDMASTER_CHANNEL);
-	//		}
-	//		break;
-	//	case BOIDCPU_CHANNEL_1:
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], BOIDCPU_CHANNEL_1);
-	//		}
-	//		break;
-	//	case BOIDCPU_CHANNEL_2:
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], BOIDCPU_CHANNEL_2);
-	//		}
-	//		break;
-	//	default:
-	//		// Otherwise, send to all BoidCPU channels
-	//#ifdef MASTER_IS_RESIDENT
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], BOIDCPU_CHANNEL_1);
-	//		}
-	//
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], BOIDCPU_CHANNEL_2);
-	//		}
-	//#else
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], 0);
-	//		}
-	//
-	//		for (i = 0; i < CMD_HEADER_LEN + len; i++) {
-	//			putFSLData(command[i], 1);
-	//		}
-	//#endif
-	//		break;
-	//	}
 	}
 }
 
@@ -452,8 +433,10 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		}
 	}
 
+#ifdef DEBUG
 	print("EXTERNAL: ");
 	printMessage(true, command);
+#endif
 
 	// Then, populate the transmit buffer
 	for (i = 0; i < command[CMD_LEN]; i++) {
@@ -601,7 +584,9 @@ void interceptMessage(u32 *interceptedData) {
  * resident BoidCPUs with the number of resident BoidCPUs.
  */
 void respondToPing() {
+#ifdef DEBUG
 	print("Gatekeeper generating ping response...\n\r");
+#endif
 
 	messageData[0] = RESIDENT_BOIDCPU_COUNT;
 	sendMessage(1, CONTROLLER_ID, gatekeeperID, CMD_PING_REPLY, messageData);
@@ -618,7 +603,9 @@ void respondToPing() {
  * message to one of the resident BoidCPUs.
  */
 void interceptSetupInfo(u32 * setupData) {
+#ifdef DEBUG
 	print("Gatekeeper intercepted setup data...\n\r");
+#endif
 
 	// Store the resident BoidCPU IDs and associated channel
 	channelIDList[channelSetupCounter] = setupData[CMD_HEADER_LEN
@@ -661,7 +648,9 @@ void interceptSetupInfo(u32 * setupData) {
 		if (channelSetupCounter == RESIDENT_BOIDCPU_COUNT) {
 #endif
 		boidCPUsSetup = true;
+#ifdef DEBUG
 		print("BoidCPUs now set up\n\r");
+#endif
 	}
 }
 
@@ -729,7 +718,7 @@ void takeUserInput() {
 void uiBoidCPUSearch() {
 	bool boidCPUSearchComplete = false;
 	do {
-		print(" Searching for BoidCPUs (press ENTER to stop)...\n\r");
+		print("Searching for BoidCPUs (press ENTER to stop)...\n\r");
 		sendInternalMessage(0, CONTROLLER_ID, gatekeeperID, CMD_PING_START,
 				messageData);
 
@@ -869,6 +858,7 @@ void putFSLData(u32 value, u32 channel) {
 	}
 }
 
+#ifdef DEBUG
 void printMessage(bool send, u32 *data) {
 	bool drawnAlready = false;
 
@@ -981,28 +971,33 @@ void printMessage(bool send, u32 *data) {
 		print("\n\r");
 	}
 }
+#endif
 
 /**
- * Decodes messages that contain encoded boids and prints out the data
+ * Decodes messages that contain encoded boids and prints out the data. Note
+ * that this simply displays the integer part of the data, the fractional part
+ * is ignored for simplicity.
  */
 void decodeAndPrintBoids(u32 *data) {
-	print("\n\r");
-	int count = (data[CMD_LEN] - CMD_HEADER_LEN - 1) / BOID_DATA_LENGTH;
+	if ((data[CMD_TYPE] == CMD_DRAW_INFO)) {
+		xil_printf("BoidCPU #%d - ", data[CMD_FROM]);
+		int count = (data[CMD_LEN] - CMD_HEADER_LEN - 1) / BOID_DATA_LENGTH;
 
-	int i = 0;
-	for (i = 0; i < count; i++) {
-		u32 position = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
-		u32 velocity = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
-		u32 boidID = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3];
+		int i = 0;
+		for (i = 0; i < count; i++) {
+			u32 position = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+			u32 velocity = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
+			u32 boidID = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3];
 
-		int16_t xPos = ((int32_t)((int32_t)position >> 16)) >> 4;
-		int16_t yPos = ((int32_t)((int16_t)position)) >> 4;
+			int16_t xPos = ((int32_t)((int32_t)position >> 16)) >> 4;
+			int16_t yPos = ((int32_t)((int16_t)position)) >> 4;
 
-		int16_t xVel = ((int32_t)((int32_t)velocity >> 16)) >> 4;
-		int16_t yVel = ((int32_t)((int16_t)velocity)) >> 4;
+			int16_t xVel = ((int32_t)((int32_t)velocity >> 16)) >> 4;
+			int16_t yVel = ((int32_t)((int16_t)velocity)) >> 4;
 
-		xil_printf("#%d: %d %d, %d %d | ", boidID, xPos, yPos, xVel, yVel);
+			xil_printf("#%d: %d %d, %d %d | ", boidID, xPos, yPos, xVel, yVel);
+		}
+		print("\n\r");
 	}
-	print("\n\r");
 }
 
