@@ -9,8 +9,10 @@
 #include "xuartlite_l.h"    // UART
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
+#include <stdint.h>			// For specific data types e.g. int16_t
 
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
+#define BOID_DATA_LENGTH 		3
 
 #define BOIDMASTER_CHANNEL		0
 #define BOIDCPU_CHANNEL_1		1
@@ -73,6 +75,7 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data);
 
 void printMessage(bool send, u32 *data);
+void decodeAndPrintBoids(u32 *data);
 
 #ifdef MASTER_IS_RESIDENT
 void takeUserInput();
@@ -867,6 +870,8 @@ void putFSLData(u32 value, u32 channel) {
 }
 
 void printMessage(bool send, u32 *data) {
+	bool drawnAlready = false;
+
 	if (send) {
 		if (data[CMD_TO] == CONTROLLER_ID) {
 			print("-> TX, Gatekeeper sent command to BoidMaster:       ");
@@ -920,6 +925,8 @@ void printMessage(bool send, u32 *data) {
 		break;
 	case CMD_NBR_REPLY:
 		print("neighbouring boids from neighbour ");
+		decodeAndPrintBoids(data);
+		drawnAlready = true;
 		break;
 	case MODE_POS_BOIDS:
 		print("calculate new boid positions      ");
@@ -938,6 +945,8 @@ void printMessage(bool send, u32 *data) {
 		break;
 	case CMD_DRAW_INFO:
 		print("boid info heading to BoidGPU      ");
+		decodeAndPrintBoids(data);
+		drawnAlready = true;
 		break;
 	case CMD_ACK:
 		print("ACK signal                        ");
@@ -959,14 +968,40 @@ void printMessage(bool send, u32 *data) {
 		break;
 	}
 
-	int i = 0;
-	for (i = 0; i < CMD_HEADER_LEN; i++) {
-		xil_printf("%d ", data[i]);
-	}
-	print("|| ");
+	if (!drawnAlready) {
+		int i = 0;
+		for (i = 0; i < CMD_HEADER_LEN; i++) {
+			xil_printf("%d ", data[i]);
+		}
+		print("|| ");
 
-	for (i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
-		xil_printf("%d ", data[CMD_HEADER_LEN + i]);
+		for (i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+			xil_printf("%d ", data[CMD_HEADER_LEN + i]);
+		}
+		print("\n\r");
+	}
+}
+
+/**
+ * Decodes messages that contain encoded boids and prints out the data
+ */
+void decodeAndPrintBoids(u32 *data) {
+	print("\n\r");
+	int count = (data[CMD_LEN] - CMD_HEADER_LEN - 1) / BOID_DATA_LENGTH;
+
+	int i = 0;
+	for (i = 0; i < count; i++) {
+		u32 position = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+		u32 velocity = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
+		u32 boidID = data[CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3];
+
+		int16_t xPos = ((int32_t)((int32_t)position >> 16)) >> 4;
+		int16_t yPos = ((int32_t)((int16_t)position)) >> 4;
+
+		int16_t xVel = ((int32_t)((int32_t)velocity >> 16)) >> 4;
+		int16_t yVel = ((int32_t)((int16_t)velocity)) >> 4;
+
+		xil_printf("#%d: %d %d, %d %d | ", boidID, xPos, yPos, xVel, yVel);
 	}
 	print("\n\r");
 }
