@@ -20,7 +20,7 @@
 #define ALL_BOIDCPU_CHANNELS	99	// When a message is sent to all channels
 
 #define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
-//#define DEBUG					1	// Undefined to show only BoidGPU messages
+#define DEBUG					1	// Undefined to show only BoidGPU messages
 
 #define KILL_KEY				0x6B// 'k'
 #define PAUSE_KEY				0x70// 'p'
@@ -32,8 +32,12 @@
 // Setup Ethernet and its transmit and receive buffers
 // FIXME: Ethernet requires a u8 buffer, but FXL requires a u32...
 XEmacLite ether;
-u8 externalOutput[MAX_CMD_LEN * MAX_OUTPUT_CMDS];
-u8 externalInput[MAX_CMD_LEN * MAX_INPUT_CMDS];
+
+static u8 own_mac_address[XEL_MAC_ADDR_SIZE] = {0x00, 0x0A, 0x35, 0x01, 0x02, 0x03};
+
+u8 externalOutput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_OUTPUT_CMDS)];
+u8 rawExternalInput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_INPUT_CMDS)];
+u32 externalInput[MAX_CMD_LEN * MAX_INPUT_CMDS];
 
 // Setup other variables
 #ifdef MASTER_IS_RESIDENT
@@ -58,6 +62,7 @@ u8 residentNbrCounter = 0;
 u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
 
 // Protocols
+void registerWithSwitch();
 void checkForInput();
 
 void respondToPing();
@@ -89,30 +94,30 @@ void sendKillCommand();
 void putFSLData(u32 value, u32 channel);
 u32 getFSLData(u32 *data, u32 channel);
 
+
 //============================================================================//
 //- Main Method --------------------------------------------------------------//
 //============================================================================//
 
 // TODO: Rename to main() when deployed
 int main() {
-	// Setup the Ethernet
-	XEmacLite_Config *etherconfig = XEmacLite_LookupConfig(
-			XPAR_EMACLITE_0_DEVICE_ID);
-	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
-
-	// Generate random, temporary Gatekeeper ID
-	// TODO: Ensure that this doesn't clash with the BoidIDs
+	// Setup own ID - TODO: Ensure that this doesn't clash with the BoidIDs
 	gatekeeperID = rand();
+	own_mac_address[5] = 0x03;
+	// TODO: Assign MAC address and ID randomly, or better
+
+	// Setup the Ethernet
+	XEmacLite_Config *etherconfig = XEmacLite_LookupConfig(XPAR_EMACLITE_0_DEVICE_ID);
+	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
+	XEmacLite_SetMacAddress(&ether, own_mac_address);
+	XEmacLite_FlushReceive(&ether);
+
+	registerWithSwitch();
 
 	do {
 		bool simulationKilled = false;
 		do {
 #ifdef MASTER_IS_RESIDENT
-			// Start the user interface
-			print("------------------------------------------------------\n\r");
-			print("---------FPGA Implementation of Flocking Birds--------\n\r");
-			print("------------------------------------------------------\n\r");
-
 			// Search for BoidCPUs
 			uiBoidCPUSearch();
 
@@ -132,6 +137,9 @@ int main() {
 						simulationKilled = true;
 						sendKillCommand();
 						print("Simulation killed, restarting...\n\r");
+						print("------------------------------------------------------\n\r");
+						print("---------FPGA Implementation of Flocking Birds--------\n\r");
+						print("------------------------------------------------------\n\r");
 					} else if (key == PAUSE_KEY) {
 						print("Simulation paused, press 'p' to resume\n\r");
 						bool simulationUnpaused = false;
@@ -171,8 +179,7 @@ int main() {
  */
 void checkForInput() {
 	// Check for external (Ethernet) data --------------------------------------
-	volatile int recv_len = 0;
-	recv_len = XEmacLite_Recv(&ether, externalInput);
+	volatile int recv_len = XEmacLite_Recv(&ether, rawExternalInput);
 
 	// Process received external data ------------------------------------------
 	if (recv_len != 0) {
@@ -258,26 +265,38 @@ void processReceivedInternalMessage(u32 *inputData) {
 }
 
 void processReceivedExternalMessage() {
-#ifdef DEBUG
-	print("EXTERNAL: ");
-	printMessage(false, (u32*)externalInput);
-#endif
-	decodeAndPrintBoids((u32*)externalInput);
-
-	if (!boidCPUsSetup) {
-		interceptMessage((u32*) externalInput);
-	} else if (externalMessageRelevant()) {
-		// Forward the message
-		u32 dataBodyLength = externalInput[CMD_LEN] - CMD_HEADER_LEN;
-		u32 dataBody[dataBodyLength];
-		int i = 0;
-		for (i = 0; i < dataBodyLength; i++) {
-			dataBody[i] = externalInput[CMD_HEADER_LEN + i];
+	if((rawExternalInput[12] == 0x55) && (rawExternalInput[13] == 0xAA)) {
+		// Strip the Ethernet header
+		int j = 0, k = 0;
+		for (j = XEL_HEADER_SIZE, k = 0; j < (MAX_CMD_LEN * MAX_INPUT_CMDS); j++, k++) {
+			externalInput[k] = (u32)rawExternalInput[j];
 		}
 
-		sendMessage(dataBodyLength, externalInput[CMD_TO],
-				externalInput[CMD_FROM], externalInput[CMD_TYPE], dataBody);
+		// Then process the remaining information
+#ifdef DEBUG
+		print("EXTERNAL: ");
+		printMessage(false, externalInput);
+#endif
+		decodeAndPrintBoids(externalInput);
+
+		if (!boidCPUsSetup) {
+			print("BoidCPUs not setup\n\r");
+			interceptMessage(externalInput);
+		} else if (externalMessageRelevant()) {
+			// Forward the message
+			u32 dataBodyLength = externalInput[CMD_LEN] - CMD_HEADER_LEN;
+			u32 dataBody[dataBodyLength];
+			int i = 0;
+			for (i = 0; i < dataBodyLength; i++) {
+				dataBody[i] = externalInput[CMD_HEADER_LEN + i];
+			}
+
+			sendMessage(dataBodyLength, externalInput[CMD_TO],
+					externalInput[CMD_FROM], externalInput[CMD_TYPE], dataBody);
+		}
 	}
+
+	XEmacLite_FlushReceive(&ether); // Clear any received messages
 }
 
 //============================================================================//
@@ -310,9 +329,6 @@ void sendMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 	else {
 		recipientLocation = recipientLookUp(to);
 	}
-
-	// If MASTER_IS_PRESENT and CMD_PING
-	// 	Then recipient is EXTERNAL
 
 	// Send a message internally or externally, depending on the recipient
 	if (recipientLocation == EXTERNAL_RECIPIENT) {
@@ -375,12 +391,6 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 			}
 		}
 	} else {
-		// Print out message details
-		if (channel == ALL_BOIDCPU_CHANNELS) {
-//			print("INTERNAL - Sending to all BoidCPU channels...\n\r");
-		} else {
-//			xil_printf("INTERNAL - Sending to channel %d...\n\r", channel);
-		}
 #ifdef DEBUG
 		print("INTERNAL: ");
 		printMessage(true, command);
@@ -418,9 +428,28 @@ void sendInternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
  * resides on. Ethernet is used to transmit the messages to other FPGAs.
  */
 void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
-	// First, create the message
-	u32 command[MAX_CMD_LEN];
+	// First, create the Ethernet message header
+	// The destination MAC address, broadcast here
+	u8 *buffer = externalOutput;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+
+	// The source MAC address
 	int i = 0;
+	for(i = 0; i < XEL_MAC_ADDR_SIZE; i++) {
+		*buffer++ = own_mac_address[i];
+	}
+
+	// Add the type thingy
+	*buffer++ = 0x55;
+	*buffer++ = 0xAA;
+
+	// Then create the data to send, create the message
+	u32 command[MAX_CMD_LEN];
 
 	command[CMD_LEN] = len + CMD_HEADER_LEN;
 	command[CMD_TO] = to;
@@ -440,12 +469,12 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 
 	// Then, populate the transmit buffer
 	for (i = 0; i < command[CMD_LEN]; i++) {
-		externalOutput[i] = command[i];
+		externalOutput[XEL_HEADER_SIZE + i] = (u8)command[i];
 	}
 
 	// Finally, clear the receive buffer before sending
 	XEmacLite_FlushReceive(&ether);
-	XEmacLite_Send(&ether, externalOutput, command[CMD_LEN]);
+	XEmacLite_Send(&ether, externalOutput, XEL_HEADER_SIZE + command[CMD_LEN]);
 }
 
 //============================================================================//
@@ -561,9 +590,11 @@ void interceptMessage(u32 *interceptedData) {
 	}
 
 #ifdef MASTER_IS_RESIDENT
+	// This should only ever be received from an external source
 	else if (interceptedData[CMD_TYPE] == CMD_PING_REPLY) {
-		xil_printf("found %d..", interceptedData[CMD_HEADER_LEN]);
+		xil_printf("found %d BoidCPU(s)..", interceptedData[CMD_HEADER_LEN]);
 		discoveredBoidCPUCount += interceptedData[CMD_HEADER_LEN];
+		xil_printf("total (%d)..\n\r", discoveredBoidCPUCount);
 
 		// Forward the data
 		int i = 0;
@@ -573,8 +604,8 @@ void interceptMessage(u32 *interceptedData) {
 			dataBody[i] = interceptedData[CMD_HEADER_LEN + i];
 		}
 
-		sendMessage(dataBodyLength, CMD_BROADCAST, interceptedData[CMD_FROM],
-				interceptedData[CMD_TYPE], dataBody);
+		sendMessage(dataBodyLength, interceptedData[CMD_TO],
+				interceptedData[CMD_FROM], interceptedData[CMD_TYPE], dataBody);
 	}
 #endif
 }
@@ -592,8 +623,9 @@ void respondToPing() {
 	sendMessage(1, CONTROLLER_ID, gatekeeperID, CMD_PING_REPLY, messageData);
 
 #ifdef MASTER_IS_RESIDENT
-	xil_printf("found %d..", RESIDENT_BOIDCPU_COUNT);
+	xil_printf("found %d BoidCPU(s) - ", RESIDENT_BOIDCPU_COUNT);
 	discoveredBoidCPUCount += RESIDENT_BOIDCPU_COUNT;
+	xil_printf("total (%d)..\n\r", discoveredBoidCPUCount);
 #endif
 }
 
@@ -686,6 +718,7 @@ void takeUserInput() {
 
 		do {
 			keyPress = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
+//			xil_printf("%d entered\n\r", keyPress);
 
 			if (!USING_VLAB) {
 				XUartLite_SendByte(XPAR_RS232_UART_1_BASEADDR, keyPress);
@@ -693,7 +726,7 @@ void takeUserInput() {
 
 			keyPresses[index] = keyPress;
 			index++;
-		} while (keyPress != ENTER);
+		} while (keyPress != WINDOWS_ENTER_KEY);
 
 		// Check if entered boid count is valid
 		boidCount = (u32) atoi(keyPresses);
@@ -728,7 +761,9 @@ void uiBoidCPUSearch() {
 
 			// If the ENTER key is pressed, exit search
 			if (!XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR)) {
-				if (XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR) == ENTER) {
+				int key = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
+
+				if ((key == LINUX_ENTER_KEY) || (key == WINDOWS_ENTER_KEY)) {
 					enterKeyPressed = true;
 				}
 			}
@@ -737,6 +772,7 @@ void uiBoidCPUSearch() {
 		// If BoidCPUs have been found, exit search, else restart
 		if (discoveredBoidCPUCount > 0) {
 			boidCPUSearchComplete = true;
+			xil_printf("\n\r%d BoidCPUs found\n\r", discoveredBoidCPUCount);
 		} else {
 			print("\n\rNo BoidCPUs found, trying again...\n\r");
 		}
@@ -748,6 +784,53 @@ void uiBoidCPUSearch() {
 }
 
 #endif
+
+/**
+ * Each gatekeeper/MicroBlaze needs to send a broadcast message so that the
+ * Ethernet switch can build its address table. Need a delay after sending, so
+ * get the user to press enter to begin the setup process.
+ */
+void registerWithSwitch() {
+	// Register with the switch
+	u8 *buffer = externalOutput;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+	*buffer++ = 0xFF;
+
+	//Write the source MAC address
+	int m = 0;
+	for(m = 0; m < 6; m++)
+		*buffer++ = own_mac_address[m];
+
+	//Write the type/length field
+	*buffer++ = 0x55;
+	*buffer++ = 0xAA;
+
+	XEmacLite_Send(&ether, externalOutput, XEL_HEADER_SIZE);
+
+#ifdef MASTER_IS_RESIDENT
+	print("------------------------------------------------------\n\r");
+	print("---------FPGA Implementation of Flocking Birds--------\n\r");
+	print("------------------------------------------------------\n\r");
+	print("Please press ENTER to begin the simulation setup\n\r");
+
+	// This is needed to give the switch time to process the register message
+	bool enterKeyPressed = false;
+	do {
+		// If the ENTER key is pressed, exit search
+		if (!XUartLite_IsReceiveEmpty(XPAR_RS232_UART_1_BASEADDR)) {
+			int key = XUartLite_RecvByte(XPAR_RS232_UART_1_BASEADDR);
+
+			if ((key == LINUX_ENTER_KEY) || (key == WINDOWS_ENTER_KEY)) {
+				enterKeyPressed = true;
+			}
+		}
+	} while (!enterKeyPressed);
+#endif
+}
 
 //============================================================================//
 //- Supporting Functions -----------------------------------------------------//
@@ -861,6 +944,7 @@ void putFSLData(u32 value, u32 channel) {
 #ifdef DEBUG
 void printMessage(bool send, u32 *data) {
 	bool drawnAlready = false;
+	bool unknownMessage = false;
 
 	if (send) {
 		if (data[CMD_TO] == CONTROLLER_ID) {
@@ -892,9 +976,6 @@ void printMessage(bool send, u32 *data) {
 	}
 
 	switch (data[CMD_TYPE]) {
-	case 0:
-		print("do something                      ");
-		break;
 	case MODE_INIT:
 		print("initialise self                   ");
 		break;
@@ -955,6 +1036,7 @@ void printMessage(bool send, u32 *data) {
 		break;
 	default:
 		print("UNKNOWN COMMAND                   ");
+		unknownMessage = true;
 		break;
 	}
 
@@ -965,7 +1047,11 @@ void printMessage(bool send, u32 *data) {
 		}
 		print("|| ");
 
-		for (i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		int range = 0;
+		if (!unknownMessage) range = data[CMD_LEN] - CMD_HEADER_LEN;
+		else range = MAX_CMD_LEN;
+
+		for (i = 0; i < range; i++) {
 			xil_printf("%d ", data[CMD_HEADER_LEN + i]);
 		}
 		print("\n\r");
@@ -979,7 +1065,11 @@ void printMessage(bool send, u32 *data) {
  * is ignored for simplicity.
  */
 void decodeAndPrintBoids(u32 *data) {
+#ifndef DEBUG
 	if ((data[CMD_TYPE] == CMD_DRAW_INFO)) {
+#else
+	if ((data[CMD_TYPE] == CMD_DRAW_INFO) || (data[CMD_TYPE] == CMD_NBR_REPLY)) {
+#endif
 		xil_printf("BoidCPU #%d - ", data[CMD_FROM]);
 		int count = (data[CMD_LEN] - CMD_HEADER_LEN - 1) / BOID_DATA_LENGTH;
 
@@ -1000,4 +1090,6 @@ void decodeAndPrintBoids(u32 *data) {
 		print("\n\r");
 	}
 }
+
+
 
