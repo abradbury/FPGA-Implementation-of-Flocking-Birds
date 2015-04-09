@@ -35,8 +35,8 @@ XEmacLite ether;
 
 static u8 own_mac_address[XEL_MAC_ADDR_SIZE] = {0x00, 0x0A, 0x35, 0x01, 0x02, 0x03};
 
-u8 externalOutput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_OUTPUT_CMDS)];
-u8 rawExternalInput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_INPUT_CMDS)];
+u8 externalOutput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_OUTPUT_CMDS * 4)];
+u8 rawExternalInput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_INPUT_CMDS * 4)];
 u32 externalInput[MAX_CMD_LEN * MAX_INPUT_CMDS];
 
 // Setup other variables
@@ -94,6 +94,9 @@ void sendKillCommand();
 void putFSLData(u32 value, u32 channel);
 u32 getFSLData(u32 *data, u32 channel);
 
+void encodeEthernetMessage(u32 outputValue, u8* outputArrayPointer, int* idx);
+u32 decodeEthernetMessage(u8 inputZero, u8 inputOne, u8 inputTwo, u8 inputThree);
+
 
 //============================================================================//
 //- Main Method --------------------------------------------------------------//
@@ -117,6 +120,12 @@ int main() {
 	do {
 		bool simulationKilled = false;
 		do {
+#ifdef DEBUG
+			print("------------------------------------------------------\n\r");
+			print("---------FPGA Implementation of Flocking Birds--------\n\r");
+			print("------------------------------------------------------\n\r");
+#endif
+
 #ifdef MASTER_IS_RESIDENT
 			// Search for BoidCPUs
 			uiBoidCPUSearch();
@@ -137,9 +146,6 @@ int main() {
 						simulationKilled = true;
 						sendKillCommand();
 						print("Simulation killed, restarting...\n\r");
-						print("------------------------------------------------------\n\r");
-						print("---------FPGA Implementation of Flocking Birds--------\n\r");
-						print("------------------------------------------------------\n\r");
 					} else if (key == PAUSE_KEY) {
 						print("Simulation paused, press 'p' to resume\n\r");
 						bool simulationUnpaused = false;
@@ -268,8 +274,8 @@ void processReceivedExternalMessage() {
 	if((rawExternalInput[12] == 0x55) && (rawExternalInput[13] == 0xAA)) {
 		// Strip the Ethernet header
 		int j = 0, k = 0;
-		for (j = XEL_HEADER_SIZE, k = 0; j < (MAX_CMD_LEN * MAX_INPUT_CMDS); j++, k++) {
-			externalInput[k] = (u32)rawExternalInput[j];
+		for (j = XEL_HEADER_SIZE, k = 0; j < (MAX_CMD_LEN * MAX_INPUT_CMDS); j+=4, k++) {
+			externalInput[k] = decodeEthernetMessage(rawExternalInput[j + 0], rawExternalInput[j + 1], rawExternalInput[j + 2], rawExternalInput[j + 3]);
 		}
 
 		// Then process the remaining information
@@ -448,6 +454,21 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 	*buffer++ = 0x55;
 	*buffer++ = 0xAA;
 
+	// The internal messages are 32 bits in size, whereas Ethernet is 8 bits.
+	// A simple solution is to split the messages up on sending into 8 bit
+	// pieces and join back together on receiving.
+	int index = 14;
+	encodeEthernetMessage((len + CMD_HEADER_LEN), externalOutput, &index);
+	encodeEthernetMessage(to, externalOutput, &index);
+	encodeEthernetMessage(from, externalOutput, &index);
+	encodeEthernetMessage(type, externalOutput, &index);
+
+	if (len > 0) {
+		for (i = 0; i < len; i++) {
+			encodeEthernetMessage(data[i], externalOutput, &index);
+		}
+	}
+
 	// Then create the data to send, create the message
 	u32 command[MAX_CMD_LEN];
 
@@ -467,14 +488,9 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 	printMessage(true, command);
 #endif
 
-	// Then, populate the transmit buffer
-	for (i = 0; i < command[CMD_LEN]; i++) {
-		externalOutput[XEL_HEADER_SIZE + i] = (u8)command[i];
-	}
-
 	// Finally, clear the receive buffer before sending
 	XEmacLite_FlushReceive(&ether);
-	XEmacLite_Send(&ether, externalOutput, XEL_HEADER_SIZE + command[CMD_LEN]);
+	XEmacLite_Send(&ether, externalOutput, XEL_HEADER_SIZE + ((len + CMD_HEADER_LEN) * 4));
 }
 
 //============================================================================//
@@ -939,6 +955,25 @@ void putFSLData(u32 value, u32 channel) {
 	if (error) {
 		xil_printf("Error writing data to channel %d: %d\n\r", channel, value);
 	}
+}
+
+/**
+ * Split a 32 bit value into four 8 bit values for transmission over Ethernet
+ */
+void encodeEthernetMessage(u32 outputValue, u8* outputArrayPointer, int* idx) {
+	outputArrayPointer[*idx + 0] = (outputValue & 0xff000000UL) >> 24;
+	outputArrayPointer[*idx + 1] = (outputValue & 0x00ff0000UL) >> 16;
+	outputArrayPointer[*idx + 2] = (outputValue & 0x0000ff00UL) >>  8;
+	outputArrayPointer[*idx + 3] = (outputValue & 0x000000ffUL)      ;
+
+	*idx += 4;
+}
+
+/**
+ * Take four 8 bit values from Ethernet and combine into one 32 bit value
+ */
+u32 decodeEthernetMessage(u8 inputZero, u8 inputOne, u8 inputTwo, u8 inputThree) {
+	return (u32)((inputZero << 24) | (inputOne << 16) | (inputTwo << 8) | (inputThree));
 }
 
 #ifdef DEBUG
