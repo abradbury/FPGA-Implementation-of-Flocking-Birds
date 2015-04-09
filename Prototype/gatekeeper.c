@@ -105,7 +105,7 @@ u32 decodeEthernetMessage(u8 inputZero, u8 inputOne, u8 inputTwo, u8 inputThree)
 // TODO: Rename to main() when deployed
 int main() {
 	// Setup own ID - TODO: Ensure that this doesn't clash with the BoidIDs
-	gatekeeperID = rand();
+	gatekeeperID = *((volatile int *) XPAR_MCB_DDR2_S0_AXI_BASEADDR + 0x01ABCABC);
 	own_mac_address[5] = 0x03;
 	// TODO: Assign MAC address and ID randomly, or better
 
