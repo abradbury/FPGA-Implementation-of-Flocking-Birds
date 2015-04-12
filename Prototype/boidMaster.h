@@ -38,14 +38,17 @@
 #define CMD_PING_END			7	// Gatekeeper -> Controller (D)
 #define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU (D)
 #define MODE_POS_BOIDS          9   // Controller -> BoidCPU (B)
-#define CMD_LOAD_BAL            10  // Controller -> BoidCPU (?) TODO: Implement
+#define MODE_LOAD_BAL           10  // Controller -> BoidCPU (?)
 #define MODE_TRAN_BOIDS         11  // Controller -> BoidCPU (B)
 #define CMD_BOID                12  // BoidCPU -> BoidCPU (D)
-#define MODE_DRAW               14  // Controller -> BoidCPU (B) TODO: Needed?
+#define MODE_DRAW               14  // Controller -> BoidCPU (B)
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
 #define CMD_KILL                16  // Controller -> All (B)
 #define CMD_ACK					17
 #define CMD_PING_START			18
+#define CMD_LOAD_BAL_REQUEST	19
+#define CMD_LOAD_BAL			20
+#define CMD_BOUNDS_AT_MIN		21
 #define CMD_DEBUG				76
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index

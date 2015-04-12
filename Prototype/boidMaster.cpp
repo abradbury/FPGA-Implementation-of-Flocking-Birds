@@ -7,10 +7,16 @@
 #define SIMULATION_WIDTH		1920	// The pixel width of the simulation
 #define SIMULATION_HEIGHT		1080	// The pixel height of the simulation
 
+#define NORTH_IDX	12			// The index of the north edge change (load bal)
+#define EAST_IDX	8			// The index of the east edge change (load bal)
+#define SOUTH_IDX	4			// The index of the south edge change (load bal)
+#define WEST_IDX	0			// The index of the west edge change (load bal)
+
 // Function headers ============================================================
 void processUserData();
 void processPingReply();
 void processAck();
+void processLoadData();
 
 void issuePing();
 void issueSetupInformation();
@@ -18,10 +24,11 @@ void sendUserDataToBoidGPU();
 
 void issueCalcNbrsMode();
 void issueCalcBoidMode();
-//void issueLoadBalance(); // TODO
+void issueLoadBalance();
 void issueTransferMode();
 void issueDrawMode();
 
+void updateMinimalBoidCPUsList();
 void killSimulation();
 
 void setupSimulation();
@@ -50,6 +57,8 @@ struct BoidCPU {
 	uint32 gatekeeperID;
 	uint8 x;
 	uint8 y;
+	bool minimalHeight;
+	bool minimalWidth;
 };
 
 uint8 state = CMD_PING;
@@ -58,6 +67,8 @@ uint8 gatekeeperCount = 0;
 uint8 boidCPUCount = 0;
 BoidCPU boidCPUs[MAX_BOIDCPUS];
 
+uint12 simulationGridHeight = 0;
+uint12 simulationGridWidth  = 0;
 uint8 gridAssignment[MAX_BOIDCPUS][MAX_BOIDCPUS];
 
 uint32 boidCount = 100;
@@ -113,10 +124,12 @@ void boidMaster(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 			case CMD_PING_END:
 				pingEnd = true;
 				break;
-//			case CMD_LOAD_BAL_REPLY:
-//				// TODO: Implement load balancing
-//				processLoadData();
-//				break;
+			case CMD_LOAD_BAL_REQUEST:
+				processLoadData();
+				break;
+			case CMD_BOUNDS_AT_MIN:
+				updateMinimalBoidCPUsList();
+				break;
 			case CMD_ACK:
 				processAck();
 				break;
@@ -217,9 +230,6 @@ void setupSimulation() {
 	}
 
 	// Determine simulation grid layout
-	uint12 simulationGridHeight = 0;
-	uint12 simulationGridWidth  = 0;
-
 	closestMultiples(&simulationGridHeight, &simulationGridWidth, boidCPUCount);
 
 	std::cout << "Simulation is " << simulationGridWidth << " BoidCPUs wide by "
@@ -266,6 +276,16 @@ void setupSimulation() {
 			} else {
 				boidCPUs[count].boidCPUCoords[3] = boidCPUs[count].\
 						boidCPUCoords[1] + boidCPUPixelHeight;
+			}
+
+			// Is minimal?
+			if ((boidCPUs[count].boidCPUCoords[2] - boidCPUs[count].boidCPUCoords[0]) <= VISION_RADIUS) {
+				boidCPUs[count].minimalHeight = true;
+			} else if ((boidCPUs[count].boidCPUCoords[3] - boidCPUs[count].boidCPUCoords[1]) <= VISION_RADIUS) {
+				boidCPUs[count].minimalWidth = true;
+			} else {
+				boidCPUs[count].minimalHeight = false;
+				boidCPUs[count].minimalWidth = false;
 			}
 
 			// Store the grid position of the BoidCPU
@@ -356,7 +376,6 @@ void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
 }
 
 void processAck() {
-
 	if (inputData[CMD_FROM] == BOIDGPU_ID) {
 		state = MODE_CALC_NBRS;
 		issueCalcNbrsMode();
@@ -380,6 +399,10 @@ void processAck() {
 			issueTransferMode();
 			break;
 		case MODE_TRAN_BOIDS:
+			state = MODE_LOAD_BAL;
+			issueLoadBalance();
+			break;
+		case MODE_LOAD_BAL:
 			state = MODE_DRAW;
 			issueDrawMode();
 			break;
@@ -387,6 +410,144 @@ void processAck() {
 			break;
 		}
 		ackCount = 0;
+	}
+}
+
+/**
+ * Calculate the boundary changes for the overloaded BoidCPU and the other
+ * BoidCPUs that are affected by this change. A step size is the same as the
+ * vision radius of a boid.
+ */
+void processLoadData() {
+	// TODO: Load balancing ACK
+	// TODO: Utilise the minimal BoidCPU information
+
+	// Get info about BoidCPU making request
+	uint8 x = boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].x;
+	uint8 y = boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].y;
+
+	// Determine changes for the BoidCPU that made the request
+	int16 edgeChanges = 0;
+	int4 stepChanges = 1;
+	std::cout << "Overloaded BoidCPU (#" << inputData[CMD_FROM] << ") [" <<
+			x << ", " <<  y << "]: ";
+
+	// If the BoidCPU is not on the topmost row of the simulation grid
+	if (x != 0) {
+		edgeChanges |= (int16(stepChanges) << NORTH_IDX);
+		std::cout << "NORTH edge decreased, ";
+	}
+
+	// If the BoidCPU is not on the rightmost column of the simulation grid
+	if (y != (simulationGridWidth - 1)) {
+		edgeChanges |= ((~(int16)0xF000) & (int16(-stepChanges) << EAST_IDX));
+		std::cout << "EAST edge decreased, ";
+	}
+
+	// If the BoidCPU is not on the bottom-most row of the simulation grid
+	if (x != (simulationGridHeight - 1)) {
+		edgeChanges |= ((~(int16)0xFF00) & (int16(-stepChanges) << SOUTH_IDX));
+		std::cout << "SOUTH edge decreased, ";
+	}
+
+	// If the BoidCPU is not on the leftmost column of the simulation gird
+	if (y != 0) {
+		edgeChanges |= ((~(int16)0xFFF0) & (int16(stepChanges) << WEST_IDX));
+		std::cout << "WEST edge decreased, ";
+	}
+	std::cout << std::endl;
+
+	// Determine changes for other, affected BoidCPUs
+	for (int i = 0; i < boidCPUCount; i++) {
+
+		int16 affectedBoidCPUEdgeChanges = 0;
+		std::cout << "BoidCPU #" << boidCPUs[i].boidCPUID << ": ";
+
+		// If the NORTH edge of the overloaded BoidCPU is changing and this
+		// BoidCPU is on the row above the overloaded one, lower this
+		// BoidCPU's SOUTH edge. If on same row lower its NORTH edge.
+		if (int4(edgeChanges >> NORTH_IDX) != 0) {
+			if (boidCPUs[i].y == (y - 1)) {
+				affectedBoidCPUEdgeChanges |= ((~(int16)0xFF00) &
+						(int16(stepChanges) << SOUTH_IDX));
+				std::cout << "SOUTH edge increased, ";
+			} else if (boidCPUs[i].y == y) {
+				affectedBoidCPUEdgeChanges |= ((int16(stepChanges) << NORTH_IDX));
+				std::cout << "NORTH edge decreased, ";
+			}
+		}
+
+		// If the SOUTH edge of the overloaded BoidCPU is changing and this
+		// BoidCPU is on the row below the overloaded one, raise this
+		// BoidCPU's NORTH edge. If on same row raise its SOUTH edge.
+		if (int4(edgeChanges >> SOUTH_IDX) != 0) {
+			if (boidCPUs[i].y == (y + 1)) {
+				affectedBoidCPUEdgeChanges |= ((int16(-stepChanges) << NORTH_IDX));
+				std::cout << "NORTH edge increased, ";
+			} else if (boidCPUs[i].y == y) {
+				affectedBoidCPUEdgeChanges |= ((~(int16)0xFF00) &
+						(int16(-stepChanges) << SOUTH_IDX));
+				std::cout << "SOUTH edge decreased, ";
+			}
+		}
+
+		// If the EAST edge of the overloaded BoidCPU is changing and this
+		// BoidCPU is on the column to the right of the overloaded one, widen
+		// this BoidCPU's WEST edge. If on same column narrow its EAST edge.
+		if (int4(edgeChanges >> EAST_IDX) != 0) {
+			if (boidCPUs[i].x == (x + 1)) {
+				affectedBoidCPUEdgeChanges |= ((~(int16)0xFFF0) &
+						(int16(-stepChanges) << WEST_IDX));
+				std::cout << "WEST edge increased, ";
+			} else if (boidCPUs[i].x == x) {
+				affectedBoidCPUEdgeChanges |= ((~(int16)0xF000) &
+						(int16(-stepChanges) << EAST_IDX));
+				std::cout << "EAST edge decreased, ";
+			}
+		}
+
+		// If the WEST edge of the overloaded BoidCPU is changing and this
+		// BoidCPU is on the column to the left of the overloaded one, widen
+		// this BoidCPU's EAST edge. If on same column narrow its WEST edge.
+		if (int4(edgeChanges >> WEST_IDX) != 0) {
+			if (boidCPUs[i].x == (x - 1)) {
+				affectedBoidCPUEdgeChanges |= ((~(int16)0xF000) &
+						(int16(stepChanges) << EAST_IDX));
+				std::cout << "EAST edge increased, ";
+			} else if (boidCPUs[i].x == x) {
+				affectedBoidCPUEdgeChanges |= ((~(int16)0xFFF0) &
+						(int16(stepChanges) << WEST_IDX));
+				std::cout << "WEST edge decreased, ";
+			}
+		}
+
+		std::cout << " [" << int4(affectedBoidCPUEdgeChanges >> NORTH_IDX) <<
+				", " << int4(affectedBoidCPUEdgeChanges >> EAST_IDX) << ", "
+				<< int4(affectedBoidCPUEdgeChanges >> SOUTH_IDX) << ", "
+				<< int4(affectedBoidCPUEdgeChanges >> WEST_IDX) << "]"
+				<< std::endl;
+
+		if (affectedBoidCPUEdgeChanges) {
+			data[0] = (uint32)affectedBoidCPUEdgeChanges;
+			createCommand(1, boidCPUs[i].boidCPUID, CONTROLLER_ID, CMD_LOAD_BAL, data);
+		}
+	}
+}
+
+/**
+ * 0 = minimal width, 1 = minimal height, 2 = minimal height and width
+ */
+void updateMinimalBoidCPUsList() {
+	if (inputData[CMD_HEADER_LEN]) {
+		boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].minimalWidth = true;
+		std::cout << "BoidCPU #" << CMD_FROM << " at minimal width" << std::endl;
+	} else if (inputData[CMD_HEADER_LEN] == 1) {
+		boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].minimalHeight = true;
+		std::cout << "BoidCPU #" << CMD_FROM << " at minimal height" << std::endl;
+	} else {
+		boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].minimalHeight = true;
+		boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].minimalWidth = true;
+		std::cout << "BoidCPU #" << CMD_FROM << " at minimum" << std::endl;
 	}
 }
 
@@ -438,6 +599,12 @@ void issueCalcBoidMode() {
 	to = CMD_BROADCAST;
 	dataLength = 0;
 	createCommand(dataLength, to, from, MODE_POS_BOIDS, data);
+}
+
+void issueLoadBalance() {
+	to = CMD_BROADCAST;
+	dataLength = 0;
+	createCommand(dataLength, to, from, MODE_LOAD_BAL, data);
 }
 
 void issueTransferMode() {
@@ -531,8 +698,17 @@ void printCommand(bool send, uint32 *data) {
 	case MODE_POS_BOIDS:
 		std::cout << "calculate new boid positions      ";
 		break;
+	case MODE_LOAD_BAL:
+		std::cout << "load balance mode                 ";
+		break;
 	case CMD_LOAD_BAL:
-		std::cout << "load balance                      ";
+		std::cout << "load balance instructions         ";
+		break;
+	case CMD_LOAD_BAL_REQUEST:
+		std::cout << "load balance request              ";
+		break;
+	case CMD_BOUNDS_AT_MIN:
+		std::cout << "BoidCPU at minimal bounds         ";
 		break;
 	case MODE_TRAN_BOIDS:
 		std::cout << "transfer boids                    ";

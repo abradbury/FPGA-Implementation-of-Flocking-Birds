@@ -6,6 +6,7 @@
 // Key function headers --------------------------------------------------------
 static void simulationSetup(void);
 static void calcNextBoidPositions(void);
+static void evaluateLoad(void);
 static void loadBalance(void);
 static void calculateEscapedBoids(void);
 static void updateDisplay(void);
@@ -121,9 +122,12 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
                 case MODE_POS_BOIDS:
                     calcNextBoidPositions();
                     break;
-                case CMD_LOAD_BAL:
-                    loadBalance();
+                case MODE_LOAD_BAL:
+                    evaluateLoad();
                     break;
+                case CMD_LOAD_BAL:
+                	loadBalance();
+                	break;
                 case MODE_TRAN_BOIDS:
                     calculateEscapedBoids();
                     break;
@@ -298,7 +302,11 @@ void processNeighbouringBoids() {
     // Parse each received boid and add to possible neighbour list
     rxNbrBoidLoop: for (int i = 0; i < boidsPerMsg; i++) {
         possibleBoidNeighbours[possibleNeighbourCount] = parsePackedBoid(i);
-        possibleNeighbourCount++;
+
+        // Don't go beyond the edge of the array
+        if (possibleNeighbourCount != (MAX_NEIGHBOURING_BOIDS - 1)) {
+        	possibleNeighbourCount++;
+    	}
     }
 
     // If no further messages are expected, then process it
@@ -375,33 +383,59 @@ void calcNextBoidPositions() {
 	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
-void loadBalance() {
-//    if (boidCount > BOID_THRESHOLD) {
+// If overloaded, signal the controller
+void evaluateLoad() {
+    if (boidCount > BOID_THRESHOLD) {
     	std::cout << "-Load balancing..." << std::endl;
-//
-//    	// If overloaded, signal the controller
-//    	generateOutput(0, CONTROLLER_ID, CMD_LOAD_BAL_REQ, outputBody);
-//
-//
-//    } else {
-//    	std::cout << "-No need to load balance" << std::endl;
-//    	// Send ACK?
-//    }
+
+    	generateOutput(0, CONTROLLER_ID, CMD_LOAD_BAL_REQUEST, outputBody);
+    } else {
+    	std::cout << "-No need to load balance" << std::endl;
+    	outputBody[0] = MODE_LOAD_BAL;
+		generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
+    }
 }
 
-//void processLoadBalanceCommand() {
-//
-//}
-//
-///**
-// * Change the bounds of the BoidCPU. Used during load balancing.
-// */
-//void changeBoidCPUBounds(int12 xMin, int12 yMin, int12 xMax, int12 yMax) {
-//	boidCPUCoords[X_MIN] = xMin;
-//	boidCPUCoords[Y_MIN] = yMin;
-//	boidCPUCoords[X_MAX] = xMax;
-//	boidCPUCoords[Y_MAX] = yMax;
-//}
+void loadBalance() {
+	int16 edgeChanges = (int16)inputData[CMD_HEADER_LEN + 0];
+
+	std::cout << "BoidCPU #" << boidCPUID << " changing NORTH edge from " <<
+			boidCPUCoords[Y_MIN];
+	boidCPUCoords[Y_MIN] += VISION_RADIUS * int4(edgeChanges >> NORTH_IDX);
+	std::cout << " to " << boidCPUCoords[Y_MIN] << std::endl;
+
+	std::cout << "BoidCPU #" << boidCPUID << " changing EAST edge from " <<
+			boidCPUCoords[X_MAX];
+	boidCPUCoords[X_MAX] += VISION_RADIUS * int4(edgeChanges >> EAST_IDX);
+	std::cout << " to " << boidCPUCoords[X_MAX] << std::endl;
+
+	std::cout << "BoidCPU #" << boidCPUID << " changing SOUTH edge from " <<
+			boidCPUCoords[Y_MAX];
+	boidCPUCoords[Y_MAX] += VISION_RADIUS * int4(edgeChanges >> SOUTH_IDX);
+	std::cout << " to " << boidCPUCoords[Y_MAX] << std::endl;
+
+	std::cout << "BoidCPU #" << boidCPUID << " changing WEST edge from " <<
+			boidCPUCoords[X_MIN];
+	boidCPUCoords[X_MIN] += VISION_RADIUS * int4(edgeChanges >> WEST_IDX);
+	std::cout << " to " << boidCPUCoords[X_MIN] << std::endl;
+
+	// Is minimal?
+	int12 width  = boidCPUCoords[2] - boidCPUCoords[0];
+	int12 height = boidCPUCoords[3] - boidCPUCoords[1];
+	if ((width <= VISION_RADIUS) && (height <= VISION_RADIUS)) {
+		std::cout << "BoidCPU #" << boidCPUID << " minimal" << std::endl;
+		outputBody[0] = 2;
+		generateOutput(1, CONTROLLER_ID, CMD_BOUNDS_AT_MIN, outputBody);
+	} else if (width <= VISION_RADIUS) {
+		std::cout << "BoidCPU #" << boidCPUID << " width minimal" << std::endl;
+		outputBody[0] = 0;
+		generateOutput(1, CONTROLLER_ID, CMD_BOUNDS_AT_MIN, outputBody);
+	} else if (height <= VISION_RADIUS) {
+		std::cout << "BoidCPU #" << boidCPUID << " height minimal" << std::endl;
+		outputBody[0] = 1;
+		generateOutput(1, CONTROLLER_ID, CMD_BOUNDS_AT_MIN, outputBody);
+	}
+}
 
 void updateDisplay() {
 	if (queuedBoidsCounter > 0) {
@@ -831,9 +865,18 @@ void printCommand(bool send, uint32 *data) {
         case MODE_POS_BOIDS:
             std::cout << "calculate new boid positions";
             break;
-        case CMD_LOAD_BAL:
-            std::cout << "load balance";
-            break;
+        case MODE_LOAD_BAL:
+			std::cout << "load balance";
+			break;
+		case CMD_LOAD_BAL:
+			std::cout << "load balance instructions";
+			break;
+		case CMD_LOAD_BAL_REQUEST:
+			std::cout << "load balance request";
+			break;
+		case CMD_BOUNDS_AT_MIN:
+			std::cout << "BoidCPU at minimal bounds";
+			break;
         case MODE_TRAN_BOIDS:
             std::cout << "transfer boids";
             break;

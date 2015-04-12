@@ -39,13 +39,18 @@
 #define CMD_PING_END			7	// Gatekeeper -> Controller (D)
 #define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU (D)
 #define MODE_POS_BOIDS          9   // Controller -> BoidCPU (B)
-#define CMD_LOAD_BAL            10  // Controller -> BoidCPU (?) TODO: Implement
+#define MODE_LOAD_BAL           10  // Controller -> BoidCPU (?)
 #define MODE_TRAN_BOIDS         11  // Controller -> BoidCPU (B)
 #define CMD_BOID                12  // BoidCPU -> BoidCPU (D)
-#define MODE_DRAW               14  // Controller -> BoidCPU (B) TODO: Needed?
+#define MODE_DRAW               14  // Controller -> BoidCPU (B)
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
 #define CMD_KILL                16  // Controller -> All (B)
 #define CMD_ACK					17
+#define CMD_PING_START			18
+#define CMD_LOAD_BAL_REQUEST	19
+#define CMD_LOAD_BAL			20
+#define CMD_BOUNDS_AT_MIN		21
+#define CMD_DEBUG				76
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
 #define CMD_SETUP_COORD_IDX 	2	// Coordinates start index
@@ -83,13 +88,10 @@
 #define SOUTHWEST				6	// Index of the BoidCPU to the southwest
 #define WEST					7	// Index of the BoidCPU to the west
 
-// Other definitions -----------------------------------------------------------
-#define POLY_MASK_16        0xD295  // Used for random
-#define POLY_MASK_15        0x6699  // Used for random
-
-#define ROUND_TOWARDS_ZERO 				1
-#define ROUND_AWAY_FROM_ZERO			2
-#define REMAINDER_ROUND_TOWARDS_ZERO	3
+#define NORTH_IDX	12			// The index of the north edge change (load bal)
+#define EAST_IDX	8			// The index of the east edge change (load bal)
+#define SOUTH_IDX	4			// The index of the south edge change (load bal)
+#define WEST_IDX	0			// The index of the west edge change (load bal)
 
 
 // Typedefs

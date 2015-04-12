@@ -25,6 +25,7 @@ void testMoveBoids();
 void testDrawBoids();
 
 void simulateNeighbourResponse();
+void simulateLoadBalanceInstructions();
 void simulateBoidTransfer();
 
 void processNeighbourReply();
@@ -48,6 +49,7 @@ int main() {
     simulateNeighbourResponse();
     testCalcNextBoidPos();
     testLoadBalance();
+//    simulateLoadBalanceInstructions();
     testMoveBoids();
     simulateBoidTransfer();
     testDrawBoids();
@@ -274,7 +276,16 @@ void testLoadBalance() {
     // 4 0 1 10 ||
     tbDataLength = 0;
     tbTo = CMD_BROADCAST;
-    tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_LOAD_BAL, tbData);
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, MODE_LOAD_BAL, tbData);
+}
+
+void simulateLoadBalanceInstructions() {
+	// 5 3 1 20 || 7936
+	tbDataLength = 1;
+	tbData[0] = 8177;	// Shrink all 4 edges
+	tbTo = 3;
+	tbFrom = CONTROLLER_ID;
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_LOAD_BAL, tbData);
 }
 
 void testMoveBoids() {
@@ -537,8 +548,14 @@ void tbPrintCommand(bool send, uint32 *data) {
 	case MODE_POS_BOIDS:
 		std::cout << "calculate new boid positions      ";
 		break;
+	case MODE_LOAD_BAL:
+		std::cout << "load balance mode                 ";
+		break;
 	case CMD_LOAD_BAL:
-		std::cout << "load balance                      ";
+		std::cout << "load balance instructions         ";
+		break;
+	case CMD_LOAD_BAL_REQUEST:
+		std::cout << "load balance request              ";
 		break;
 	case MODE_TRAN_BOIDS:
 		std::cout << "transfer boids                    ";

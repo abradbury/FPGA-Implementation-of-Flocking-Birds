@@ -21,6 +21,8 @@ void simulatePingStart();
 void simulateUserInfo();
 void issueEndOfPing();
 void simulatePingReplies();
+void simulateLoadBalanceRequest();
+
 void simulateSetupAck();
 void simulateNbrSearchAck();
 void simulatePositionBoidsAck();
@@ -50,6 +52,8 @@ int main() {
     simulateNbrSearchAck();
     simulatePositionBoidsAck();
     simulateBoidTransferAck();
+
+    simulateLoadBalanceRequest();
 
     simulateBoidGPUAck();
 
@@ -147,9 +151,10 @@ void simulateUserInfo() {
 // 5 1 66 3 || 4
 void simulatePingReplies() {
 	std::cout << "Simulating ping replies..." << std::endl;
-	tbGatekeeperCount = 1;
+	tbGatekeeperCount = 3;
 	tbGatekeeperIDs[0] = 1481765933;
-//	tbGatekeeperIDs[1] = 66;
+	tbGatekeeperIDs[1] = 66;
+	tbGatekeeperIDs[2] = 432;
 
 	tbData[0] = 2;					// Number of resident BoidCPUs
 	tbDataLength = 1;
@@ -157,11 +162,17 @@ void simulatePingReplies() {
 	tbFrom = tbGatekeeperIDs[0];	// Random Gatekeeper ID
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
 
-//	tbData[0] = 4;					// Number of resident BoidCPUs
-//	tbDataLength = 1;
-//	tbTo = CONTROLLER_ID;
-//	tbFrom = tbGatekeeperIDs[1];	// Random Gatekeeper ID
-//	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
+	tbData[0] = 4;					// Number of resident BoidCPUs
+	tbDataLength = 1;
+	tbTo = CONTROLLER_ID;
+	tbFrom = tbGatekeeperIDs[1];	// Random Gatekeeper ID
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
+
+	tbData[0] = 3;					// Number of resident BoidCPUs
+	tbDataLength = 1;
+	tbTo = CONTROLLER_ID;
+	tbFrom = tbGatekeeperIDs[2];	// Random Gatekeeper ID
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
 
 	std::cout << "Responding to ping with 6 BoidCPUs (2/4)..." << std::endl;
 }
@@ -232,6 +243,17 @@ void simulatePositionBoidsAck() {
 	for (int i = 0; i < tbGatekeeperCount; i++) {
 		simulateAck(tbGatekeeperIDs[i]);
 	}
+}
+
+void simulateLoadBalanceRequest() {
+	tbTo = CONTROLLER_ID;
+	tbFrom = 7;
+
+	tbCreateCommand(0, tbTo, tbFrom, CMD_LOAD_BAL_REQUEST, tbData);
+}
+
+void simulateLoadBalanceAck() {
+
 }
 
 void simulateBoidTransferAck() {
@@ -323,8 +345,14 @@ void tbPrintCommand(bool send, uint32 *data) {
 	case MODE_POS_BOIDS:
 		std::cout << "calculate new boid positions       ";
 		break;
+	case MODE_LOAD_BAL:
+		std::cout << "load balance mode                  ";
+		break;
 	case CMD_LOAD_BAL:
-		std::cout << "load balance                       ";
+		std::cout << "load balance instructions          ";
+		break;
+	case CMD_LOAD_BAL_REQUEST:
+		std::cout << "load balance request               ";
 		break;
 	case MODE_TRAN_BOIDS:
 		std::cout << "transfer boids                     ";
