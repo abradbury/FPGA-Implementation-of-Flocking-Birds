@@ -1,7 +1,9 @@
 #include "boidMaster.h"
 
+#define TB_MAX_OUTPUT_CMDS	30
+
 // Global variables ============================================================
-uint32 tbOutputData[20][MAX_CMD_LEN];
+uint32 tbOutputData[TB_MAX_OUTPUT_CMDS][MAX_CMD_LEN];
 uint32 tbInputData[MAX_INPUT_CMDS][MAX_CMD_LEN];
 uint32 tbOutputCount = 0;
 uint32 tbInputCount = 0;
@@ -15,17 +17,18 @@ uint32 tbGatekeeperCount;
 uint32 tbGatekeeperIDs[8];
 
 // Function headers ============================================================
-void simulateAck(uint32 from);
+void simulateAck(uint32 from, uint32 type);
 
 void simulatePingStart();
 void simulateUserInfo();
 void issueEndOfPing();
 void simulatePingReplies();
-void simulateLoadBalanceRequest();
+void simulateOverloadedBoidCPU();
 
 void simulateSetupAck();
 void simulateNbrSearchAck();
 void simulatePositionBoidsAck();
+void simulateLoadBalanceAck();
 void simulateBoidTransferAck();
 void simulateBoidGPUAck();
 
@@ -53,9 +56,10 @@ int main() {
     simulatePositionBoidsAck();
     simulateBoidTransferAck();
 
-    simulateLoadBalanceRequest();
+    simulateOverloadedBoidCPU();
+    simulateLoadBalanceAck();
 
-    simulateBoidGPUAck();
+//    simulateBoidGPUAck();
 
     // Send data ---------------------------------------------------------------
 	outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -121,9 +125,10 @@ int main() {
 // State processing functions ------------------------------------------------//
 //============================================================================//
 
-// 4 1 [from] 17 ||
-void simulateAck(uint32 from) {
-	tbDataLength = 0;
+// 5 1 [from] 17 || [type]
+void simulateAck(uint32 from, uint32 type) {
+	tbData[0] = type;
+	tbDataLength = 1;
 	tbTo = CONTROLLER_ID;
 	tbFrom = from;			// Just some random ID
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_ACK, tbData);
@@ -162,13 +167,13 @@ void simulatePingReplies() {
 	tbFrom = tbGatekeeperIDs[0];	// Random Gatekeeper ID
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
 
-	tbData[0] = 4;					// Number of resident BoidCPUs
+	tbData[0] = 6;					// Number of resident BoidCPUs
 	tbDataLength = 1;
 	tbTo = CONTROLLER_ID;
 	tbFrom = tbGatekeeperIDs[1];	// Random Gatekeeper ID
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_REPLY, tbData);
 
-	tbData[0] = 3;					// Number of resident BoidCPUs
+	tbData[0] = 1;					// Number of resident BoidCPUs
 	tbDataLength = 1;
 	tbTo = CONTROLLER_ID;
 	tbFrom = tbGatekeeperIDs[2];	// Random Gatekeeper ID
@@ -227,45 +232,60 @@ void processSetupInfo() {
 void simulateSetupAck() {
 	std::cout << "Simulating setup ACK..." << std::endl;
 	for (int i = 0; i < tbGatekeeperCount; i++) {
-		simulateAck(tbGatekeeperIDs[i]);
+		simulateAck(tbGatekeeperIDs[i], CMD_SIM_SETUP);
 	}
 }
 
 void simulateNbrSearchAck() {
 	std::cout << "Simulating neighbour search ACK..." << std::endl;
 	for (int i = 0; i < tbGatekeeperCount; i++) {
-		simulateAck(tbGatekeeperIDs[i]);
+		simulateAck(tbGatekeeperIDs[i], MODE_CALC_NBRS);
 	}
 }
 
 void simulatePositionBoidsAck() {
 	std::cout << "Simulating position boids ACK..." << std::endl;
 	for (int i = 0; i < tbGatekeeperCount; i++) {
-		simulateAck(tbGatekeeperIDs[i]);
+		simulateAck(tbGatekeeperIDs[i], MODE_POS_BOIDS);
 	}
 }
 
-void simulateLoadBalanceRequest() {
-	tbTo = CONTROLLER_ID;
-	tbFrom = 7;
-
-	tbCreateCommand(0, tbTo, tbFrom, CMD_LOAD_BAL_REQUEST, tbData);
+void simulateOverloadedBoidCPU() {
+	for (int i = 0; i < tbGatekeeperCount; i++) {
+		if (tbGatekeeperIDs[i] != 66) {
+			std::cout << "Simulating load balance ACK..." << std::endl;
+			simulateAck(tbGatekeeperIDs[i], MODE_LOAD_BAL);
+		} else {
+			std::cout << "Simulating load balance request..." << std::endl;
+			tbTo = CONTROLLER_ID;
+			tbFrom = 3;
+			tbCreateCommand(0, tbTo, tbFrom, CMD_LOAD_BAL_REQUEST, tbData);
+		}
+	}
 }
 
 void simulateLoadBalanceAck() {
+	std::cout << "Simulating load balance (2) ACK..." << std::endl;
+	for (int i = 0; i < tbGatekeeperCount; i++) {
+//		simulateAck(tbGatekeeperIDs[i], CMD_LOAD_BAL);
 
+		if (tbGatekeeperIDs[i] != 432) {
+			std::cout << "Simulating load balance ACK..." << std::endl;
+			simulateAck(tbGatekeeperIDs[i], CMD_LOAD_BAL);
+		}
+	}
 }
 
 void simulateBoidTransferAck() {
 	std::cout << "Simulating boid transfer ACK..." << std::endl;
 	for (int i = 0; i < tbGatekeeperCount; i++) {
-		simulateAck(tbGatekeeperIDs[i]);
+		simulateAck(tbGatekeeperIDs[i], MODE_TRAN_BOIDS);
 	}
 }
 
 void simulateBoidGPUAck() {
 	std::cout << "Simulating BoidGPU ACK..." << std::endl;
-	simulateAck(BOIDGPU_ID);
+	simulateAck(BOIDGPU_ID, MODE_DRAW);
 }
 
 void processDrawMode() {
@@ -278,18 +298,23 @@ void processDrawMode() {
 
 void tbCreateCommand(uint32 len, uint32 to, uint32 from, uint32 type,
 		uint32 *data) {
-	tbOutputData[tbOutputCount][CMD_LEN] = len + CMD_HEADER_LEN;
-	tbOutputData[tbOutputCount][CMD_TO] = to;
-	tbOutputData[tbOutputCount][CMD_FROM] = from;
-	tbOutputData[tbOutputCount][CMD_TYPE] = type;
 
-	if (len > 0) {
-		dataToCmd: for (int i = 0; i < len; i++) {
-			tbOutputData[tbOutputCount][CMD_HEADER_LEN + i] = data[i];
+	if (tbOutputCount < TB_MAX_OUTPUT_CMDS) {
+		tbOutputData[tbOutputCount][CMD_LEN] = len + CMD_HEADER_LEN;
+		tbOutputData[tbOutputCount][CMD_TO] = to;
+		tbOutputData[tbOutputCount][CMD_FROM] = from;
+		tbOutputData[tbOutputCount][CMD_TYPE] = type;
+
+		if (len > 0) {
+			dataToCmd: for (int i = 0; i < len; i++) {
+				tbOutputData[tbOutputCount][CMD_HEADER_LEN + i] = data[i];
+			}
 		}
-	}
 
-	tbOutputCount++;
+		tbOutputCount++;
+	} else {
+		std::cout << "Cannot send message, output buffer full" << std::endl;
+	}
 }
 
 //============================================================================//

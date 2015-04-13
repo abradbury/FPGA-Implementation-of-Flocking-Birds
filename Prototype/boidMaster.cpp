@@ -3,6 +3,7 @@
 //#define USING_TB				true	// Defined when using VHLS test bench
 
 #define MAX_BOIDCPUS			32		// TODO: Decide on a suitable value
+#define MAX_GATEKEEPERS			16		// TODO: Decide on a suitable value
 
 #define SIMULATION_WIDTH		1920	// The pixel width of the simulation
 #define SIMULATION_HEIGHT		1080	// The pixel height of the simulation
@@ -61,8 +62,15 @@ struct BoidCPU {
 	bool minimalWidth;
 };
 
+struct AckStruct {
+	uint32 gatekeeperID;
+	bool recieved;
+	bool loadBalancing;
+};
+
 uint8 state = CMD_PING;
 uint8 ackCount = 0;
+AckStruct ackList[MAX_GATEKEEPERS];
 uint8 gatekeeperCount = 0;
 uint8 boidCPUCount = 0;
 BoidCPU boidCPUs[MAX_BOIDCPUS];
@@ -81,9 +89,6 @@ void boidMaster(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable = input core = AXI4Stream
 #pragma HLS RESOURCE variable = output core = AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port = return
-
-	// Perform initialisation
-//    initialisation();
 
 // Continually check for input and deal with it. Note that reading an empty
 // input stream will generate warnings in HLS, but should be blocking in the
@@ -188,10 +193,10 @@ void processUserData() {
  * another matter), the simulation setup is calculated.
  */
 void processPingReply() {
-	uint8 gatekeeperBoidCPUCount = inputData[CMD_HEADER_LEN + 0];
+	ackList[gatekeeperCount].gatekeeperID = inputData[CMD_FROM];
 	gatekeeperCount++;
 
-	pingResponseLoop: for (int i = 0; i < gatekeeperBoidCPUCount; i++) {
+	pingResponseLoop: for (int i = 0; i < inputData[CMD_HEADER_LEN + 0]; i++) {
 		boidCPUs[boidCPUCount] = BoidCPU();
 
 		boidCPUs[boidCPUCount].gatekeeperID = inputData[CMD_FROM];
@@ -279,9 +284,11 @@ void setupSimulation() {
 			}
 
 			// Is minimal?
-			if ((boidCPUs[count].boidCPUCoords[2] - boidCPUs[count].boidCPUCoords[0]) <= VISION_RADIUS) {
+			if ((boidCPUs[count].boidCPUCoords[2] - boidCPUs[count].\
+					boidCPUCoords[0]) <= VISION_RADIUS) {
 				boidCPUs[count].minimalHeight = true;
-			} else if ((boidCPUs[count].boidCPUCoords[3] - boidCPUs[count].boidCPUCoords[1]) <= VISION_RADIUS) {
+			} else if ((boidCPUs[count].boidCPUCoords[3] - boidCPUs[count].\
+					boidCPUCoords[1]) <= VISION_RADIUS) {
 				boidCPUs[count].minimalWidth = true;
 			} else {
 				boidCPUs[count].minimalHeight = false;
@@ -375,13 +382,43 @@ void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
 	}
 }
 
+/**
+ * Process a received ACK. Typically this moves the simulation on to the next
+ * stage. When an ACK is received mark that gatekeeper as having send its ACK
+ * and increment the ACK counter.
+ *
+ * In load balancing, BoidCPUs send an ACK if they do not need to load balance.
+ * A BoidCPU that does need to load balance will send a load balance request,
+ * not an ACK. During load balancing, other BoidCPUs may be affected. Every
+ * gatekeeper that has BoidCPUs affected by the load balancing has its ACK flag
+ * cleared and a load balancing flag set for it. That way, when an ACK from the
+ * original load balancing mode is received after the load balancing change
+ * messages have been received, this ACK is only counted if the gatekeeper it
+ * is from does not have any affected BoidCPUs. Otherwise, it is ignored. For
+ * gatekeepers that have affected BoidCPUs, another ACK will be sent.
+ */
 void processAck() {
 	if (inputData[CMD_FROM] == BOIDGPU_ID) {
 		state = MODE_CALC_NBRS;
 		issueCalcNbrsMode();
 		ackCount = 0;
 	} else {
-		ackCount++;
+		for (int i = 0; i < gatekeeperCount; i++) {
+			if (ackList[i].gatekeeperID == inputData[CMD_FROM]) {
+
+				if (ackList[i].loadBalancing == true) {
+					if (inputData[CMD_HEADER_LEN] == CMD_LOAD_BAL) {
+						ackList[i].recieved = true;
+						ackCount++;
+					} else {
+						std::cout << "Ignored ACK (as load bal)" << std::endl;
+					}
+				} else {
+					ackList[i].recieved = true;
+					ackCount++;
+				}
+			}
+		}
 	}
 
 	if (ackCount == gatekeeperCount) {
@@ -409,7 +446,12 @@ void processAck() {
 		default:
 			break;
 		}
+
 		ackCount = 0;
+		for (int i = 0; i < gatekeeperCount; i++) {
+			ackList[i].recieved = false;
+			ackList[i].loadBalancing = false;
+		}
 	}
 }
 
@@ -419,7 +461,6 @@ void processAck() {
  * vision radius of a boid.
  */
 void processLoadData() {
-	// TODO: Load balancing ACK
 	// TODO: Utilise the minimal BoidCPU information
 
 	// Get info about BoidCPU making request
@@ -433,25 +474,25 @@ void processLoadData() {
 			x << ", " <<  y << "]: ";
 
 	// If the BoidCPU is not on the topmost row of the simulation grid
-	if (x != 0) {
+	if (y != 0) {
 		edgeChanges |= (int16(stepChanges) << NORTH_IDX);
 		std::cout << "NORTH edge decreased, ";
 	}
 
 	// If the BoidCPU is not on the rightmost column of the simulation grid
-	if (y != (simulationGridWidth - 1)) {
+	if (x != (simulationGridWidth - 1)) {
 		edgeChanges |= ((~(int16)0xF000) & (int16(-stepChanges) << EAST_IDX));
 		std::cout << "EAST edge decreased, ";
 	}
 
 	// If the BoidCPU is not on the bottom-most row of the simulation grid
-	if (x != (simulationGridHeight - 1)) {
+	if (y != (simulationGridHeight - 1)) {
 		edgeChanges |= ((~(int16)0xFF00) & (int16(-stepChanges) << SOUTH_IDX));
 		std::cout << "SOUTH edge decreased, ";
 	}
 
 	// If the BoidCPU is not on the leftmost column of the simulation gird
-	if (y != 0) {
+	if (x != 0) {
 		edgeChanges |= ((~(int16)0xFFF0) & (int16(stepChanges) << WEST_IDX));
 		std::cout << "WEST edge decreased, ";
 	}
@@ -530,11 +571,30 @@ void processLoadData() {
 		if (affectedBoidCPUEdgeChanges) {
 			data[0] = (uint32)affectedBoidCPUEdgeChanges;
 			createCommand(1, boidCPUs[i].boidCPUID, CONTROLLER_ID, CMD_LOAD_BAL, data);
+
+			// Clear ACK for gatekeeper owning BoidCPU
+			for (int j = 0; j < gatekeeperCount; j++) {
+				if (boidCPUs[i].gatekeeperID == ackList[j].gatekeeperID) {
+					ackList[j].recieved = false;
+					ackList[j].loadBalancing = true;
+					if (ackCount) ackCount--;
+
+					for (int i = 0; i < gatekeeperCount; i++) {
+						std::cout << ackList[i].gatekeeperID << ": (" << ackList[i].recieved << ", " << ackList[i].loadBalancing << ") , ";
+					} std::cout << "(" << ackCount << ")" << std::endl;
+
+					break;
+				}
+			}
 		}
 	}
 }
 
 /**
+ * When a BoidCPU reports that it is minimal, update the BoidMaster's knowledge
+ * of the BoidCPU. This is used in load balancing when determining the bound
+ * changes to do to balance the load.
+ *
  * 0 = minimal width, 1 = minimal height, 2 = minimal height and width
  */
 void updateMinimalBoidCPUsList() {
