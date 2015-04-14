@@ -10,7 +10,3 @@ Initially, a Python simulation was created to investigate any issues that may oc
 Vivado HLS (VHLS) Prototype
 ---------------------------
 The next stage was to develop a VHLS prototype of the system. VHLS was chosen due to relative familiarity.
-
-Bluespec SystemVerilog (BSV) Final Implementation
--------------------------------------------------
-The initial intention was to develop the final implementation using [Bluespec SystemVerilog](http://wiki.bluespec.com/), a relatively new hardware description language that would enable greater customisation than a VHLS solution. 
