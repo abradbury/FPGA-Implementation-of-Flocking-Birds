@@ -1,21 +1,33 @@
+/*****************************************************************************/
 /**
- * Routes data between internal BoidCPUs, filters out irrelevant external data
+ *Routes data between internal BoidCPUs, filters out irrelevant external data
  * and forwards internal data to external entities as appropriate.
- */
+*
+******************************************************************************/
+
+/***************************** Include Files *********************************/
 
 #include "stdlib.h"			// For rand()
 #include "xparameters.h"	// Xilinx definitions
 #include "xemaclite.h"		// Ethernet
+
+#include "xintc.h"			// Interrupt controller
+#include "xil_exception.h"
+#include "xil_io.h"
+
 #include "xuartlite_l.h"    // UART
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
 #include <stdint.h>			// For specific data types e.g. int16_t
+
+/************************** Constant Definitions *****************************/
 
 #define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
 #define DEBUG					1	// Undefined to show only BoidGPU messages
 
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
 #define BOID_DATA_LENGTH 		3
+#define EXT_INPUT_SIZE			8
 
 #ifdef MASTER_IS_RESIDENT
 #define BOIDMASTER_CHANNEL		0
@@ -32,14 +44,22 @@
 #define INTERNAL_RECIPIENT				1
 #define INTERNAL_AND_EXTERNAL_RECIPIENT	2
 
-// Setup Ethernet and its transmit and receive buffers
-// FIXME: Ethernet requires a u8 buffer, but FXL requires a u32...
-XEmacLite ether;
+#define EMAC_DEVICE_ID		XPAR_EMACLITE_0_DEVICE_ID
+#define INTC_DEVICE_ID		XPAR_INTC_0_DEVICE_ID
+#define INTC_EMACLITE_ID	XPAR_INTC_0_EMACLITE_0_VEC_ID
+
+/************************** Variable Definitions *****************************/
+
+XIntc 		intc;		// Interrupt controller
+XEmacLite 	ether;		// Ethernet
 
 static u8 own_mac_address[XEL_MAC_ADDR_SIZE] = {0x00, 0x0A, 0x35, 0x01, 0x02, 0x03};
 
+u8 extInputArrivalPtr = 0;		// Next message arrival slot
+u8 extInputProcessPtr = 0;		// Next message to process
+//u8 extInputMsgCounter = 0;		// Number of queued messages
 u8 externalOutput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_OUTPUT_CMDS * 4)];
-u8 rawExternalInput[XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_INPUT_CMDS * 4)];
+u8 rawExternalInput[EXT_INPUT_SIZE][XEL_HEADER_SIZE + (MAX_CMD_LEN * MAX_INPUT_CMDS * 4)];
 u32 externalInput[MAX_CMD_LEN * MAX_INPUT_CMDS];
 
 // Setup other variables
@@ -64,7 +84,12 @@ u8 ackCount = 0;
 u8 residentNbrCounter = 0;
 u8 residentBoidCPUNeighbours[MAX_BOIDCPU_NEIGHBOURS * RESIDENT_BOIDCPU_COUNT];
 
-// Protocols
+/************************** Function Prototypes ******************************/
+int setupEthernet();
+
+static void EmacLiteRecvHandler(void *CallBackRef);
+static void EmacLiteSendHandler(void *CallBackRef);
+
 void registerWithSwitch();
 void checkForInput();
 
@@ -105,19 +130,13 @@ u32 decodeEthernetMessage(u8 inputZero, u8 inputOne, u8 inputTwo, u8 inputThree)
 //- Main Method --------------------------------------------------------------//
 //============================================================================//
 
-// TODO: Rename to main() when deployed
 int main() {
 	// Setup own ID - TODO: Ensure that this doesn't clash with the BoidIDs
 	gatekeeperID = *((volatile int *) XPAR_MCB_DDR2_S0_AXI_BASEADDR + 0x01ABCABC);
 	own_mac_address[5] = 0x03;
 	// TODO: Assign MAC address and ID randomly, or better
 
-	// Setup the Ethernet
-	XEmacLite_Config *etherconfig = XEmacLite_LookupConfig(XPAR_EMACLITE_0_DEVICE_ID);
-	XEmacLite_CfgInitialize(&ether, etherconfig, etherconfig->BaseAddress);
-	XEmacLite_SetMacAddress(&ether, own_mac_address);
-	XEmacLite_FlushReceive(&ether);
-
+	setupEthernet();
 	registerWithSwitch();
 
 	do {
@@ -189,11 +208,9 @@ int main() {
  * internal or external lines. If there is, it is processed accordingly.
  */
 void checkForInput() {
-	// Check for external (Ethernet) data --------------------------------------
-	volatile int recv_len = XEmacLite_Recv(&ether, rawExternalInput);
-
-	// Process received external data ------------------------------------------
-	if (recv_len != 0) {
+	// Check for and process received external data ----------------------------
+	if (extInputProcessPtr != extInputArrivalPtr) {
+		xil_printf("External messages ready to be processed (p%d, a%d)\n\r", extInputProcessPtr, extInputArrivalPtr);
 		processReceivedExternalMessage();
 	}
 
@@ -276,38 +293,44 @@ void processReceivedInternalMessage(u32 *inputData) {
 }
 
 void processReceivedExternalMessage() {
-	if((rawExternalInput[12] == 0x55) && (rawExternalInput[13] == 0xAA)) {
-		// Strip the Ethernet header
-		int j = 0, k = 0;
-		for (j = XEL_HEADER_SIZE, k = 0; j < (MAX_CMD_LEN * MAX_INPUT_CMDS); j+=4, k++) {
-			externalInput[k] = decodeEthernetMessage(rawExternalInput[j + 0], rawExternalInput[j + 1], rawExternalInput[j + 2], rawExternalInput[j + 3]);
-		}
 
-		// Then process the remaining information
-#ifdef DEBUG
-		print("EXTERNAL: ");
-		printMessage(false, externalInput);
-#endif
-		decodeAndPrintBoids(externalInput);
-
-		if (!boidCPUsSetup) {
-			print("BoidCPUs not setup\n\r");
-			interceptMessage(externalInput);
-		} else if (externalMessageRelevant()) {
-			// Forward the message
-			u32 dataBodyLength = externalInput[CMD_LEN] - CMD_HEADER_LEN;
-			u32 dataBody[dataBodyLength];
-			int i = 0;
-			for (i = 0; i < dataBodyLength; i++) {
-				dataBody[i] = externalInput[CMD_HEADER_LEN + i];
-			}
-
-			sendMessage(dataBodyLength, externalInput[CMD_TO],
-					externalInput[CMD_FROM], externalInput[CMD_TYPE], dataBody);
-		}
+	// Move the message and strip the header
+	int j = 0, k = 0;
+	for (j = XEL_HEADER_SIZE, k = 0; j < (MAX_CMD_LEN * MAX_INPUT_CMDS); j+=4, k++) {
+		externalInput[k] = decodeEthernetMessage(
+				rawExternalInput[extInputProcessPtr][j + 0],
+				rawExternalInput[extInputProcessPtr][j + 1],
+				rawExternalInput[extInputProcessPtr][j + 2],
+				rawExternalInput[extInputProcessPtr][j + 3]);
 	}
 
-	XEmacLite_FlushReceive(&ether); // Clear any received messages
+//	XEmacLite_FlushReceive(&ether); // Clear any received messages
+
+	// Then process the remaining information
+#ifdef DEBUG
+	print("EXTERNAL: ");
+	printMessage(false, externalInput);
+#endif
+	decodeAndPrintBoids(externalInput);
+
+	if (!boidCPUsSetup) {
+		print("BoidCPUs not setup\n\r");
+		interceptMessage(externalInput);
+	} else if (externalMessageRelevant()) {
+		// Forward the message
+		u32 dataBodyLength = externalInput[CMD_LEN] - CMD_HEADER_LEN;
+		u32 dataBody[dataBodyLength];
+		int i = 0;
+		for (i = 0; i < dataBodyLength; i++) {
+			dataBody[i] = externalInput[CMD_HEADER_LEN + i];
+		}
+
+		sendMessage(dataBodyLength, externalInput[CMD_TO],
+				externalInput[CMD_FROM], externalInput[CMD_TYPE], dataBody);
+	}
+
+
+	extInputProcessPtr = (extInputProcessPtr + 1) % EXT_INPUT_SIZE;
 }
 
 //============================================================================//
@@ -491,7 +514,7 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 #endif
 
 	// Finally, clear the receive buffer before sending
-	XEmacLite_FlushReceive(&ether);
+//	XEmacLite_FlushReceive(&ether);
 	int status = XEmacLite_Send(&ether, externalOutput, XEL_HEADER_SIZE + ((len + CMD_HEADER_LEN) * 4));
 
 	if(status == 1) {
@@ -573,15 +596,15 @@ u8 recipientLookUp(u32 to, u32 from) {
             // Else INTERNAL_RECIPIENT;
 
 #ifdef MASTER_IS_RESIDENT
-				for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
+			for (i = 1; i < (RESIDENT_BOIDCPU_COUNT + 1); i++) {
 #else
-				for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
+			for (i = 0; i < RESIDENT_BOIDCPU_COUNT; i++) {
 #endif
                 if (channelIDList[i] == from) {
-					recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
-					intAndExt = true;
-					break;
-				}
+				    recipientInterface = INTERNAL_AND_EXTERNAL_RECIPIENT;
+				    intAndExt = true;
+				    break;
+			    }
                 if (!intAndExt) recipientInterface = INTERNAL_RECIPIENT;
             }
 			break;
@@ -836,6 +859,9 @@ void uiBoidCPUSearch() {
  * get the user to press enter to begin the setup process.
  */
 void registerWithSwitch() {
+
+    print("Registering with the switch\n\r");
+
 	// Register with the switch
 	u8 *buffer = externalOutput;
 	*buffer++ = 0xFF;
@@ -1030,6 +1056,9 @@ void printMessage(bool send, u32 *data) {
 					data[CMD_TO]);
 		}
 	} else {
+
+		xil_printf(" (p%d, a%d) ", extInputProcessPtr, extInputArrivalPtr);
+
 		if (data[CMD_FROM] == CONTROLLER_ID) {
 			print("-----------------------------------------------------------"
 					"---------------------------------------------------\n\r");
@@ -1163,5 +1192,116 @@ void decodeAndPrintBoids(u32 *data) {
 	}
 }
 
+int setupEthernet() {
+	int Status;
+	XEmacLite_Config *ConfigPtr;
+
+	// Initialize the EmacLite device.
+	ConfigPtr = XEmacLite_LookupConfig(EMAC_DEVICE_ID);
+	if (ConfigPtr == NULL) {
+		return XST_FAILURE;
+	}
+	Status = XEmacLite_CfgInitialize(&ether,
+					ConfigPtr,
+					ConfigPtr->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	// Set the MAC address.
+	XEmacLite_SetMacAddress(&ether, own_mac_address);
+
+	// Empty any existing receive frames.
+	XEmacLite_FlushReceive(&ether);
+
+
+	// Check if there is a Tx buffer available, if there isn't it is an error.
+	if (XEmacLite_TxBufferAvailable(&ether) != TRUE) {
+		return XST_FAILURE;
+	}
+
+
+	// Set up the interrupt infrastructure.
+	// Initialize the interrupt controller driver so that it is ready to use.
+	Status = XIntc_Initialize(&intc, INTC_DEVICE_ID);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	/*
+	 * Connect a device driver handler that will be called when an interrupt
+	 * for the device occurs, the device driver handler performs the
+	 * specific interrupt processing for the device.
+	 */
+	Status = XIntc_Connect(&intc,
+				INTC_EMACLITE_ID,
+				XEmacLite_InterruptHandler,
+				(void *)(&ether));
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	/*
+	 * Start the interrupt controller such that interrupts are enabled for
+	 * all devices that cause interrupts, specific real mode so that
+	 * the EmacLite can cause interrupts thru the interrupt controller.
+	 */
+	Status = XIntc_Start(&intc, XIN_REAL_MODE);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	// Enable the interrupt for the EmacLite in the Interrupt controller.
+	XIntc_Enable(&intc, INTC_EMACLITE_ID);
+
+	// Initialize the exception table.
+	Xil_ExceptionInit();
+
+	// Register the interrupt controller handler with the exception table.
+	Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
+				(Xil_ExceptionHandler) XIntc_InterruptHandler,
+				&intc);
+
+	// Enable non-critical exceptions.
+	Xil_ExceptionEnable();
+
+	// Setup the EmacLite handlers.
+	XEmacLite_SetRecvHandler((&ether), (void *)(&ether),
+				 (XEmacLite_Handler)EmacLiteRecvHandler);
+	XEmacLite_SetSendHandler((&ether), (void *)(&ether),
+				 (XEmacLite_Handler)EmacLiteSendHandler);
+
+	// Enable the interrupts in the EmacLite controller.
+	XEmacLite_EnableInterrupts(&ether);
+
+	return XST_SUCCESS;
+}
+
+
+static void EmacLiteRecvHandler(void *CallBackRef) {
+	XEmacLite *XEmacInstancePtr;
+
+	// Convert the argument to something useful.
+	XEmacInstancePtr = (XEmacLite *)CallBackRef;
+
+	// Handle the Receive callback.
+	XEmacLite_Recv(XEmacInstancePtr, (u8 *)rawExternalInput[extInputArrivalPtr]);
+
+	if ((rawExternalInput[extInputArrivalPtr][12] == 0x55) &&
+			(rawExternalInput[extInputArrivalPtr][13] == 0xAA)) {
+		xil_printf("++ Receive Interrupt Triggered: Relevant - placed in buffer slot a%d (p%d)\n\r", extInputArrivalPtr, extInputProcessPtr);
+
+		extInputArrivalPtr = (extInputArrivalPtr + 1) % EXT_INPUT_SIZE;
+	}
+}
+
+static void EmacLiteSendHandler(void *CallBackRef) {
+	print("++ Transmit Interrupt Triggered \n\r");
+
+	XEmacLite *XEmacInstancePtr;
+
+	// Convert the argument to something useful.
+	XEmacInstancePtr = (XEmacLite *)CallBackRef;
+}
 
 
