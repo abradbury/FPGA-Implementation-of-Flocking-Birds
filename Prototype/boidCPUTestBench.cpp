@@ -45,16 +45,18 @@ int main() {
     testSimulationSetup();
 
     // Then repeat these commands every time step
-    testNeighbourSearch();
-    simulateNeighbourResponse();
-    testCalcNextBoidPos();
-    testLoadBalance();
-//    simulateLoadBalanceInstructions();
-    testMoveBoids();
-    simulateBoidTransfer();
-    testDrawBoids();
+    for (int i = 0; i < 3; i++ ) {
+		testNeighbourSearch();
+		simulateNeighbourResponse();
+		testCalcNextBoidPos();
+//		testLoadBalance();
+//	    simulateLoadBalanceInstructions();
+		testMoveBoids();
+//		simulateBoidTransfer();
+		testDrawBoids();
 
-    testNeighbourSearch();
+		std::cout << "-------------------------------------------" << std::endl;
+    }
 
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -120,8 +122,8 @@ void testSimulationSetup() {
 
     tbCoords[0] = 0;
 	tbCoords[1] = 0;
-	tbCoords[2] = 40;
-	tbCoords[3] = 40;
+	tbCoords[2] = 640;
+	tbCoords[3] = 360;
 
     tbNeighbours[0] = 4;
     tbNeighbours[1] = 3;
@@ -145,8 +147,8 @@ void testSimulationSetup() {
         tbData[CMD_SETUP_BNBRS_IDX + i] = tbNeighbours[i];
     }
 
-    tbData[CMD_SETUP_SIMWH_IDX + 0] = 80;
-    tbData[CMD_SETUP_SIMWH_IDX + 1] = 40;
+    tbData[CMD_SETUP_SIMWH_IDX + 0] = 1280;
+    tbData[CMD_SETUP_SIMWH_IDX + 1] = 720;
 
     tbCreateCommand(tbDataLength, CMD_BROADCAST, tbFrom, CMD_SIM_SETUP, tbData);
 }
@@ -228,41 +230,41 @@ void simulateNeighbourResponse() {
 	// 8  99 3 8 || 0 3145856 4292870144 30
 	tbData[0] = 1;
 	tbData[1] = 12583088;
-	tbData[2] = 5242880;
+	tbData[2] = 5242960;
 	tbData[3] = 21 + 10;
 	tbData[4] = 20185648;
-	tbData[5] = 4289724444;
+	tbData[5] = 5242960;
 	tbData[6] = 22 + 10;
 	tbData[7] = 12583408;
-	tbData[8] = 4290838496;
+	tbData[8] = 5242960;
 	tbData[9] = 23 + 10;
 	tbData[10] = 36700512;
-	tbData[11] = 65488;
+	tbData[11] = 5242960;
 	tbData[12] = 24 + 10;
 	tbData[13] = 4194448;
-	tbData[14] = 4293918720;
+	tbData[14] = 5242960;
 	tbData[15] = 25 + 10;
 	tbData[16] = 19923232;
-	tbData[17] = 2162640;
+	tbData[17] = 5242960;
 	tbData[18] = 26 + 10;
 	tbData[19] = 39846192;
-	tbData[20] = 4259776;
+	tbData[20] = 5242960;
 	tbData[21] = 27 + 10;
 	tbData[22] = 18874448;
-	tbData[23] = 4293918752;
+	tbData[23] = 5242960;
 	tbData[24] = 28 + 10;
 	tbData[25] = 15729168;
-	tbData[26] = 2162656;
+	tbData[26] = 5242960;
 	tbData[27] = 29 + 10;
 
-	tbCreateCommand(28, 99, 4, CMD_NBR_REPLY, tbData);
+//	tbCreateCommand(28, 99, 4, CMD_NBR_REPLY, tbData);
 
 	tbData[0] = 0;
-	tbData[1] = 3145856;
-	tbData[2] = 4292870144;
-	tbData[3] = 30 + 10;
+//	tbData[1] = 3145856;
+//	tbData[2] = 5242960;
+//	tbData[3] = 30 + 10;
 
-	tbCreateCommand(4, 99, 4, CMD_NBR_REPLY, tbData);
+	tbCreateCommand(1, 99, 4, CMD_NBR_REPLY, tbData);
 }
 
 void testCalcNextBoidPos() {

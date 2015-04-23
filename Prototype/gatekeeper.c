@@ -15,6 +15,8 @@
 #include "xil_exception.h"
 #include "xil_io.h"
 
+#include "xtmrctr.h"		// Timer
+
 #include "xuartlite_l.h"    // UART
 #include "fsl.h"        	// AXI Steam
 #include "boids.h"			// Boid definitions
@@ -23,11 +25,11 @@
 /************************** Constant Definitions *****************************/
 
 #define MASTER_IS_RESIDENT		1	// Defined when the BoidMaster is resident
-#define DEBUG					1	// Undefined to show only BoidGPU messages
+//#define DEBUG					1	// Undefined to show only BoidGPU messages
 
 #define RESIDENT_BOIDCPU_COUNT	2	// The number of resident BoidCPUs
 #define BOID_DATA_LENGTH 		3
-#define EXT_INPUT_SIZE			8
+#define EXT_INPUT_SIZE			4
 
 #ifdef MASTER_IS_RESIDENT
 #define BOIDMASTER_CHANNEL		0
@@ -52,6 +54,11 @@
 
 XIntc 		intc;		// Interrupt controller
 XEmacLite 	ether;		// Ethernet
+XTmrCtr		timer;		// Timer
+
+bool timerStarted = false;
+int simStartTime = 0;
+int simEndTime = 0;
 
 static u8 own_mac_address[XEL_MAC_ADDR_SIZE] = {0x00, 0x0A, 0x35, 0x01, 0x02, 0x03};
 
@@ -71,6 +78,10 @@ static u8 channelIDList[RESIDENT_BOIDCPU_COUNT + 1];
 u8 channelSetupCounter = 0;
 static u8 channelIDList[RESIDENT_BOIDCPU_COUNT];
 #endif
+
+u32 boidCount = 0;				// Number of simulation boids
+int drawnBoidsCount = 0;
+int timeStep = 0;
 
 // If the BoidMaster is present, then it must be on channel 0
 
@@ -119,6 +130,9 @@ void uiBoidCPUSearch();
 void sendKillCommand();
 #endif
 
+void monitorDrawnBoids(u32* data);
+void simulateBoidGPUACK();
+
 void putFSLData(u32 value, u32 channel);
 u32 getFSLData(u32 *data, u32 channel);
 
@@ -132,9 +146,14 @@ u32 decodeEthernetMessage(u8 inputZero, u8 inputOne, u8 inputTwo, u8 inputThree)
 
 int main() {
 	// Setup own ID - TODO: Ensure that this doesn't clash with the BoidIDs
-	gatekeeperID = *((volatile int *) XPAR_MCB_DDR2_S0_AXI_BASEADDR + 0x01ABCABC);
+//	gatekeeperID = *((volatile int *) XPAR_MCB_DDR2_S0_AXI_BASEADDR + 0x01ABCABC);
+	gatekeeperID = 999;
 	own_mac_address[5] = 0x03;
 	// TODO: Assign MAC address and ID randomly, or better
+
+	XTmrCtr_Initialize(&timer, XPAR_TMRCTR_0_DEVICE_ID);
+	XTmrCtr_SetResetValue(&timer, 0, 0);
+	XTmrCtr_Reset(&timer, 0);
 
 	setupEthernet();
 	registerWithSwitch();
@@ -142,11 +161,11 @@ int main() {
 	do {
 		bool simulationKilled = false;
 		do {
-#ifdef DEBUG
-			print("------------------------------------------------------\n\r");
-			print("---------FPGA Implementation of Flocking Birds--------\n\r");
-			print("------------------------------------------------------\n\r");
-#endif
+//#ifndef MASTER_IS_RESIDENT
+//			print("------------------------------------------------------\n\r");
+//			print("---------FPGA Implementation of Flocking Birds--------\n\r");
+//			print("------------------------------------------------------\n\r");
+//#endif
 
 #ifdef MASTER_IS_RESIDENT
 			// Search for BoidCPUs
@@ -180,16 +199,9 @@ int main() {
 							}
 						} while (!simulationUnpaused);
 						print("Simulation resumed\n\r");
-					} else if (key == 0x67) {
-						sendInternalMessage(0, CONTROLLER_ID, BOIDGPU_ID,
-								CMD_ACK, messageData);
-						print("----------------------------------------------"
-							"------------------------------------------------"
-							"----------------\n\r");
-						print("\n\r------------------------------------------"
-							"------------------------------------------------"
-							"--------------------\n\r");
-					}
+					} //else if (key == 0x67) {
+						//simulateBoidGPUACK();
+					//}
 				}
 #endif
 			} while (!simulationKilled);
@@ -210,7 +222,8 @@ int main() {
 void checkForInput() {
 	// Check for and process received external data ----------------------------
 	if (extInputProcessPtr != extInputArrivalPtr) {
-		xil_printf("External messages ready to be processed (p%d, a%d)\n\r", extInputProcessPtr, extInputArrivalPtr);
+//		xil_printf("External messages ready to be processed (p%d, a%d)\n\r", extInputProcessPtr, extInputArrivalPtr);
+		print("External messages ready to be processed\n\r");
 		processReceivedExternalMessage();
 	}
 
@@ -246,7 +259,49 @@ void checkForInput() {
 //- Message Reception Functions ----------------------------------------------//
 //============================================================================//
 
+void monitorDrawnBoids(u32* data) {
+	if (data[CMD_TYPE] == CMD_DRAW_INFO) {
+		drawnBoidsCount +=  (data[CMD_LEN] - CMD_HEADER_LEN - 1) / BOID_DATA_LENGTH;
+//		xil_printf("%d of %d boids drawn\n\r", drawnBoidsCount, boidCount);
+
+		if (drawnBoidsCount == boidCount) {
+				drawnBoidsCount = 0;
+				simulateBoidGPUACK();
+		}
+	}
+}
+
+void simulateBoidGPUACK() {
+	XTmrCtr_Stop(&timer, 0);
+	xil_printf("%d: Simulation time: %d\n\r", timeStep, simEndTime - simStartTime);
+	XTmrCtr_Reset(&timer, 0);
+	timerStarted = false;
+	timeStep++;
+
+	sendInternalMessage(0, CONTROLLER_ID, BOIDGPU_ID,
+			CMD_ACK, messageData);
+//#ifdef DEBUG
+	print("----------------------------------------------"
+		"------------------------------------------------"
+		"----------------\n\r");
+	print("\n\r------------------------------------------"
+		"------------------------------------------------"
+		"--------------------\n\r");
+//#endif
+}
+
 void processReceivedInternalMessage(u32 *inputData) {
+
+	if (!timerStarted && (inputData[CMD_TYPE] == MODE_CALC_NBRS)) {
+		XTmrCtr_Start(&timer, 0);
+		simStartTime = XTmrCtr_GetValue(&timer, 0);
+		timerStarted = true;
+	} else if (inputData[CMD_TYPE] == CMD_DRAW_INFO) {
+		simEndTime = XTmrCtr_GetValue(&timer, 0);
+	}
+
+	monitorDrawnBoids(inputData);
+
 	fowardMessage = true;
 #ifdef DEBUG
 	print("INTERNAL: ");
@@ -276,6 +331,8 @@ void processReceivedInternalMessage(u32 *inputData) {
 					RESIDENT_BOIDCPU_COUNT);
 		}
 #endif
+	} else if (inputData[CMD_TO] == BOIDGPU_ID) {
+		fowardMessage = false;
 	}
 
 	// Forward the message, if needed
@@ -304,19 +361,34 @@ void processReceivedExternalMessage() {
 				rawExternalInput[extInputProcessPtr][j + 3]);
 	}
 
-//	XEmacLite_FlushReceive(&ether); // Clear any received messages
+	XEmacLite_FlushReceive(&ether); // Clear any received messages
 
-	// Then process the remaining information
-#ifdef DEBUG
-	print("EXTERNAL: ");
-	printMessage(false, externalInput);
-#endif
-	decodeAndPrintBoids(externalInput);
+	if (externalInput[CMD_TYPE] == CMD_DRAW_INFO) {
+		simEndTime = XTmrCtr_GetValue(&timer, 0);
+	}
+
+	monitorDrawnBoids(externalInput);
 
 	if (!boidCPUsSetup) {
 		print("BoidCPUs not setup\n\r");
+
+		// Then process the remaining information
+#ifdef DEBUG
+		print("EXTERNAL: ");
+		printMessage(false, externalInput);
+#endif
+		decodeAndPrintBoids(externalInput);
+
 		interceptMessage(externalInput);
 	} else if (externalMessageRelevant()) {
+
+		// Then process the remaining information
+#ifdef DEBUG
+		print("EXTERNAL: ");
+		printMessage(false, externalInput);
+#endif
+		decodeAndPrintBoids(externalInput);
+
 		// Forward the message
 		u32 dataBodyLength = externalInput[CMD_LEN] - CMD_HEADER_LEN;
 		u32 dataBody[dataBodyLength];
@@ -494,7 +566,14 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		}
 	}
 
+//	const int minEthernetMsgSize = 64;
+//	int paddedBytes = minEthernetMsgSize - (((len + CMD_HEADER_LEN) * 4) + XEL_HEADER_SIZE);
+//	for (i = 0; i < paddedBytes; i++) {
+//		externalOutput[index + i] = 0;
+//	}
+
 	// Then create the data to send, create the message
+#ifdef DEBUG
 	u32 command[MAX_CMD_LEN];
 
 	command[CMD_LEN] = len + CMD_HEADER_LEN;
@@ -508,7 +587,6 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 		}
 	}
 
-#ifdef DEBUG
 	print("EXTERNAL: ");
 	printMessage(true, command);
 #endif
@@ -517,11 +595,13 @@ void sendExternalMessage(u32 len, u32 to, u32 from, u32 type, u32 *data) {
 //	XEmacLite_FlushReceive(&ether);
 	int status = XEmacLite_Send(&ether, externalOutput, XEL_HEADER_SIZE + ((len + CMD_HEADER_LEN) * 4));
 
+#ifdef DEBUG
 	if(status == 1) {
-		print("Message failed to send\n\r");
+		print("**** Failed to send external message\n\r");
 	} else {
-		print("Message sent successfully \n\r");
+		print("External message sent successfully \n\r");
 	}
+#endif
 }
 
 //============================================================================//
@@ -543,6 +623,8 @@ bool externalMessageRelevant() {
 		result = true;
 	} else if (externalInput[CMD_TO] == CMD_BROADCAST) {
 		result = true;
+	} else if (externalInput[CMD_TO] == BOIDGPU_ID) {
+		result = false;
 	}
 
 #ifdef MASTER_IS_RESIDENT
@@ -776,7 +858,6 @@ void sendKillCommand() {
  */
 void takeUserInput() {
 	bool boidCountValid = false;	// True if count is valid
-	u32 boidCount = 0;				// Number of simulation boids
 	u8 index = 0;           		// Index for keyPresses
 	char keyPress;          		// The key pressed
 	char keyPresses[] = ""; 		// An array of the keys pressed
@@ -1057,7 +1138,7 @@ void printMessage(bool send, u32 *data) {
 		}
 	} else {
 
-		xil_printf(" (p%d, a%d) ", extInputProcessPtr, extInputArrivalPtr);
+//		xil_printf(" (p%d, a%d, %d) ", extInputProcessPtr, extInputArrivalPtr, data[CMD_HEADER_LEN]);
 
 		if (data[CMD_FROM] == CONTROLLER_ID) {
 			print("-----------------------------------------------------------"
@@ -1171,7 +1252,7 @@ void decodeAndPrintBoids(u32 *data) {
 #else
 	if ((data[CMD_TYPE] == CMD_DRAW_INFO) || (data[CMD_TYPE] == CMD_NBR_REPLY)) {
 #endif
-		xil_printf("BoidCPU #%d - ", data[CMD_FROM]);
+		xil_printf("BoidCPU #%d -", data[CMD_FROM]);
 		int count = (data[CMD_LEN] - CMD_HEADER_LEN - 1) / BOID_DATA_LENGTH;
 
 		int i = 0;
@@ -1182,6 +1263,9 @@ void decodeAndPrintBoids(u32 *data) {
 
 			int16_t xPos = ((int32_t)((int32_t)position >> 16)) >> 4;
 			int16_t yPos = ((int32_t)((int16_t)position)) >> 4;
+
+//			int4_t xPos = ((int32_t)((int32_t)position >> 16)) >> 4;
+//			int4_t yPosF = (int4_t)position;
 
 			int16_t xVel = ((int32_t)((int32_t)velocity >> 16)) >> 4;
 			int16_t yVel = ((int32_t)((int16_t)velocity)) >> 4;
@@ -1285,18 +1369,25 @@ static void EmacLiteRecvHandler(void *CallBackRef) {
 	XEmacInstancePtr = (XEmacLite *)CallBackRef;
 
 	// Handle the Receive callback.
-	XEmacLite_Recv(XEmacInstancePtr, (u8 *)rawExternalInput[extInputArrivalPtr]);
+	u8 extInputArrivalPtrOld = extInputArrivalPtr;
+	extInputArrivalPtr = (extInputArrivalPtr + 1) % EXT_INPUT_SIZE;
+	XEmacLite_Recv(XEmacInstancePtr, (u8 *)rawExternalInput[extInputArrivalPtrOld]);
 
-	if ((rawExternalInput[extInputArrivalPtr][12] == 0x55) &&
-			(rawExternalInput[extInputArrivalPtr][13] == 0xAA)) {
-		xil_printf("++ Receive Interrupt Triggered: Relevant - placed in buffer slot a%d (p%d)\n\r", extInputArrivalPtr, extInputProcessPtr);
-
-		extInputArrivalPtr = (extInputArrivalPtr + 1) % EXT_INPUT_SIZE;
+	if ((rawExternalInput[extInputArrivalPtrOld][12] == 0x55) &&
+			(rawExternalInput[extInputArrivalPtrOld][13] == 0xAA)) {
+#ifdef DEBUG
+		xil_printf("++ Receive Interrupt Triggered: Relevant (a%d, p%d) ++\n\r", extInputArrivalPtr, extInputProcessPtr);
+#endif
+	} else {
+		extInputArrivalPtr--;
+		XEmacLite_FlushReceive(&ether); // Clear any received messages
 	}
 }
 
 static void EmacLiteSendHandler(void *CallBackRef) {
-	print("++ Transmit Interrupt Triggered \n\r");
+#ifdef DEBUG
+	print("++ Transmit Interrupt Triggered ++\n\r");
+#endif
 
 	XEmacLite *XEmacInstancePtr;
 

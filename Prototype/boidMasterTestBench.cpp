@@ -13,6 +13,8 @@ uint32 tbTo;
 uint32 tbFrom;
 uint32 tbDataLength = 0;
 
+uint32 masterGatekeeerID = -971895691;
+
 uint32 tbGatekeeperCount;
 uint32 tbGatekeeperIDs[8];
 
@@ -138,7 +140,7 @@ void simulatePingStart() {
 	std::cout << "Simulating ping start..." << std::endl;
 	tbDataLength = 0;
 	tbTo = CONTROLLER_ID;
-	tbFrom = 1481765933;
+	tbFrom = masterGatekeeerID;
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_START, tbData);
 }
 
@@ -148,7 +150,7 @@ void simulateUserInfo() {
 	tbData[0] = 20;			// Number of boids
 	tbDataLength = 1;
 	tbTo = CONTROLLER_ID;
-	tbFrom = 1481765933;
+	tbFrom = masterGatekeeerID;
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_USER_INFO, tbData);
 }
 
@@ -157,7 +159,7 @@ void simulateUserInfo() {
 void simulatePingReplies() {
 	std::cout << "Simulating ping replies..." << std::endl;
 	tbGatekeeperCount = 3;
-	tbGatekeeperIDs[0] = 1481765933;
+	tbGatekeeperIDs[0] = masterGatekeeerID;
 	tbGatekeeperIDs[1] = 66;
 	tbGatekeeperIDs[2] = 432;
 
@@ -186,7 +188,7 @@ void issueEndOfPing() {
 	std::cout << "Simulating end of ping..." << std::endl;
 	tbDataLength = 0;
 	tbTo = CONTROLLER_ID;
-	tbFrom = 1481765933;
+	tbFrom = masterGatekeeerID;
 	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_PING_END, tbData);
 }
 
@@ -252,15 +254,15 @@ void simulatePositionBoidsAck() {
 
 void simulateOverloadedBoidCPU() {
 	for (int i = 0; i < tbGatekeeperCount; i++) {
-		if (tbGatekeeperIDs[i] != 66) {
-			std::cout << "Simulating load balance ACK..." << std::endl;
-			simulateAck(tbGatekeeperIDs[i], MODE_LOAD_BAL);
-		} else {
+//		if (tbGatekeeperIDs[i] != 66) {
+//			std::cout << "Simulating load balance ACK..." << std::endl;
+//			simulateAck(tbGatekeeperIDs[i], MODE_LOAD_BAL);
+//		} else {
 			std::cout << "Simulating load balance request..." << std::endl;
 			tbTo = CONTROLLER_ID;
 			tbFrom = 3;
 			tbCreateCommand(0, tbTo, tbFrom, CMD_LOAD_BAL_REQUEST, tbData);
-		}
+//		}
 	}
 }
 

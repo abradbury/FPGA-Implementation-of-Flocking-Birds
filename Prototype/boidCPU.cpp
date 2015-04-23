@@ -1,13 +1,18 @@
 #include "boidCPU.h"
 
 //#define USING_TB	true
+//#define LAD_BAL		true
 
 // Function headers ============================================================
 // Key function headers --------------------------------------------------------
 static void simulationSetup(void);
 static void calcNextBoidPositions(void);
+
+#ifdef LOAD_BAL
 static void evaluateLoad(void);
 static void loadBalance(void);
+#endif
+
 static void calculateEscapedBoids(void);
 static void updateDisplay(void);
 
@@ -26,6 +31,7 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data);
 bool fromNeighbour();
 
 void commitAcceptedBoids();
+void sendAck(uint8 type);
 
 bool isBoidBeyond(Boid boid, uint8 edge);
 bool isBoidBeyondSingle(Boid boid, uint8 edge);
@@ -65,6 +71,7 @@ Boid boids[MAX_BOIDS];     // TODO: Perhaps re-implement as a LL due to deletion
 
 // TODO: Try with and without pointers (for synthesising)
 Boid *boidNeighbourList[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
+//bool boidsWithinSepDist[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
 
 // A list of possible neighbouring boids for the BoidCPU
 Boid possibleBoidNeighbours[MAX_NEIGHBOURING_BOIDS];
@@ -81,90 +88,92 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS RESOURCE variable = output core = AXI4Stream
 #pragma HLS INTERFACE ap_ctrl_none port = return
 
-    // Continually check for input and deal with it. Note that reading an empty
-    // input stream will generate warnings in HLS, but should be blocking in the
-    // actual implementation.
+	// Continually check for input and deal with it. Note that reading an empty
+	// input stream will generate warnings in HLS, but should be blocking in the
+	// actual implementation.
 
 #ifdef USING_TB
-    inputData[CMD_LEN] = input.read();
+	inputData[CMD_LEN] = input.read();
 #endif
 
-    mainWhileLoop: while (continueOperation) {
-        // INPUT ---------------------------------------------------------------
-        // Block until there is input available
+	mainWhileLoop: while (continueOperation) {
+		// INPUT ---------------------------------------------------------------
+		// Block until there is input available
 #ifndef USING_TB
-         inputData[CMD_LEN] = input.read();
+		inputData[CMD_LEN] = input.read();
 #endif
 
-        // When there is input, read in the command
-        inputLoop: for (int i = 1; i < inputData[CMD_LEN]; i++) {
-            inputData[i] = input.read();
-        }
-        printCommand(false, inputData);
-        // ---------------------------------------------------------------------
+		// When there is input, read in the command
+		inputLoop: for (int i = 1; i < inputData[CMD_LEN]; i++) {
+			inputData[i] = input.read();
+		}
+		printCommand(false, inputData);
+		// ---------------------------------------------------------------------
 
-        // STATE CHANGE --------------------------------------------------------
-        if ((inputData[CMD_FROM] != boidCPUID) &&
-        		((inputData[CMD_TO] == boidCPUID) ||
-        				(inputData[CMD_TO] == CMD_BROADCAST) ||
-        				fromNeighbour())) {
+		// STATE CHANGE --------------------------------------------------------
+		if ((inputData[CMD_FROM] != boidCPUID) &&
+				((inputData[CMD_TO] == boidCPUID) ||
+						(inputData[CMD_TO] == CMD_BROADCAST) ||
+						fromNeighbour())) {
 
-            switch (inputData[CMD_TYPE]) {
-                case CMD_SIM_SETUP:
-                    simulationSetup();
-                    break;
-                case MODE_CALC_NBRS:
-                    sendBoidsToNeighbours();
-                    break;
-                case CMD_NBR_REPLY:
-                    processNeighbouringBoids();
-                    break;
-                case MODE_POS_BOIDS:
-                    calcNextBoidPositions();
-                    break;
-                case MODE_LOAD_BAL:
-                    evaluateLoad();
-                    break;
-                case CMD_LOAD_BAL:
-                	loadBalance();
-                	break;
-                case MODE_TRAN_BOIDS:
-                    calculateEscapedBoids();
-                    break;
-                case CMD_BOID:
-                	acceptBoid();
-                	break;
-                case MODE_DRAW:
-                    updateDisplay();
-                    break;
-                default:
-                    std::cout << "Command state " << inputData[CMD_TYPE] <<
-                        " not recognised" << std::endl;
-                    break;
-            }
-        } else {
-        	std::cout << "The above message was ignored" << std::endl;
-        }
-        // ---------------------------------------------------------------------
+			switch (inputData[CMD_TYPE]) {
+			case CMD_SIM_SETUP:
+				simulationSetup();
+				break;
+			case MODE_CALC_NBRS:
+				sendBoidsToNeighbours();
+				break;
+			case CMD_NBR_REPLY:
+				processNeighbouringBoids();
+				break;
+			case MODE_POS_BOIDS:
+				calcNextBoidPositions();
+				break;
+#ifdef LOAD_BAL
+			case MODE_LOAD_BAL:
+				evaluateLoad();
+				break;
+			case CMD_LOAD_BAL:
+				loadBalance();
+				break;
+#endif
+			case MODE_TRAN_BOIDS:
+				calculateEscapedBoids();
+				break;
+			case CMD_BOID:
+				acceptBoid();
+				break;
+			case MODE_DRAW:
+				updateDisplay();
+				break;
+			default:
+				std::cout << "Command state " << inputData[CMD_TYPE] <<
+				" not recognised" << std::endl;
+				break;
+			}
+		} else {
+			std::cout << "The above message was ignored" << std::endl;
+		}
+		// ---------------------------------------------------------------------
 
-        // OUTPUT --------------------------------------------------------------
-        // If there is output to send, send it
-        if (outputCount > 0) {
-            outerOutLoop: for (int j = 0; j < outputCount; j++) {
-                innerOutLoop: for (int i = 0; i < outputData[j][CMD_LEN]; i++) {
-                    output.write(outputData[j][i]);
-                }
-                printCommand(true, outputData[j]);
-            }
-        }
-        outputCount = 0;
-        // ---------------------------------------------------------------------
+		// OUTPUT --------------------------------------------------------------
+		// If there is output to send, send it
+		if (outputCount > 0) {
+			outerOutLoop: for (int j = 0; j < outputCount; j++) {
+				innerOutLoop: for (int i = 0; i < outputData[j][CMD_LEN]; i++) {
+					output.write(outputData[j][i]);
+				}
+				printCommand(true, outputData[j]);
+			}
+		}
+		outputCount = 0;
+		// ---------------------------------------------------------------------
 
 #ifdef USING_TB
-        continueOperation = input.read_nb(inputData[0]);
+		continueOperation = input.read_nb(inputData[0]);
 #endif
-    }
-    std::cout << "=============BoidCPU has finished==============" << std::endl;
+	}
+	std::cout << "=============BoidCPU has finished==============" << std::endl;
 }
 
 //==============================================================================
@@ -178,93 +187,78 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
  * Creates own boids
  */
 void simulationSetup() {
-    std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
+	std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
 
-    // Set BoidCPU parameters (supplied by the controller)
-    int8 oldBoidCPUID = boidCPUID;
-    boidCPUID = inputData[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
-    boidCount = inputData[CMD_HEADER_LEN + CMD_SETUP_BDCNT_IDX];
+	// Set BoidCPU parameters (supplied by the controller)
+	int8 oldBoidCPUID = boidCPUID;
+	boidCPUID = inputData[CMD_HEADER_LEN + CMD_SETUP_NEWID_IDX];
+	boidCount = inputData[CMD_HEADER_LEN + CMD_SETUP_BDCNT_IDX];
 
-    edgeSetupLoop: for (int i = 0; i < EDGE_COUNT; i++) {
-        boidCPUCoords[i] = inputData[CMD_HEADER_LEN + CMD_SETUP_COORD_IDX + i];
-    }
+	edgeSetupLoop: for (int i = 0; i < EDGE_COUNT; i++) {
+		boidCPUCoords[i] = inputData[CMD_HEADER_LEN + CMD_SETUP_COORD_IDX + i];
+	}
 
-    // Get the number of distinct neighbours
-    distinctNeighbourCount = inputData[CMD_HEADER_LEN + CMD_SETUP_NBCNT_IDX];
+	// Get the number of distinct neighbours
+	distinctNeighbourCount = inputData[CMD_HEADER_LEN + CMD_SETUP_NBCNT_IDX];
 
-    // Get the list of neighbours on each edge
-    neighbourSetupLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-        neighbouringBoidCPUs[i] =
-            inputData[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
-    }
-    neighbouringBoidCPUsSetup = true;
+	// Get the list of neighbours on each edge
+	neighbourSetupLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		neighbouringBoidCPUs[i] =
+				inputData[CMD_HEADER_LEN + CMD_SETUP_BNBRS_IDX + i];
+	}
+	neighbouringBoidCPUsSetup = true;
 
-    // Get the simulation width and height
-    simulationWidth  = inputData[CMD_HEADER_LEN + CMD_SETUP_SIMWH_IDX];
-    simulationHeight = inputData[CMD_HEADER_LEN + CMD_SETUP_SIMWH_IDX + 1];
+	// Get the simulation width and height
+	simulationWidth  = inputData[CMD_HEADER_LEN + CMD_SETUP_SIMWH_IDX];
+	simulationHeight = inputData[CMD_HEADER_LEN + CMD_SETUP_SIMWH_IDX + 1];
 
-    // Print out BoidCPU parameters
-    std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" <<
-        boidCPUID << std::endl;
-    std::cout << "BoidCPU #" << boidCPUID << " initial boid count: " <<
-        boidCount << std::endl;
-    std::cout << "BoidCPU #" << boidCPUID << " has " << distinctNeighbourCount
-    	<< " distinct neighbouring BoidCPUs" << std::endl;
+	// Print out BoidCPU parameters
+	std::cout << "BoidCPU #" << oldBoidCPUID << " now has ID #" <<
+			boidCPUID << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " initial boid count: " <<
+			boidCount << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " has " << distinctNeighbourCount
+			<< " distinct neighbouring BoidCPUs" << std::endl;
 
-    std::cout << "BoidCPU #" << boidCPUID << " coordinates: [";
-    printEdgeLoop: for (int i = 0; i < EDGE_COUNT; i++) {
-        std::cout << boidCPUCoords[i] << ", ";
-    } std::cout << "]" << std::endl;
-    std::cout << "BoidCPU #" << boidCPUID << " neighbours: [";
-    printNeighbourLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
-        std::cout << neighbouringBoidCPUs[i] << ", ";
-    } std::cout << "]" << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " coordinates: [";
+	printEdgeLoop: for (int i = 0; i < EDGE_COUNT; i++) {
+		std::cout << boidCPUCoords[i] << ", ";
+	} std::cout << "]" << std::endl;
+	std::cout << "BoidCPU #" << boidCPUID << " neighbours: [";
+	printNeighbourLoop: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		std::cout << neighbouringBoidCPUs[i] << ", ";
+	} std::cout << "]" << std::endl;
 
-    std::cout << "The simulation is of width " << simulationWidth <<
-    	" and of height " << simulationHeight << std::endl;
+	std::cout << "The simulation is of width " << simulationWidth <<
+			" and of height " << simulationHeight << std::endl;
 
-    // Create the boids (actual implementation)
-//  uint16 boidID;
-//  boidCreationLoop: for(int i = 0; i < boidCount; i++) {
-//      Vector velocity = Vector(getRandom(-MAX_VELOCITY, MAX_VELOCITY),
-//          getRandom(-MAX_VELOCITY, MAX_VELOCITY));
-//      Vector position = Vector(getRandom(boidCPUCoords[X_MIN],
-//          boidCPUCoords[X_MAX]), getRandom(boidCPUCoords[Y_MIN],
-//          boidCPUCoords[Y_MAX]));
-//
-//      boidID = ((boidCPUID - 1) * boidCount) + i + 1;
-//
-//      Boid boid = Boid(boidID, position, velocity, i);
-//      boids[i] = boid;
-//  }
+	// Create the boids (actual implementation)
+	uint16 boidID;
+	int12 widthStep  = (boidCPUCoords[2] - boidCPUCoords[0]) / boidCount;
+	int12 heightStep = (boidCPUCoords[3] - boidCPUCoords[1]) / boidCount;
 
-    // Create the boids (testing implementation)
-//    uint8 testBoidCount = boidCount;
-    Vector knownSetup[10][2] = {{Vector(12, 11), Vector(5, 0)},
-            {Vector(19.3, 35), Vector(-5, 1.76)},
-            {Vector(12, 31), Vector(-4, -2)},
-            {Vector(35, 22), Vector(0, -3)},
-            {Vector(4, 9), Vector(-1, 0)},
-            {Vector(19, 18), Vector(2, -3)},
-            {Vector(38, 19), Vector(4, -4)},
-            {Vector(18, 5), Vector(-1, 2)},
-            {Vector(15, 33), Vector(2, -2)},
-            {Vector(3, 8), Vector(-2, 0)}};
+	// This could be used to add some variance to the velocities of the boids
+	// but it can't be used because everything breaks
+//	int16_fp velStep = (MAX_VELOCITY + MAX_VELOCITY) / boidCount;
 
-    uint16 baseBoidID = 0;
-    setupMultLoop: for (int i = 0; i < (boidCPUID - 1); i++) {
-    	baseBoidID += boidCount;
-    }
+	boidCreationLoop: for (int i = 0; i < boidCount; i++) {
+		Vector velocity = Vector(MAX_VELOCITY, MAX_VELOCITY);
 
-    testBoidCreationLoop: for (int i = 0; i < boidCount; i++) {
-        uint16 boidID = baseBoidID + i + 1;
-        Boid boid = Boid(boidID, knownSetup[i][0], knownSetup[i][1]);
-        boids[i] = boid;
-    }
+		// This would introduce some variance into the positions of the boids
+		// but can't be used because everything breaks
+//		int16_fp xPos = (widthStep * i) + boidCPUCoords[0] + 1;
+//		if (int4((xPos/boidCPUID)<<4) < 0) xPos += boidCPUID;
 
-    // Send ACK signal
-    outputBody[0] = CMD_SIM_SETUP;
-    generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
+		Vector position = Vector((widthStep * i) + boidCPUCoords[0] + 1,
+				(heightStep * i) + boidCPUCoords[1] + 1);
+		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
+
+		Boid boid = Boid(boidID, position, velocity);
+		boids[i] = boid;
+	}
+
+	// Send ACK signal
+	sendAck(CMD_SIM_SETUP);
 }
 
 /**
@@ -273,7 +267,7 @@ void simulationSetup() {
  * multiple messages if it exceeds the maximum command data size.
  */
 void sendBoidsToNeighbours() {
-    std::cout << "-Sending boids to neighbouring BoidCPUs..." << std::endl;
+	std::cout << "-Sending boids to neighbouring BoidCPUs..." << std::endl;
 
 	packBoidsForSending(CMD_MULTICAST, CMD_NBR_REPLY);
 }
@@ -292,40 +286,39 @@ void processNeighbouringBoids() {
 		}
 	}
 
-    // Calculate the number of boids per message TODO: Remove division
+	// Calculate the number of boids per message TODO: Remove division
 	uint8 boidsPerMsg = (inputData[CMD_LEN] - CMD_HEADER_LEN - 1) /
 			BOID_DATA_LENGTH;
 
-    std::cout << "-BoidCPU #" << boidCPUID << " received " << boidsPerMsg <<
-        " boids from BoidCPU #" << inputData[CMD_FROM] << std::endl;
+	std::cout << "-BoidCPU #" << boidCPUID << " received " << boidsPerMsg <<
+			" boids from BoidCPU #" << inputData[CMD_FROM] << std::endl;
 
-    // Parse each received boid and add to possible neighbour list
-    rxNbrBoidLoop: for (int i = 0; i < boidsPerMsg; i++) {
-        possibleBoidNeighbours[possibleNeighbourCount] = parsePackedBoid(i);
+	// Parse each received boid and add to possible neighbour list
+	rxNbrBoidLoop: for (int i = 0; i < boidsPerMsg; i++) {
+		possibleBoidNeighbours[possibleNeighbourCount] = parsePackedBoid(i);
 
-        // Don't go beyond the edge of the array
-        if (possibleNeighbourCount != (MAX_NEIGHBOURING_BOIDS - 1)) {
-        	possibleNeighbourCount++;
-    	}
-    }
+		// Don't go beyond the edge of the array
+		if (possibleNeighbourCount != MAX_NEIGHBOURING_BOIDS) {
+			possibleNeighbourCount++;
+		}// else {
+		//	break;
+		//}
+	}
 
-    // If no further messages are expected, then process it
-    if (inputData[CMD_HEADER_LEN + 0] == 0) {
-    	distinctNeighbourCounter++;
+	// If no further messages are expected, then process it
+	if (inputData[CMD_HEADER_LEN + 0] == 0) {
+		distinctNeighbourCounter++;
 
-    	if (distinctNeighbourCounter == distinctNeighbourCount) {
+		if (distinctNeighbourCounter == distinctNeighbourCount) {
 			calculateBoidNeighbours();
 
 			// Send ACK signal
-			outputBody[0] = MODE_CALC_NBRS;
-			outputBody[1] = distinctNeighbourCounter;
-			outputBody[2] = distinctNeighbourCount;
-			generateOutput(3, CONTROLLER_ID, CMD_ACK, outputBody);
+			sendAck(MODE_CALC_NBRS);
 		}
-    } else {
-    	std::cout << "Expecting " << inputData[CMD_HEADER_LEN + 0] << \
-    			" further message(s) from " << inputData[CMD_FROM] << std::endl;
-    }
+	} else {
+		std::cout << "Expecting " << inputData[CMD_HEADER_LEN + 0] << \
+				" further message(s) from " << inputData[CMD_FROM] << std::endl;
+	}
 }
 
 /**
@@ -339,12 +332,21 @@ void calculateBoidNeighbours() {
 		uint8 boidNeighbourCount = 0;
 		inCalcBoidNbrsLoop: for (int j = 0; j < possibleNeighbourCount; j++) {
 			if (possibleBoidNeighbours[j].id != boids[i].id) {
-				int16_fp boidSeparation = Vector::squaredDistanceBetween(
-					boids[i].position, possibleBoidNeighbours[j].position);
+				int32_fp boidSeparation = Vector::squaredDistanceBetween(
+						boids[i].position, possibleBoidNeighbours[j].position);
+
+
 
 				if (boidSeparation < VISION_RADIUS_SQUARED) {
 					boidNeighbourList[i][boidNeighbourCount] =
-						&possibleBoidNeighbours[j];
+							&possibleBoidNeighbours[j];
+
+					//					if (boidSeparation < SEP_RAIDUS_SQUARED) {
+					//						boidsWithinSepDist[i][boidNeighbourCount] = true;
+					//					} else {
+					//						boidsWithinSepDist[i][boidNeighbourCount] = false;
+					//					}
+					//
 					boidNeighbourCount++;
 				}
 			}
@@ -359,41 +361,40 @@ void calculateBoidNeighbours() {
 }
 
 void calcNextBoidPositions() {
-    std::cout << "-Calculating next boid positions..." << std::endl;
+	std::cout << "-Calculating next boid positions..." << std::endl;
 
-    updateBoidsLoop: for (int i = 0; i < boidCount; i++) {
-        boids[i].update();
+	updateBoidsLoop: for (int i = 0; i < boidCount; i++) {
+		boids[i].update();
 
-        // Contain boid pixel position values to within the simulation area
-        if (boids[i].position.x > simulationWidth) {
-        	boids[i].position.x = 0;
-        } else if (boids[i].position.x < 0) {
-        	boids[i].position.x = simulationWidth;
-        }
+		// Contain boid pixel position values to within the simulation area
+		if (boids[i].position.x > simulationWidth) {
+			boids[i].position.x = 0;
+		} else if (boids[i].position.x < 0) {
+			boids[i].position.x = simulationWidth;
+		}
 
-        if (boids[i].position.y > simulationHeight) {
-        	boids[i].position.y = 0;
-        } else if (boids[i].position.y < 0) {
-        	boids[i].position.y = simulationHeight;
-        }
-    }
+		if (boids[i].position.y > simulationHeight) {
+			boids[i].position.y = 0;
+		} else if (boids[i].position.y < 0) {
+			boids[i].position.y = simulationHeight;
+		}
+	}
 
-    // Send ACK signal
-    outputBody[0] = MODE_POS_BOIDS;
-	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
+	// Send ACK signal
+	sendAck(MODE_POS_BOIDS);
 }
 
+#ifdef LOAD_BAL
 // If overloaded, signal the controller
 void evaluateLoad() {
-    if (boidCount > BOID_THRESHOLD) {
-    	std::cout << "-Load balancing..." << std::endl;
+	if (boidCount > BOID_THRESHOLD) {
+		std::cout << "-Load balancing..." << std::endl;
 
-    	generateOutput(0, CONTROLLER_ID, CMD_LOAD_BAL_REQUEST, outputBody);
-    } else {
-    	std::cout << "-No need to load balance" << std::endl;
-    	outputBody[0] = MODE_LOAD_BAL;
-		generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
-    }
+		generateOutput(0, CONTROLLER_ID, CMD_LOAD_BAL_REQUEST, outputBody);
+	} else {
+		std::cout << "-No need to load balance" << std::endl;
+		sendAck(MODE_LOAD_BAL);
+	}
 }
 
 void loadBalance() {
@@ -436,6 +437,7 @@ void loadBalance() {
 		generateOutput(1, CONTROLLER_ID, CMD_BOUNDS_AT_MIN, outputBody);
 	}
 }
+#endif
 
 void updateDisplay() {
 	if (queuedBoidsCounter > 0) {
@@ -454,9 +456,9 @@ void updateDisplay() {
 //==============================================================================
 
 void calculateEscapedBoids() {
-    std::cout << "-Transferring boids..." << std::endl;
+	std::cout << "-Transferring boids..." << std::endl;
 
-    uint16 boidIDs[MAX_BOIDS];
+	uint16 boidIDs[MAX_BOIDS];
 	uint8 recipientIDs[MAX_BOIDS];
 	uint8 counter = 0;
 
@@ -477,9 +479,7 @@ void calculateEscapedBoids() {
 	if (counter > 0) {
 		transmitBoids(boidIDs, recipientIDs, counter);
 	} else {
-		// Send ACK signal
-		outputBody[0] = MODE_TRAN_BOIDS;
-		generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
+		sendAck(MODE_TRAN_BOIDS);
 	}
 }
 
@@ -587,7 +587,7 @@ void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 				generateOutput(5, recipientIDs[i], CMD_BOID, outputBody);
 
 				std::cout << "-Transferring boid #" << boids[j].id <<
-					" to boidCPU #" << recipientIDs[i] << std::endl;
+						" to boidCPU #" << recipientIDs[i] << std::endl;
 
 				break;
 			}
@@ -612,54 +612,58 @@ void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 	}
 
 	// Send ACK signal
-	outputBody[0] = MODE_TRAN_BOIDS;
-	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
+	sendAck(MODE_TRAN_BOIDS);
 }
 
 void acceptBoid() {
 	// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
-	for (int i = 0; i < 5; i++) {
-		queuedBoids[queuedBoidsCounter][i] = inputData[CMD_HEADER_LEN + i];
-	}
+	if (queuedBoidsCounter < (MAX_QUEUED_BOIDS - 1)) {
+		queueBoidsLoop: for (int i = 0; i < 5; i++) {
+			queuedBoids[queuedBoidsCounter][i] = inputData[CMD_HEADER_LEN + i];
+		}
 
-	queuedBoidsCounter++;
+		queuedBoidsCounter++;
+	}
 }
 
 void commitAcceptedBoids() {
 	std::cout << "-Committing accepted boids..." << std::endl;
 
-	for (int i = 0; i < queuedBoidsCounter; i++) {
-		// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
-		uint16 boidID = queuedBoids[i][0];
-		Vector boidPosition = Vector(queuedBoids[i][1], queuedBoids[i][2]);
-		Vector boidVelocity = Vector(queuedBoids[i][3], queuedBoids[i][4]);
-		Boid boid = Boid(boidID, boidPosition, boidVelocity);
+	commitQueuedBoidLoop: for (int i = 0; i < queuedBoidsCounter; i++) {
+		if (boidCount < (MAX_BOIDS - 1)) {
+			// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
+			uint16 boidID = queuedBoids[i][0];
+			Vector boidPosition = Vector(queuedBoids[i][1], queuedBoids[i][2]);
+			Vector boidVelocity = Vector(queuedBoids[i][3], queuedBoids[i][4]);
+			Boid boid = Boid(boidID, boidPosition, boidVelocity);
 
-		boids[boidCount] = boid;
-		boidCount++;
+			boids[boidCount] = boid;
+			boidCount++;
 
-		std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID
-			<< " from boidCPU #" << inputData[CMD_FROM] << std::endl;
+			std::cout << "-BoidCPU #" << boidCPUID << " accepted boid #" << boidID
+					<< " from boidCPU #" << inputData[CMD_FROM] << std::endl;
+		}
 	}
 
 	queuedBoidsCounter = 0;
 }
 
 //============================================================================//
-//- Load Balancing Functions -------------------------------------------------//
-//============================================================================//
-
-//============================================================================//
 //- Supporting functions -----------------------------------------------------//
 //============================================================================//
 
 void printStateOfBoidCPUBoids() {
-    boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {
-        std::cout << "Boid " << boids[i].id << " has position [" <<
-            boids[i].position.x << ", " << boids[i].position.y <<
-            "] and velocity [" << boids[i].velocity.x << ", " <<
-            boids[i].velocity.y << "]" << std::endl;
-    }
+	boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {
+		std::cout << "Boid " << boids[i].id << " has position [" <<
+				boids[i].position.x << ", " << boids[i].position.y <<
+				"] and velocity [" << boids[i].velocity.x << ", " <<
+				boids[i].velocity.y << "]" << std::endl;
+	}
+}
+
+void sendAck(uint8 type) {
+	outputBody[0] = type;
+	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
 Boid parsePackedBoid(uint8 offset) {
@@ -703,7 +707,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 		uint8 endBoidIndex   = startBoidIndex + boidsPerMsg;
 
 		// Next, send a message for each group of boids
-		nbrMsgSendLoop: for (int i = 0; i < msgCount; i++) {
+		nbrMsgSendLoop: for (uint16 i = 0; i < msgCount; i++) {
 			// Limit the end index if the message won't be full
 			if (endBoidIndex > boidCount) {
 				endBoidIndex = boidCount;
@@ -714,7 +718,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 
 			// The next step is to create the message data
 			uint8 index = 1;
-			NMClp: for (int j = startBoidIndex, k = 0; j < endBoidIndex; j++, k++) {
+			NMClp: for (uint8 j = startBoidIndex; j < endBoidIndex; j++) {
 				uint32 position = 0;
 				uint32 velocity = 0;
 
@@ -777,7 +781,7 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
 	if (outputCount > MAX_OUTPUT_CMDS - 1) {
 		std::cout << "Cannot send message, output buffer is full (" <<
-			outputCount << "/" << MAX_OUTPUT_CMDS << ")" << std::endl;
+				outputCount << "/" << MAX_OUTPUT_CMDS << ")" << std::endl;
 	} else {
 		outputData[outputCount][CMD_LEN]  = len + CMD_HEADER_LEN;
 		outputData[outputCount][CMD_TO]   = to;
@@ -804,7 +808,7 @@ bool fromNeighbour() {
 	bool result = false;
 
 	if (neighbouringBoidCPUsSetup) {
-		for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
+		fromNbrCheck: for (int i = 0; i < MAX_BOIDCPU_NEIGHBOURS; i++) {
 			if (inputData[CMD_FROM] == neighbouringBoidCPUs[i]) {
 				result = true;
 			}
@@ -818,100 +822,100 @@ bool fromNeighbour() {
  * Parses the supplied command and prints it out to the terminal
  */
 void printCommand(bool send, uint32 *data) {
-    if (send) {
-        if (data[CMD_TO] == CONTROLLER_ID) {
-            std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
-        } else if (data[CMD_TO] == BOIDGPU_ID) {
-            std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to BoidGPU: ";
-        } else {
-            std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << data[CMD_TO] << ": ";
-        }
-    } else {
-        if (data[CMD_FROM] == CONTROLLER_ID) {
-            std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from controller: ";
-        } else if (data[CMD_FROM] == BOIDGPU_ID) {
-            // This should never happen
-            std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from BoidGPU: ";
-        }  else {
-            std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << data[CMD_FROM] << ": ";
-        }
-    }
+	if (send) {
+		if (data[CMD_TO] == CONTROLLER_ID) {
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";
+		} else if (data[CMD_TO] == BOIDGPU_ID) {
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to BoidGPU: ";
+		} else {
+			std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to " << data[CMD_TO] << ": ";
+		}
+	} else {
+		if (data[CMD_FROM] == CONTROLLER_ID) {
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from controller: ";
+		} else if (data[CMD_FROM] == BOIDGPU_ID) {
+			// This should never happen
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from BoidGPU: ";
+		}  else {
+			std::cout << "<- RX, BoidCPU #" << boidCPUID << " received command from " << data[CMD_FROM] << ": ";
+		}
+	}
 
-    switch (data[CMD_TYPE]) {
-        case 0:
-            std::cout << "do something";
-            break;
-        case MODE_INIT:
-            std::cout << "initialise self";
-            break;
-        case CMD_PING:
-            std::cout << "BoidCPU ping";
-            break;
-        case CMD_PING_REPLY:
-            std::cout << "BoidCPU ping response";
-            break;
-        case CMD_USER_INFO:
-            std::cout << "output user info";
-            break;
-        case CMD_SIM_SETUP:
-            std::cout << "setup BoidCPU";
-            break;
-        case MODE_CALC_NBRS:
-            std::cout << "calculate neighbours";
-            break;
-        case CMD_NBR_REPLY:
-            std::cout << "neighbouring boids from neighbour";
-            break;
-        case MODE_POS_BOIDS:
-            std::cout << "calculate new boid positions";
-            break;
-        case MODE_LOAD_BAL:
-			std::cout << "load balance";
-			break;
-		case CMD_LOAD_BAL:
-			std::cout << "load balance instructions";
-			break;
-		case CMD_LOAD_BAL_REQUEST:
-			std::cout << "load balance request";
-			break;
-		case CMD_BOUNDS_AT_MIN:
-			std::cout << "BoidCPU at minimal bounds";
-			break;
-        case MODE_TRAN_BOIDS:
-            std::cout << "transfer boids";
-            break;
-        case CMD_BOID:
-            std::cout << "boid in transit";
-            break;
-        case MODE_DRAW:
-            std::cout << "send boids to BoidGPU";
-            break;
-        case CMD_DRAW_INFO:
-            std::cout << "boid info heading to BoidGPU";
-            break;
-        case CMD_ACK:
-			std::cout << "ACK signal";
-			break;
-        case CMD_KILL:
-            std::cout << "kill simulation";
-            break;
-        default:
-            std::cout << "UNKNOWN COMMAND";
-            break;
-    }
-    std::cout << std::endl;
+	switch (data[CMD_TYPE]) {
+	case 0:
+		std::cout << "do something";
+		break;
+	case MODE_INIT:
+		std::cout << "initialise self";
+		break;
+	case CMD_PING:
+		std::cout << "BoidCPU ping";
+		break;
+	case CMD_PING_REPLY:
+		std::cout << "BoidCPU ping response";
+		break;
+	case CMD_USER_INFO:
+		std::cout << "output user info";
+		break;
+	case CMD_SIM_SETUP:
+		std::cout << "setup BoidCPU";
+		break;
+	case MODE_CALC_NBRS:
+		std::cout << "calculate neighbours";
+		break;
+	case CMD_NBR_REPLY:
+		std::cout << "neighbouring boids from neighbour";
+		break;
+	case MODE_POS_BOIDS:
+		std::cout << "calculate new boid positions";
+		break;
+	case MODE_LOAD_BAL:
+		std::cout << "load balance";
+		break;
+	case CMD_LOAD_BAL:
+		std::cout << "load balance instructions";
+		break;
+	case CMD_LOAD_BAL_REQUEST:
+		std::cout << "load balance request";
+		break;
+	case CMD_BOUNDS_AT_MIN:
+		std::cout << "BoidCPU at minimal bounds";
+		break;
+	case MODE_TRAN_BOIDS:
+		std::cout << "transfer boids";
+		break;
+	case CMD_BOID:
+		std::cout << "boid in transit";
+		break;
+	case MODE_DRAW:
+		std::cout << "send boids to BoidGPU";
+		break;
+	case CMD_DRAW_INFO:
+		std::cout << "boid info heading to BoidGPU";
+		break;
+	case CMD_ACK:
+		std::cout << "ACK signal";
+		break;
+	case CMD_KILL:
+		std::cout << "kill simulation";
+		break;
+	default:
+		std::cout << "UNKNOWN COMMAND";
+		break;
+	}
+	std::cout << std::endl;
 
-    std::cout << "\t";
-    printCommandLoop: for (int i = 0; i < CMD_HEADER_LEN; i++) {
-        std::cout << data[i] << " ";
-    }
+	std::cout << "\t";
+	printCommandLoop: for (int i = 0; i < CMD_HEADER_LEN; i++) {
+		std::cout << data[i] << " ";
+	}
 
-    std::cout << "|| ";
+	std::cout << "|| ";
 
-    printCmdDataLoop: for (int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
-        std::cout << data[CMD_HEADER_LEN + i] << " ";
-    }
-    std::cout << std::endl;
+	printCmdDataLoop: for (int i = 0; i < data[CMD_LEN] - CMD_HEADER_LEN; i++) {
+		std::cout << data[CMD_HEADER_LEN + i] << " ";
+	}
+	std::cout << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -923,96 +927,96 @@ void printCommand(bool send, uint32 *data) {
 //==============================================================================
 
 Boid::Boid() {
-    id = 0;
+	id = 0;
 
-    position = Vector(0, 0);
-    velocity = Vector(0, 0);
+	position = Vector(0, 0);
+	velocity = Vector(0, 0);
 
-    boidNeighbourIndex = 0;
-    boidNeighbourCount = 0;
+	boidNeighbourIndex = 0;
+	boidNeighbourCount = 0;
 }
 
 Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
-    id = _boidID;
+	id = _boidID;
 
-    position = initPosition;
-    velocity = initVelocity;
+	position = initPosition;
+	velocity = initVelocity;
 
-    boidNeighbourIndex = 0;
-    boidNeighbourCount = 0;
+	boidNeighbourIndex = 0;
+	boidNeighbourCount = 0;
 
-    std::cout << "Created boid #" << id << std::endl;
-    printBoidInfo();
+	std::cout << "Created boid #" << id << std::endl;
+	printBoidInfo();
 }
 
 void Boid::update(void) {
-    std::cout << "Updating boid #" << id << std::endl;
+	std::cout << "Updating boid #" << id << std::endl;
 
-    if (boidNeighbourCount > 0) {
-        acceleration.add(separate());
-        acceleration.add(align());
-        acceleration.add(cohesion());
-    }
+	if (boidNeighbourCount > 0) {
+		acceleration.add(separate());
+		acceleration.add(align());
+		acceleration.add(cohesion());
+	}
 
-    velocity.add(acceleration);
-    velocity.limit(MAX_VELOCITY);
-    position.add(velocity);
-    acceleration.mul(0);
+	velocity.add(acceleration);
 
-    printBoidInfo();
+	int32_fp mag = velocity.mag();
+	if (mag > MAX_VELOCITY) {
+		velocity.setMag(MAX_VELOCITY);
+	}
+
+	position.add(velocity);
+	acceleration.mul(0);
+	printBoidInfo();
 }
 
 Vector Boid::align(void) {
-    Vector total;
+	Vector total;
 
-    alignBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
-    	total.add(boidNeighbourList[boidNeighbourIndex][i]->velocity);
-    }
+	alignBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
+		total.add(boidNeighbourList[boidNeighbourIndex][i]->velocity);
+	}
 
-    total.div(boidNeighbourCount);
-    total.setMag(MAX_VELOCITY);
+	total.div(boidNeighbourCount);
+	total.setMag(MAX_VELOCITY);
+	Vector steer = Vector::sub(total, velocity);
+	//    steer.limit(MAX_FORCE);
 
-    Vector steer = Vector::sub(total, velocity);
-    steer.limit(MAX_FORCE);
-
-    return steer;
+	return steer;
 }
 
 Vector Boid::separate(void) {
-    Vector total;
-    Vector diff;
+	Vector total;
+	Vector diff;
 
-    separateBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
-        diff = Vector::sub(position, boidNeighbourList[boidNeighbourIndex][i]->position);
-        diff.normalise();
-        // Optionally weight by the distance
-        total.add(diff);
-    }
+	separateBoidsLoop: for (int i = 0; i < boidNeighbourCount; i++) {
+		diff = Vector::sub(position, boidNeighbourList[boidNeighbourIndex][i]->position);
+		diff.normalise();
+		total.add(diff);
+	}
 
-    total.div(boidNeighbourCount);
-    total.setMag(MAX_VELOCITY);
-    Vector steer = Vector::sub(total, velocity);
-    steer.limit(MAX_FORCE);
+	total.div(boidNeighbourCount);
+	total.setMag(MAX_VELOCITY);
+	Vector steer = Vector::sub(total, velocity);
+	//    steer.limit(MAX_FORCE);
 
-    return steer;
+	return steer;
 }
 
 Vector Boid::cohesion(void) {
-    Vector total;
+	Vector total;
 
-    coheseBoidLoop: for (int i = 0; i < boidNeighbourCount; i++) {
-        total.add(boidNeighbourList[boidNeighbourIndex][i]->position);
-    }
+	coheseBoidLoop: for (int i = 0; i < boidNeighbourCount; i++) {
+		total.add(boidNeighbourList[boidNeighbourIndex][i]->position);
+	}
 
-    total.div(boidNeighbourCount);
-
-    Vector desired = Vector::sub(total, position);
-
-    desired.setMag(MAX_VELOCITY);
+	total.div(boidNeighbourCount);
+	Vector desired = Vector::sub(total, position);
+	desired.setMag(MAX_VELOCITY);
 	Vector steer = Vector::sub(desired, velocity);
-	steer.limit(MAX_FORCE);
-
+	//    steer.limit(MAX_FORCE);
 	return steer;
+
 }
 
 void Boid::setNeighbourDetails(uint8 neighbourIndex, uint8 neighbourCount) {
@@ -1021,12 +1025,12 @@ void Boid::setNeighbourDetails(uint8 neighbourIndex, uint8 neighbourCount) {
 }
 
 void Boid::printBoidInfo() {
-    std::cout << "==========Info for Boid " << id << "==========" << std::endl;
-    std::cout << "Boid Position: [" << position.x << " " << position.y << "]"
-        << std::endl;
-    std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << "]"
-        << std::endl;
-    std::cout << "===================================" << std::endl;
+	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
+	std::cout << "Boid Position: [" << position.x << " " << position.y << "]"
+			<< std::endl;
+	std::cout << "Boid Velocity: [" << velocity.x << " " << velocity.y << "]"
+			<< std::endl;
+	std::cout << "===================================" << std::endl;
 }
 
 //==============================================================================
@@ -1035,76 +1039,60 @@ void Boid::printBoidInfo() {
 
 // Constructors ////////////////////////////////////////////////////////////////
 Vector::Vector() {
-    x = 0;
-    y = 0;
+	x = 0;
+	y = 0;
 }
 
 Vector::Vector(int16_fp x_, int16_fp y_) {
-    x = x_;
-    y = y_;
+	x = x_;
+	y = y_;
 }
 
 // Basic Operations ////////////////////////////////////////////////////////////
 void Vector::add(Vector v) {
-    x = x + v.x;
-    y = y + v.y;
+	x = x + v.x;
+	y = y + v.y;
 }
 
 void Vector::mul(int16_fp n) {
-    x = x * n;
-    y = y * n;
+	x = x * n;
+	y = y * n;
 }
 
+// Input is always positive
 void Vector::div(int16_fp n) {
-    if (n != 0) {
-    	x = x / n;
-    	y = y / n;
-    }
+	x = x / n;
+	y = y / n;
 }
 
 // Static Operations /////////////////////////////////////////////////////////
 Vector Vector::sub(Vector v1, Vector v2) {
-	Vector v3 = Vector(v1.x - v2.x, v1.y - v2.y);
-    return v3;
+	return Vector(v1.x - v2.x, v1.y - v2.y);
 }
 
 // Calculate the squared distance between two vectors - used to avoid use of
 // doubles and square roots, which are expensive in hardware.
-int16_fp Vector::squaredDistanceBetween(Vector v1, Vector v2) {
-	int16_fp xPart = v1.x - v2.x;
-	int16_fp yPart = v1.y - v2.y;
+int32_fp Vector::squaredDistanceBetween(Vector v1, Vector v2) {
+	int32_fp xPart = v1.x - v2.x;
+	int32_fp yPart = v1.y - v2.y;
 
-	xPart *= xPart;
-	yPart *= yPart;
-
-	return xPart + yPart;
+	return (xPart*xPart) + (yPart*yPart);
 }
 
 // Advanced Operations /////////////////////////////////////////////////////////
 int16_fp Vector::mag() {
-	int16_fp result = (x*x + y*y);
+	int32_fp result = (x*x + y*y);
 	return hls::sqrt(result);
 }
 
-// TODO: setMag and limit are similar - perhaps combine?
-void Vector::setMag(int16_fp mag) {
-    normalise();
-    mul(mag);
-}
-
-void Vector::limit(int16_fp max) {
-	int16_fp m = mag();
-    if (m > max) {
-        normaliseWithMag(m);
-        mul(max);
-    }
+void Vector::setMag(int16_fp newMag) {
+	normalise();
+	mul(newMag);
 }
 
 void Vector::normalise() {
-	normaliseWithMag(mag());
-}
+	int16_fp magnitude = mag();
 
-void Vector::normaliseWithMag(int16_fp magnitude) {
 	if (magnitude != 0) {
 		div(magnitude);
 	} else {

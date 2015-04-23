@@ -63,9 +63,14 @@
 #define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU
 #define MAX_VELOCITY            5
 #define MAX_FORCE               1   // Determines how quickly a boid can turn
-#define VISION_RADIUS           20  // How far a boid can see
-#define VISION_RADIUS_SQUARED	400
+#define VISION_RADIUS           80  // How far a boid can see
+#define VISION_RADIUS_SQUARED	6400
+#define SEP_RAIDUS_SQUARED		1600
 #define MAX_NEIGHBOURING_BOIDS  45  // TODO: Decide on appropriate value?
+
+//#define ALIGNMENT_WEIGHT		1
+//#define SEPARATION_WEIGHT		1
+//#define COHESION_WEIGHT			1
 
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
@@ -134,13 +139,10 @@ class Vector {
 
     int16_fp mag();
     void setMag(int16_fp mag);
-    void limit(int16_fp max);
-
     void normalise();
-    void normaliseWithMag(int16_fp magnitude);
 
     static Vector sub(Vector v1, Vector v2);
-    static int16_fp squaredDistanceBetween(Vector v1, Vector v2);
+    static int32_fp squaredDistanceBetween(Vector v1, Vector v2);
 };
 
 class Boid {
@@ -172,8 +174,6 @@ class Boid {
     Vector align();         // Calculate the alignment force
     Vector separate();      // Calculate the separation force
     Vector cohesion();      // Calculate the cohesion force
-
-    Vector seek(Vector);    // Seek a new position
 };
 
 #endif
