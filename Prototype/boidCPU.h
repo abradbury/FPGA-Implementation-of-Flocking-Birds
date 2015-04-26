@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <iostream>     			// For cout
 #include <ap_int.h>                 // For arbitrary precision types
 #include <ap_fixed.h>               // For fixed point data types
 #include <hls_stream.h>
@@ -38,13 +39,18 @@
 #define CMD_PING_END			7	// Gatekeeper -> Controller (D)
 #define CMD_NBR_REPLY           8   // BoidCPU -> BoidCPU (D)
 #define MODE_POS_BOIDS          9   // Controller -> BoidCPU (B)
-#define CMD_LOAD_BAL            10  // Controller -> BoidCPU (?) TODO: Implement
+#define MODE_LOAD_BAL           10  // Controller -> BoidCPU (?)
 #define MODE_TRAN_BOIDS         11  // Controller -> BoidCPU (B)
 #define CMD_BOID                12  // BoidCPU -> BoidCPU (D)
-#define MODE_DRAW               14  // Controller -> BoidCPU (B) TODO: Needed?
+#define MODE_DRAW               14  // Controller -> BoidCPU (B)
 #define CMD_DRAW_INFO           15  // BoidCPU -> BoidGPU (D)
 #define CMD_KILL                16  // Controller -> All (B)
 #define CMD_ACK					17
+#define CMD_PING_START			18
+#define CMD_LOAD_BAL_REQUEST	19
+#define CMD_LOAD_BAL			20
+#define CMD_BOUNDS_AT_MIN		21
+#define CMD_DEBUG				76
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
 #define CMD_SETUP_COORD_IDX 	2	// Coordinates start index
@@ -57,9 +63,14 @@
 #define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU
 #define MAX_VELOCITY            5
 #define MAX_FORCE               1   // Determines how quickly a boid can turn
-#define VISION_RADIUS           20  // How far a boid can see
-#define VISION_RADIUS_SQUARED	400
+#define VISION_RADIUS           80  // How far a boid can see
+#define VISION_RADIUS_SQUARED	6400
+#define SEP_RAIDUS_SQUARED		1600
 #define MAX_NEIGHBOURING_BOIDS  45  // TODO: Decide on appropriate value?
+
+//#define ALIGNMENT_WEIGHT		1
+//#define SEPARATION_WEIGHT		1
+//#define COHESION_WEIGHT			1
 
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
@@ -82,13 +93,10 @@
 #define SOUTHWEST				6	// Index of the BoidCPU to the southwest
 #define WEST					7	// Index of the BoidCPU to the west
 
-// Other definitions -----------------------------------------------------------
-#define POLY_MASK_16        0xD295  // Used for random
-#define POLY_MASK_15        0x6699  // Used for random
-
-#define ROUND_TOWARDS_ZERO 				1
-#define ROUND_AWAY_FROM_ZERO			2
-#define REMAINDER_ROUND_TOWARDS_ZERO	3
+#define NORTH_IDX	12			// The index of the north edge change (load bal)
+#define EAST_IDX	8			// The index of the east edge change (load bal)
+#define SOUTH_IDX	4			// The index of the south edge change (load bal)
+#define WEST_IDX	0			// The index of the west edge change (load bal)
 
 
 // Typedefs
@@ -99,7 +107,7 @@ typedef ap_uint<16> uint16;
 typedef ap_int<16> int16;
 
 typedef ap_int<12> int12;   // Used to represent position and negative velocity
-typedef ap_int<12> uint12;
+typedef ap_uint<11> uint11;	// For simulation width and height
 
 typedef ap_uint<8> uint8;
 typedef ap_int<8> int8;
@@ -107,31 +115,34 @@ typedef ap_int<8> int8;
 typedef ap_uint<4> uint4;
 typedef ap_int<4> int4;
 
+// 16-bit signed word with 4 fractional bits, truncation and saturation
+typedef ap_fixed<16,12, AP_TRN, AP_SAT> int16_fp;
+
+// 32-bit signed word with 8 fractional bits, truncation and saturation
+typedef ap_fixed<32,24, AP_TRN, AP_SAT> int32_fp;
+
 // Prototypes
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output);
 
 // Classes
 class Vector {
  public:
-    int12 x;
-    int12 y;
+	int16_fp x;
+	int16_fp y;
 
     Vector();
-    Vector(int12 x_, int12 y_);
+    Vector(int16_fp x_, int16_fp y_);
 
     void add(Vector v);
-    void mul(int12 n);
-    void div(int12 n);
+    void mul(int16_fp n);
+    void div(int16_fp n);
 
-    int12 mag();
-    void setMag(int12 mag);
-    void limit(int12 max);
-
+    int16_fp mag();
+    void setMag(int16_fp mag);
     void normalise();
-    void normaliseWithMag(int12 magnitude);
 
     static Vector sub(Vector v1, Vector v2);
-    static uint12 squaredDistanceBetween(Vector v1, Vector v2);
+    static int32_fp squaredDistanceBetween(Vector v1, Vector v2);
 };
 
 class Boid {
@@ -163,8 +174,6 @@ class Boid {
     Vector align();         // Calculate the alignment force
     Vector separate();      // Calculate the separation force
     Vector cohesion();      // Calculate the cohesion force
-
-    Vector seek(Vector);    // Seek a new position
 };
 
 #endif

@@ -1,8 +1,9 @@
 #ifndef BOIDS_H_
 #define BOIDS_H_
 
-#define ENTER                   0x0A// The ASCII code for '\n' or Line Feed (LF)
-#define USING_VLAB              1   // 1 if using VLAB, 0 if not
+#define LINUX_ENTER_KEY         0x0A// The ASCII code for '\n' or Line Feed (LF)
+#define WINDOWS_ENTER_KEY		0x0D
+#define USING_VLAB              0   // 1 if using VLAB, 0 if not
 
 #define BOID_COUNT              20  // The total number of system boids
 
@@ -43,8 +44,9 @@
 #define CMD_KILL                16  // Controller -> All
 #define CMD_ACK					17	// All -> Controller
 #define CMD_PING_START			18
+#define CMD_DEBUG				76
 
-#define CMD_COUNT               18
+#define CMD_COUNT               19
 
 #define CMD_SETUP_BNBRS_IDX 	7	// Neighbouring BoidCPU start index
 #define CMD_SETUP_COORD_IDX 	2	// Coordinates start index

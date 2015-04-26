@@ -25,6 +25,7 @@ void testMoveBoids();
 void testDrawBoids();
 
 void simulateNeighbourResponse();
+void simulateLoadBalanceInstructions();
 void simulateBoidTransfer();
 
 void processNeighbourReply();
@@ -44,13 +45,18 @@ int main() {
     testSimulationSetup();
 
     // Then repeat these commands every time step
-    testNeighbourSearch();
-    simulateNeighbourResponse();
-    testCalcNextBoidPos();
-    testLoadBalance();
-    testMoveBoids();
-    simulateBoidTransfer();
-    testDrawBoids();
+    for (int i = 0; i < 3; i++ ) {
+		testNeighbourSearch();
+		simulateNeighbourResponse();
+		testCalcNextBoidPos();
+//		testLoadBalance();
+//	    simulateLoadBalanceInstructions();
+		testMoveBoids();
+//		simulateBoidTransfer();
+		testDrawBoids();
+
+		std::cout << "-------------------------------------------" << std::endl;
+    }
 
     // Send data ---------------------------------------------------------------
     outerOutputLoop: for (int i = 0; i < tbOutputCount; i++) {
@@ -72,9 +78,9 @@ int main() {
     bool inputAvailable = from_hw.read_nb(tbInputData[tbInputCount][CMD_LEN]);
 
     while (inputAvailable) {
-        inLp: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] - 1; i++) {
-            tbInputData[tbInputCount][i + 1] = from_hw.read();
-        }
+    	inLp: for (int i = 0; i < tbInputData[tbInputCount][CMD_LEN] -1 ; i++) {
+    		tbInputData[tbInputCount][i+1] = from_hw.read();
+    	}
 
         tbPrintCommand(false, tbInputData[tbInputCount]);
 
@@ -111,22 +117,22 @@ void testSimulationSetup() {
     uint32 initialBoidCount = 10;
     uint32 distinctNeighbourCount = 1;
 
-    // BoidCPU #4
-    newID = 4;
+    // BoidCPU #3
+    newID = 3;
 
-    tbCoords[0] = 40;
+    tbCoords[0] = 0;
 	tbCoords[1] = 0;
-	tbCoords[2] = 80;
-	tbCoords[3] = 40;
+	tbCoords[2] = 640;
+	tbCoords[3] = 360;
 
-    tbNeighbours[0] = 3;
-    tbNeighbours[1] = 4;
-    tbNeighbours[2] = 3;
-    tbNeighbours[3] = 3;
-    tbNeighbours[4] = 3;
-    tbNeighbours[5] = 4;
-    tbNeighbours[6] = 3;
-    tbNeighbours[7] = 3;
+    tbNeighbours[0] = 4;
+    tbNeighbours[1] = 3;
+    tbNeighbours[2] = 4;
+    tbNeighbours[3] = 4;
+    tbNeighbours[4] = 4;
+    tbNeighbours[5] = 3;
+    tbNeighbours[6] = 4;
+    tbNeighbours[7] = 4;
 
     tbData[CMD_SETUP_NEWID_IDX] = newID;
     tbData[CMD_SETUP_BDCNT_IDX] = initialBoidCount;
@@ -141,8 +147,8 @@ void testSimulationSetup() {
         tbData[CMD_SETUP_BNBRS_IDX + i] = tbNeighbours[i];
     }
 
-    tbData[CMD_SETUP_SIMWH_IDX + 0] = 80;
-    tbData[CMD_SETUP_SIMWH_IDX + 1] = 40;
+    tbData[CMD_SETUP_SIMWH_IDX + 0] = 1280;
+    tbData[CMD_SETUP_SIMWH_IDX + 1] = 720;
 
     tbCreateCommand(tbDataLength, CMD_BROADCAST, tbFrom, CMD_SIM_SETUP, tbData);
 }
@@ -193,23 +199,23 @@ void simulateNeighbourResponse() {
 //			uint32 position = 0;
 //			uint32 velocity = 0;
 //
-//			position |= ((uint32)(boidsFromNbrs[i][j].position.x) << 20);
-//			position |= ((uint32)(boidsFromNbrs[i][j].position.y) << 8);
+//			// Encode position
+//			position |= ((uint32)(((int32_fp)(boidsFromNbrs[i][j].position.x)) << 4) << 16);
 //
-//			// Despite being of type int12, the velocity (and position) seem to
-//			// be represented using 16 bits. Therefore, negative values need to
-//			// have bits 12 to 15 set to 0 (from 1) before ORing with velocity.
-//			if (boidsFromNbrs[i][j].velocity.x < 0) {
-//				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.x) & ~((int16)0x0F << 12)) << 20);
-//			} else {
-//				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.x) << 20);
+//			if (boidsFromNbrs[i][j].position.y < 0) {
+//				position |= ((~(((uint32)0xFFFF) << 16)) &
+//						((uint32)((int32_fp)(boidsFromNbrs[i][j].position.y) << 4)));
 //			}
+//			else position |= ((uint32)((int32_fp)(boidsFromNbrs[i][j].position.y) << 4));
+//
+//			// Encode velocity
+//			velocity |= ((uint32)(((int32_fp)(boidsFromNbrs[i][j].velocity.x)) << 4) << 16);
 //
 //			if (boidsFromNbrs[i][j].velocity.y < 0) {
-//				velocity |= ((uint32)((boidsFromNbrs[i][j].velocity.y) & ~((int16)0x0F << 12)) << 8);
-//			} else {
-//				velocity |= ((uint32)(boidsFromNbrs[i][j].velocity.y) << 8);
+//				velocity |= ((~(((uint32)0xFFFF) << 16)) &
+//						((uint32)((int32_fp)(boidsFromNbrs[i][j].velocity.y) << 4)));
 //			}
+//			else velocity |= ((uint32)((int32_fp)(boidsFromNbrs[i][j].velocity.y) << 4));
 //
 //			data[(k * BOID_DATA_LENGTH) + 0] = position;
 //			data[(k * BOID_DATA_LENGTH) + 1] = velocity;
@@ -220,39 +226,45 @@ void simulateNeighbourResponse() {
 //		createCommand(dataLength, 7, neighbours[i], CMD_NBR_REPLY, data);
 //	}
 
-	// 34 99 3 8 || 12585728 5242880 21 19931904 -5242624 22 12590848 -3146240 23 36705792 1047808 24 4196608 -1048576 25 19927552 3144960 26 39850752 5241856 27 18875648 -1048064 28 15737088 3145216 29 3147776 -2097152 30
-	tbData[0] = 12585728;
-	tbData[1] = 5242880;
-	tbData[2] = 21;
-	tbData[3] = 19931904;
-	tbData[4] = -5242624;
-	tbData[5] = 22;
-	tbData[6] = 12590848;
-	tbData[7] = -3146240;
-	tbData[8] = 23;
-	tbData[9] = 36705792;
-	tbData[10] = 1047808;
-	tbData[11] = 24;
-	tbData[12] = 4196608;
-	tbData[13] = -1048576;
-	tbData[14] = 25;
-	tbData[15] = 19927552;
-	tbData[16] = 3144960;
-	tbData[17] = 26;
-	tbData[18] = 39850752;
-	tbData[19] = 5241856;
-	tbData[20] = 27;
-	tbData[21] = 18875648;
-	tbData[22] = -1048064;
-	tbData[23] = 28;
-	tbData[24] = 15737088;
-	tbData[25] = 3145216;
-	tbData[26] = 29;
-	tbData[27] = 3147776;
-	tbData[28] = -2097152;
-	tbData[29] = 30;
+	// 32 99 3 8 || 1 12583088 5242880 21 20185648 4289724444 22 12583408 4290838496 23 36700512 65488 24 4194448 4293918720 25 19923232 2162640 26 39846192 4259776 27 18874448 4293918752 28 15729168 2162656 29
+	// 8  99 3 8 || 0 3145856 4292870144 30
+	tbData[0] = 1;
+	tbData[1] = 12583088;
+	tbData[2] = 5242960;
+	tbData[3] = 21 + 10;
+	tbData[4] = 20185648;
+	tbData[5] = 5242960;
+	tbData[6] = 22 + 10;
+	tbData[7] = 12583408;
+	tbData[8] = 5242960;
+	tbData[9] = 23 + 10;
+	tbData[10] = 36700512;
+	tbData[11] = 5242960;
+	tbData[12] = 24 + 10;
+	tbData[13] = 4194448;
+	tbData[14] = 5242960;
+	tbData[15] = 25 + 10;
+	tbData[16] = 19923232;
+	tbData[17] = 5242960;
+	tbData[18] = 26 + 10;
+	tbData[19] = 39846192;
+	tbData[20] = 5242960;
+	tbData[21] = 27 + 10;
+	tbData[22] = 18874448;
+	tbData[23] = 5242960;
+	tbData[24] = 28 + 10;
+	tbData[25] = 15729168;
+	tbData[26] = 5242960;
+	tbData[27] = 29 + 10;
 
-	tbCreateCommand(30, 99, 3, CMD_NBR_REPLY, tbData);
+//	tbCreateCommand(28, 99, 4, CMD_NBR_REPLY, tbData);
+
+	tbData[0] = 0;
+//	tbData[1] = 3145856;
+//	tbData[2] = 5242960;
+//	tbData[3] = 30 + 10;
+
+	tbCreateCommand(1, 99, 4, CMD_NBR_REPLY, tbData);
 }
 
 void testCalcNextBoidPos() {
@@ -266,7 +278,16 @@ void testLoadBalance() {
     // 4 0 1 10 ||
     tbDataLength = 0;
     tbTo = CMD_BROADCAST;
-    tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_LOAD_BAL, tbData);
+    tbCreateCommand(tbDataLength, tbTo, tbFrom, MODE_LOAD_BAL, tbData);
+}
+
+void simulateLoadBalanceInstructions() {
+	// 5 3 1 20 || 7936
+	tbDataLength = 1;
+	tbData[0] = 8177;	// Shrink all 4 edges
+	tbTo = 3;
+	tbFrom = CONTROLLER_ID;
+	tbCreateCommand(tbDataLength, tbTo, tbFrom, CMD_LOAD_BAL, tbData);
 }
 
 void testMoveBoids() {
@@ -308,23 +329,24 @@ void testDrawBoids() {
  * BoidCPU. Used when calculating the neighbours for a particular boid.
  */
 void processNeighbourReply() {
-    int count = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN) / 
+    int count = (tbInputData[tbInputCount][CMD_LEN] - CMD_HEADER_LEN - 1) /
         BOID_DATA_LENGTH;
     Boid tbBoids[MAX_BOIDS];
 
     std::cout << "Dummy BoidCPU received " << count << " boids" << std::endl;
 
     for (int i = 0; i < count; i++) {
-        uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 0];
-        uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+        uint32 position = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 1];
+        uint32 velocity = tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2];
 
-        Vector p = Vector((int12)((position & (~(uint32)0xFFFFF)) >> 20),
-                (int12)((position & (uint32)0xFFF00) >> 8));
+        // Decode position and velocity
+		Vector p = Vector(((int32_fp)((int32)position >> 16)) >> 4,
+				((int32_fp)((int16)position)) >> 4);
 
-        Vector v = Vector((int12)((velocity & (~(uint32)0xFFFFF)) >> 20),
-                (int12)((velocity & (uint32)0xFFF00) >> 8));
+		Vector v = Vector(((int32_fp)((int32)velocity >> 16)) >> 4,
+				((int32_fp)((int16)velocity)) >> 4);
 
-        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 2], p, v);
+        Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3], p, v);
         tbBoids[i] = b;
 //      b.printBoidInfo();
     }
@@ -528,8 +550,14 @@ void tbPrintCommand(bool send, uint32 *data) {
 	case MODE_POS_BOIDS:
 		std::cout << "calculate new boid positions      ";
 		break;
+	case MODE_LOAD_BAL:
+		std::cout << "load balance mode                 ";
+		break;
 	case CMD_LOAD_BAL:
-		std::cout << "load balance                      ";
+		std::cout << "load balance instructions         ";
+		break;
+	case CMD_LOAD_BAL_REQUEST:
+		std::cout << "load balance request              ";
 		break;
 	case MODE_TRAN_BOIDS:
 		std::cout << "transfer boids                    ";

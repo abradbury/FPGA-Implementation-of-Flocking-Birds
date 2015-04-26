@@ -4,8 +4,8 @@
 
 #define MAX_BOIDCPUS			32		// TODO: Decide on a suitable value
 
-#define SIMULATION_WIDTH		1920	// The pixel width of the simulation
-#define SIMULATION_HEIGHT		1080	// The pixel height of the simulation
+#define SIMULATION_WIDTH		1280	// The pixel width of the simulation
+#define SIMULATION_HEIGHT		720		// The pixel height of the simulation
 
 // Function headers ============================================================
 void processUserData();
@@ -25,7 +25,7 @@ void issueDrawMode();
 void killSimulation();
 
 void setupSimulation();
-void closestMultiples(uint8 *height, uint8 *width, uint8 number);
+void closestMultiples(uint12 *height, uint12 *width, uint8 number);
 
 void printCommand(bool send, uint32 *data);
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type,
@@ -217,20 +217,16 @@ void setupSimulation() {
 	}
 
 	// Determine simulation grid layout
-	uint8 simulationGridHeight = 0;
-	uint8 simulationGridWidth  = 0;
+	uint12 simulationGridHeight = 0;
+	uint12 simulationGridWidth  = 0;
 
 	closestMultiples(&simulationGridHeight, &simulationGridWidth, boidCPUCount);
+
 	std::cout << "Simulation is " << simulationGridWidth << " BoidCPUs wide by "
 			<< simulationGridHeight << " BoidCPUs high" << std::endl;
 
 	// Calculate coordinates
 	// First, calculate the pixel width and height of one BoidCPU
-//	uint12 boidCPUPixelWidth = SIMULATION_WIDTH / 2;
-//	uint12 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
-//			2));
-	// FIXME: WHen the simulationGridWidth is 2, get incorrect values, when
-	//  a hard-coded 2 is used, get correct values!!!
 	uint12 boidCPUPixelWidth = SIMULATION_WIDTH / simulationGridWidth;
 	uint12 widthRemainder = (SIMULATION_WIDTH - (boidCPUPixelWidth *
 			simulationGridWidth));
@@ -242,17 +238,6 @@ void setupSimulation() {
 	std::cout << "Typical BoidCPU dimensions: " << boidCPUPixelWidth <<
 			" pixels wide by " << boidCPUPixelHeight << " pixels high" <<
 			std::endl;
-
-	uint32 td[8];
-	td[0] = simulationGridWidth;
-	td[1] = simulationGridHeight;
-	td[2] = SIMULATION_WIDTH;
-	td[3] = SIMULATION_HEIGHT;
-	td[4] = boidCPUPixelWidth;
-	td[5] = boidCPUPixelHeight;
-	td[6] = widthRemainder;
-	td[7] = heightRemainder;
-	createCommand(8, 76, CONTROLLER_ID, 76, td);
 
 	// Then calculate each BoidCPU's coordinates
 	uint8 count = 0;
@@ -353,7 +338,7 @@ void setupSimulation() {
 	issueSetupInformation();
 }
 
-void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
+void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
 	uint8 difference = -1;
 
 	incCloestMultLoop: for (int i = 1; i < number + 1; i++) {
@@ -371,7 +356,14 @@ void closestMultiples(uint8 *height, uint8 *width, uint8 number) {
 }
 
 void processAck() {
-	ackCount++;
+
+	if (inputData[CMD_FROM] == BOIDGPU_ID) {
+		state = MODE_CALC_NBRS;
+		issueCalcNbrsMode();
+		ackCount = 0;
+	} else {
+		ackCount++;
+	}
 
 	if (ackCount == gatekeeperCount) {
 		switch(state) {
@@ -394,7 +386,6 @@ void processAck() {
 		default:
 			break;
 		}
-
 		ackCount = 0;
 	}
 }
@@ -562,10 +553,13 @@ void printCommand(bool send, uint32 *data) {
 		std::cout << "end of ping                       ";
 		break;
 	case CMD_PING_START:
-		std::cout << "start of ping                      ";
+		std::cout << "start of ping                     ";
 		break;
 	case CMD_KILL:
 		std::cout << "kill simulation                   ";
+		break;
+	case CMD_DEBUG:
+		std::cout << "debug information                 ";
 		break;
 	default:
 		std::cout << "UNKNOWN COMMAND: (" << data[CMD_TYPE] << ")             ";
