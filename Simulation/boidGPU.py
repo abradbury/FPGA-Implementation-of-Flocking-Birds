@@ -8,6 +8,7 @@
 from Tkinter import Frame, Canvas, Label, Button, Checkbutton, Scale
 from Tkinter import Tk, TOP, E, W, HORIZONTAL, BOTH
 
+import random
 import ttk                              # Used for the tabs
 import numpy as np                      # Used in various mathematical operations
 import decimal as dec
@@ -44,145 +45,148 @@ class BoidGPU(object):
         # Notebook tabs ---------------------------------------------------------------------------#
         # Create the tabs/notebook
         self.notebook = ttk.Notebook(master, name="notebook")
-        # self.notebook.enable_traversal()
+        self.notebook.enable_traversal()
         self.notebook.pack(fill=BOTH)
 
         # Add the simulation frame to the notebook
         frame = Frame(self.notebook, name='simulation')
         frame.grid(row=row, rowspan=20, column=3)
-        self.notebook.add(frame, text="Simulation")
 
-        # Add the graph frame to the notebook
-        self.graph_frame = Frame(self.notebook, name='graphs')
-        self.notebook.add(self.graph_frame, text="BoidCPU Timing")
+        if not self.config['graphicsHarness']: 
+            self.notebook.add(frame, text="Simulation")
 
-        # Add the graph frame to the notebook
-        self.graph_frame_b = Frame(self.notebook, name='graphs2')
-        self.notebook.add(self.graph_frame_b, text="Overloaded BoidCPUs")
+            # Add the graph frame to the notebook
+            self.graph_frame = Frame(self.notebook, name='graphs')
+            self.notebook.add(self.graph_frame, text="BoidCPU Timing")
 
-        # Add the graph frame to the notebook
-        self.graph_frame_c = Frame(self.notebook, name='graphs3')
-        self.notebook.add(self.graph_frame_c, text="Timings")
+            # Add the graph frame to the notebook
+            self.graph_frame_b = Frame(self.notebook, name='graphs2')
+            self.notebook.add(self.graph_frame_b, text="Overloaded BoidCPUs")
+
+            # Add the graph frame to the notebook
+            self.graph_frame_c = Frame(self.notebook, name='graphs3')
+            self.notebook.add(self.graph_frame_c, text="Timings")
 
         # Setup the simulation area ---------------------------------------------------------------#
         self.canvas = Canvas(frame, bg="black", width=self.config['width'], \
             height=self.config['height'])
         self.canvas.grid(row=row, rowspan=20, column=3)
 
-        # Place the title
-        self.title = Label(frame, text="Flocking Boid Simulator", \
-            font="Helvetica 16 bold underline")
-        self.title.grid(row=row, column=1, columnspan=2)
+        if not self.config['graphicsHarness']: 
+            # Place the title
+            self.title = Label(frame, text="Flocking Boid Simulator", \
+                font="Helvetica 16 bold underline")
+            self.title.grid(row=row, column=1, columnspan=2)
 
-        # Simulation buttons ----------------------------------------------------------------------#
-        row += 1
-        self.time_button = Button(frame, text="Next Time Step", \
-            command=self.simulation.next_step_button)
-        self.time_button.grid(row=row, column=1, columnspan=2)
+            # Simulation buttons ------------------------------------------------------------------#
+            row += 1
+            self.time_button = Button(frame, text="Next Time Step", \
+                command=self.simulation.next_step_button)
+            self.time_button.grid(row=row, column=1, columnspan=2)
 
-        row += 1
-        self.pause_button = Button(frame, text="Begin Simulation", command=self.simulation.pause)
-        self.pause_button.grid(row=row, column=1, columnspan=2)
+            row += 1
+            self.pause_button = Button(frame, text="Begin Simulation", command=self.simulation.pause)
+            self.pause_button.grid(row=row, column=1, columnspan=2)
 
-        row += 1
-        self.graph_button = Button(frame, text="Update Graphs", command=self.update_graphs)
-        self.graph_button.grid(row=row, column=1, columnspan=2)
+            row += 1
+            self.graph_button = Button(frame, text="Update Graphs", command=self.update_graphs)
+            self.graph_button.grid(row=row, column=1, columnspan=2)
 
-        # Boid sliders ----------------------------------------------------------------------------#
-        # Create the boid rule weighting sliders
-        row += 1
-        self.heading1 = Label(frame, text="Boid Rule Weightings", \
-            font="Helvetica 14 bold underline")
-        self.heading1.grid(row=row, column=1, columnspan=2)
+            # Boid sliders ------------------------------------------------------------------------#
+            # Create the boid rule weighting sliders
+            row += 1
+            self.heading1 = Label(frame, text="Boid Rule Weightings", \
+                font="Helvetica 14 bold underline")
+            self.heading1.grid(row=row, column=1, columnspan=2)
 
-        min_rule_val = 1
-        max_rule_val = 5
-        resolution = 0.1
+            min_rule_val = 1
+            max_rule_val = 5
+            resolution = 0.1
 
-        row += 1
-        self.alignment_label = Label(frame, text="Alignment: ")
-        self.alignment_label.grid(row=row, column=1, sticky=E)
-        self.alignment_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
-            HORIZONTAL, resolution=resolution, command=self.simulation.change_boid_alignment)
-        self.alignment_scale.grid(row=row, column=2, sticky=W)
-        self.alignment_scale.set(self.config['ALIGNMENT_WEIGHT'])
+            row += 1
+            self.alignment_label = Label(frame, text="Alignment: ")
+            self.alignment_label.grid(row=row, column=1, sticky=E)
+            self.alignment_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
+                HORIZONTAL, resolution=resolution, command=self.simulation.change_boid_alignment)
+            self.alignment_scale.grid(row=row, column=2, sticky=W)
+            self.alignment_scale.set(self.config['ALIGNMENT_WEIGHT'])
 
-        row += 1
-        self.cohesion_label = Label(frame, text="Cohesion: ")
-        self.cohesion_label.grid(row=row, column=1, sticky=E)
-        self.cohesion_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
-            HORIZONTAL, resolution=resolution, command=self.simulation.change_boid_cohesion)
-        self.cohesion_scale.grid(row=row, column=2, sticky=W)
-        self.cohesion_scale.set(self.config['COHESION_WEIGHT'])
+            row += 1
+            self.cohesion_label = Label(frame, text="Cohesion: ")
+            self.cohesion_label.grid(row=row, column=1, sticky=E)
+            self.cohesion_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
+                HORIZONTAL, resolution=resolution, command=self.simulation.change_boid_cohesion)
+            self.cohesion_scale.grid(row=row, column=2, sticky=W)
+            self.cohesion_scale.set(self.config['COHESION_WEIGHT'])
 
-        row += 1
-        self.separation_label = Label(frame, text="Separation: ")
-        self.separation_label.grid(row=row, column=1, sticky=E)
-        self.separation_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
-            HORIZONTAL, resolution=resolution, command=self.simulation.change_boid_separation)
-        self.separation_scale.grid(row=row, column=2, sticky=W)
-        self.separation_scale.set(self.config['REPULSION_WEIGHT'])
+            row += 1
+            self.separation_label = Label(frame, text="Separation: ")
+            self.separation_label.grid(row=row, column=1, sticky=E)
+            self.separation_scale = Scale(frame, from_=min_rule_val, to=max_rule_val, orient=\
+                HORIZONTAL, resolution=resolution, command=self.simulation.change_boid_separation)
+            self.separation_scale.grid(row=row, column=2, sticky=W)
+            self.separation_scale.set(self.config['REPULSION_WEIGHT'])
 
-        # Other boid parameters -------------------------------------------------------------------#
-        row += 1
-        self.heading1 = Label(frame, text="Other Boid Parameters", \
-            font="Helvetica 14 bold underline")
-        self.heading1.grid(row=row, column=1, columnspan=2)
+            # Other boid parameters ---------------------------------------------------------------#
+            row += 1
+            self.heading1 = Label(frame, text="Other Boid Parameters", \
+                font="Helvetica 14 bold underline")
+            self.heading1.grid(row=row, column=1, columnspan=2)
 
-        row += 1
-        min_vision_radius = 10
-        max_vision_radius = 200
-        resolution = self.config['stepSize']
-        self.vision_radius_label = Label(frame, text="Vision Radius: ")
-        self.vision_radius_label.grid(row=row, column=1, sticky=E)
-        self.vision_radius = Scale(frame, from_=min_vision_radius, to=max_vision_radius, orient=\
-            HORIZONTAL, resolution=resolution, command=self.simulation.change_vision_radius)
-        self.vision_radius.grid(row=row, column=2, sticky=W)
-        self.vision_radius.set(self.config['VISION_RADIUS'])
+            row += 1
+            min_vision_radius = 10
+            max_vision_radius = 200
+            resolution = self.config['stepSize']
+            self.vision_radius_label = Label(frame, text="Vision Radius: ")
+            self.vision_radius_label.grid(row=row, column=1, sticky=E)
+            self.vision_radius = Scale(frame, from_=min_vision_radius, to=max_vision_radius, orient=\
+                HORIZONTAL, resolution=resolution, command=self.simulation.change_vision_radius)
+            self.vision_radius.grid(row=row, column=2, sticky=W)
+            self.vision_radius.set(self.config['VISION_RADIUS'])
 
-        row += 1
-        min_velocity = 1
-        max_velocity = 100
-        self.max_velocity_label = Label(frame, text="Max Velocity: ")
-        self.max_velocity_label.grid(row=row, column=1, sticky=E)
-        self.max_velocity_scale = Scale(frame, from_=min_velocity, to=max_velocity, orient=\
-            HORIZONTAL, command=self.simulation.change_max_velocity)
-        self.max_velocity_scale.grid(row=row, column=2, sticky=W)
-        self.max_velocity_scale.set(self.config['MAX_VELOCITY'])
+            row += 1
+            min_velocity = 1
+            max_velocity = 100
+            self.max_velocity_label = Label(frame, text="Max Velocity: ")
+            self.max_velocity_label.grid(row=row, column=1, sticky=E)
+            self.max_velocity_scale = Scale(frame, from_=min_velocity, to=max_velocity, orient=\
+                HORIZONTAL, command=self.simulation.change_max_velocity)
+            self.max_velocity_scale.grid(row=row, column=2, sticky=W)
+            self.max_velocity_scale.set(self.config['MAX_VELOCITY'])
 
-        row += 1
-        min_force = 0
-        max_force = 2
-        resolution = 0.01
-        self.max_force_label = Label(frame, text="Max Force: ")
-        self.max_force_label.grid(row=row, column=1, sticky=E)
-        self.max_force_scale = Scale(frame, from_=min_force, to=max_force, orient=\
-            HORIZONTAL, resolution=resolution, command=self.simulation.change_max_force)
-        self.max_force_scale.grid(row=row, column=2, sticky=W)
-        self.max_force_scale.set(self.config['MAX_FORCE'])
+            row += 1
+            min_force = 0
+            max_force = 2
+            resolution = 0.01
+            self.max_force_label = Label(frame, text="Max Force: ")
+            self.max_force_label.grid(row=row, column=1, sticky=E)
+            self.max_force_scale = Scale(frame, from_=min_force, to=max_force, orient=\
+                HORIZONTAL, resolution=resolution, command=self.simulation.change_max_force)
+            self.max_force_scale.grid(row=row, column=2, sticky=W)
+            self.max_force_scale.set(self.config['MAX_FORCE'])
 
-        row += 1
-        self.track_boid_label = Label(frame, text="Track Boid: ")
-        self.track_boid_label.grid(row=row, column=1, sticky=E)
-        self.track_boid_check = Checkbutton(frame, onvalue=True, offvalue=False, \
-            command=self.simulation.toggle_track_boid)
-        self.track_boid_check.grid(row=row, column=2, sticky=W)
-        if self.config['trackBoid']:
-            self.track_boid_check.select()
-        else:
-            self.track_boid_check.deselect()
+            row += 1
+            self.track_boid_label = Label(frame, text="Track Boid: ")
+            self.track_boid_label.grid(row=row, column=1, sticky=E)
+            self.track_boid_check = Checkbutton(frame, onvalue=True, offvalue=False, \
+                command=self.simulation.toggle_track_boid)
+            self.track_boid_check.grid(row=row, column=2, sticky=W)
+            if self.config['trackBoid']:
+                self.track_boid_check.select()
+            else:
+                self.track_boid_check.deselect()
 
-        # Add the time step counter
-        row += 1
-        self.counter_label = Label(frame, text="Time step: ")
-        self.counter_label.grid(row=19, column=1, sticky=E)
-        self.counter = Label(frame, text=0, width=6)
-        self.counter.grid(row=19, column=2, sticky=W)
+            # Add the time step counter
+            row += 1
+            self.counter_label = Label(frame, text="Time step: ")
+            self.counter_label.grid(row=19, column=1, sticky=E)
+            self.counter = Label(frame, text=0, width=6)
+            self.counter.grid(row=19, column=2, sticky=W)
 
-        # And finally add the quit button
-        row += 1
-        self.quit_button = Button(frame, text="Quit", command=frame.quit)
-        self.quit_button.grid(row=20, column=1, columnspan=2)
+            # And finally add the quit button
+            row += 1
+            self.quit_button = Button(frame, text="Quit", command=frame.quit)
+            self.quit_button.grid(row=20, column=1, columnspan=2)
 
         # Needed so that the canvas sizes can be used later
         self.root.update()
@@ -273,6 +277,10 @@ class BoidGPU(object):
             self.canvas.coords("B" + str(boid_id), points[0], points[1], points[2], points[3], \
                 points[4], points[5], points[6], points[7])
             self.canvas.itemconfig("B" + str(boid_id), fill=colour)
+
+            # Draw the boid trace
+            if self.config['showBoidTrace']:
+                self.draw_line(position - velocity, position, random.random())
 
             # Update the boid's ID
             if self.config["showBoidIds"]:
@@ -439,11 +447,6 @@ class BoidGPU(object):
         toolbar = NavigationToolbar2TkAgg(canvas, self.graph_frame)
         toolbar.update()
         canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=1)
-
-        def on_key_event(event):
-            key_press_handler(event, canvas, toolbar)
-
-        canvas.mpl_connect('key_press_event', on_key_event)
 
         for i in range(0, boid_cpu_count):
             # Create the subplots and sync the axes
