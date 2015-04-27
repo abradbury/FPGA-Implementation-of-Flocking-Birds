@@ -445,9 +445,11 @@ class Simulation(object):
     # The other BoidCPUs that will be affected by the changes are identified and then the edges of
     # all the affected BoidCPUs are adjusted in the requested manner.
     #
+    # TODO:  Utilise better method for determining change after querying affected BoidCPUs
     # FIXME: Cannot currently handle when multiple boidCPUs are overloaded
     def boidcpu_overloaded(self, boidcpu_id, requested_change):
         self.logger.debug("BoidCPU #" + str(boidcpu_id) + " is overloaded")
+        allow_change = True
 
         # Determine the row and column of the boidCPU that is requesting load balancing
         [row, col] = self.boidcpus[boidcpu_id - 1].grid_position
@@ -469,25 +471,27 @@ class Simulation(object):
             self.logger.debug("Old boid counts: " + str(old_boid_counts) + " - total: " + \
                 str(sum(old_boid_counts)))
             self.logger.debug("New boid counts: " + str(new_boid_counts) + " - total: " + \
-                str(sum(new_boid_counts)))
+                str(sum(new_boid_counts)) + " (possible calculation error)")
 
-            # TODO: Use the predicted boid levels to evaluate change request
-            #   Give overloaded info before analysis of distribution to limit options
+            # If, after the proposed change, any BoidCPUs contain 110% of the boid threshold then
+            # do not make the proposed change
+            if sum(i > (self.config['BOID_THRESHOLD'] * 1.1) for i in new_boid_counts):
+                allow_change = False
+                self.logger.debug("Requested change not allowed: overloads other BoidCPU")
 
-        # Update the edges of the affected BoidCPUs by the specified step size
-        for edge_index, edge_boidcpus in enumerate(boidcpus_to_change):
-            for boidcpu in edge_boidcpus:
-                self.boidcpus[boidcpu[0] - 1].change_bounds(edge_index, boidcpu[1], [row, col])
+        if allow_change:
+            # Update the edges of the affected BoidCPUs by the specified step size
+            for edge_index, edge_boidcpus in enumerate(boidcpus_to_change):
+                for boidcpu in edge_boidcpus:
+                    self.boidcpus[boidcpu[0] - 1].change_bounds(edge_index, boidcpu[1], [row, col])
 
 
-        for boidcpu in self.boidcpus:
-            boidcpu_width = boidcpu.boidcpu_coords[2] - boidcpu.boidcpu_coords[0]
-            boidcpu_height = boidcpu.boidcpu_coords[3] - boidcpu.boidcpu_coords[1]
+            for boidcpu in self.boidcpus:
+                boidcpu_width = boidcpu.boidcpu_coords[2] - boidcpu.boidcpu_coords[0]
+                boidcpu_height = boidcpu.boidcpu_coords[3] - boidcpu.boidcpu_coords[1]
 
-            self.logger.debug("New BoidCPU #" + str(boidcpu.boidcpu_id) + " width = " + \
-                str(boidcpu_width) + ", height = " + str(boidcpu_height))
-
-        # self.pause()
+                self.logger.debug("New BoidCPU #" + str(boidcpu.boidcpu_id) + " width = " + \
+                    str(boidcpu_width) + ", height = " + str(boidcpu_height))
 
 
     # Prints out the requested edge changes

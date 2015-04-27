@@ -633,7 +633,7 @@ class BoidGPU(object):
         # Draw legend on main graph
         self.graph_figure.legend((self.lines[0], self.lines2[0], self.threshold_lines[0], \
             self.andall_lines[0]), ('Computation Time', 'Boid Count', 'Boid Threshold', \
-            'Andall Line'), ncol=4, loc='upper center', prop={'size':14})
+            'Amdahl Line'), ncol=4, loc='upper center', prop={'size':14})
 
         # Draw a legend, from: http://stackoverflow.com/a/20337349
         label_list = ['Neighbour Search', 'Position Calculation', 'Load Balancing', \
