@@ -60,13 +60,13 @@
 #define CMD_SETUP_SIMWH_IDX		15	// The simulation width/height start index
 
 // Boid definitions ------------------------------------------------------------
-#define MAX_BOIDS               30  // The maximum number of boids for a BoidCPU
+#define MAX_BOIDS               40  // The maximum number of boids for a BoidCPU
 #define MAX_VELOCITY            5
 #define MAX_FORCE               1   // Determines how quickly a boid can turn
-#define VISION_RADIUS           80  // How far a boid can see
-#define VISION_RADIUS_SQUARED	6400
-#define SEP_RAIDUS_SQUARED		1600
-#define MAX_NEIGHBOURING_BOIDS  45  // TODO: Decide on appropriate value?
+#define VISION_RADIUS           90  // How far a boid can see
+#define VISION_RADIUS_SQUARED	8100
+#define SEP_RAIDUS_SQUARED		2025
+#define MAX_NEIGHBOURING_BOIDS  65  // TODO: Decide on appropriate value?
 
 //#define ALIGNMENT_WEIGHT		1
 //#define SEPARATION_WEIGHT		1
@@ -75,7 +75,7 @@
 // BoidCPU definitions ---------------------------------------------------------
 #define EDGE_COUNT              4   // The number of edges a BoidCPU has
 #define MAX_BOIDCPU_NEIGHBOURS  8   // The maximum neighbours a BoidCPUs has
-#define MAX_QUEUED_BOIDS 		10	// The maximum queued boids that can be held
+#define MAX_QUEUED_BOIDS 		20	// The maximum queued boids that can be held
 
 #define BOID_THRESHOLD			30	// The number of boids to overload a BoidCPU
 
@@ -140,6 +140,10 @@ class Vector {
     int16_fp mag();
     void setMag(int16_fp mag);
     void normalise();
+
+#ifndef REDUCED_BOID_BEHAVIOUR
+    void limit(int16_fp max);
+#endif
 
     static Vector sub(Vector v1, Vector v2);
     static int32_fp squaredDistanceBetween(Vector v1, Vector v2);

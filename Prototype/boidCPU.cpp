@@ -1,14 +1,25 @@
+/**
+ * FILE DESCIPTION
+ *
+ ******************************************************************************/
+
+/******************************* Include Files ********************************/
+
 #include "boidCPU.h"
 
-//#define USING_TB	true
-//#define LAD_BAL		true
+/**************************** Constant Definitions ****************************/
 
-// Function headers ============================================================
+//#define USING_TESTBENCH			true	// Define when using TestBench
+//#define LOAD_BALANCING_ENABLED	true	// Define to enable load balancing
+#define REDUCED_LUT_USAGE		true	// Define to reduce LUT usage
+
+/**************************** Function Prototypes *****************************/
+
 // Key function headers --------------------------------------------------------
 static void simulationSetup(void);
 static void calcNextBoidPositions(void);
 
-#ifdef LOAD_BAL
+#ifdef LOAD_BALANCING_ENABLED
 static void evaluateLoad(void);
 static void loadBalance(void);
 #endif
@@ -42,8 +53,8 @@ void printCommand(bool send, uint32 *data);
 void printStateOfBoidCPUBoids();
 
 
-// Global variables ============================================================
-// TODO: Determine which variables should really be global
+/**************************** Variable Definitions ****************************/
+
 // BoidCPU variables -----------------------------------------------------------
 int8 boidCPUID = FIRST_BOIDCPU_ID;
 int12 boidCPUCoords[4];
@@ -71,7 +82,6 @@ Boid boids[MAX_BOIDS];     // TODO: Perhaps re-implement as a LL due to deletion
 
 // TODO: Try with and without pointers (for synthesising)
 Boid *boidNeighbourList[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
-//bool boidsWithinSepDist[MAX_BOIDS][MAX_NEIGHBOURING_BOIDS];
 
 // A list of possible neighbouring boids for the BoidCPU
 Boid possibleBoidNeighbours[MAX_NEIGHBOURING_BOIDS];
@@ -80,7 +90,22 @@ uint8 possibleNeighbourCount = 0;	// Number of possible boid neighbours
 // Debugging variables ---------------------------------------------------------
 bool continueOperation = true;
 
-
+/******************************************************************************/
+/*
+ * The top level function of the BoidCPU core - containing the only external
+ * interfaces of the whole core. Continually checks for input data and when it
+ * arrives it is stored and a function is called to process the data. After the
+ * called function has been called the output buffer is checked. If there is
+ * output ready to send it is sent externally, else the function waits for
+ * more input. The input and output ports are implemented as a FIFO structure
+ * and can hold one value - so data needs to be read/sent promptly.
+ *
+ * @param	input	The AXI-bus import port of the BoidCPU core
+ * @param	output	The AXI-bus output port of the BoidCPU core
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 #pragma HLS INTERFACE ap_fifo port = input
 #pragma HLS INTERFACE ap_fifo port = output
@@ -92,14 +117,14 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 	// input stream will generate warnings in HLS, but should be blocking in the
 	// actual implementation.
 
-#ifdef USING_TB
+#ifdef USING_TESTBENCH
 	inputData[CMD_LEN] = input.read();
 #endif
 
 	mainWhileLoop: while (continueOperation) {
 		// INPUT ---------------------------------------------------------------
 		// Block until there is input available
-#ifndef USING_TB
+#ifndef USING_TESTBENCH
 		inputData[CMD_LEN] = input.read();
 #endif
 
@@ -129,7 +154,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 			case MODE_POS_BOIDS:
 				calcNextBoidPositions();
 				break;
-#ifdef LOAD_BAL
+#ifdef LOAD_BALANCING_ENABLED
 			case MODE_LOAD_BAL:
 				evaluateLoad();
 				break;
@@ -169,7 +194,7 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 		outputCount = 0;
 		// ---------------------------------------------------------------------
 
-#ifdef USING_TB
+#ifdef USING_TESTBENCH
 		continueOperation = input.read_nb(inputData[0]);
 #endif
 	}
@@ -180,12 +205,16 @@ void toplevel(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 // State functions =============================================================
 //==============================================================================
 
-/**
- * Sets ID to that provided by the controller
- * Populates list of neighbouring BoidCPUs
- * Initialises pixel coordinates and edges
- * Creates own boids
- */
+/******************************************************************************/
+/*
+ * Sets ID to that provided by the controller. Populates list of neighbouring
+ * BoidCPUs. Initialises pixel coordinates and edges. Creates own boids.
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void simulationSetup() {
 	std::cout << "-Preparing BoidCPU for simulation..." << std::endl;
 
@@ -232,25 +261,36 @@ void simulationSetup() {
 	std::cout << "The simulation is of width " << simulationWidth <<
 			" and of height " << simulationHeight << std::endl;
 
-	// Create the boids (actual implementation)
+	// Create the boids
 	uint16 boidID;
 	int12 widthStep  = (boidCPUCoords[2] - boidCPUCoords[0]) / boidCount;
 	int12 heightStep = (boidCPUCoords[3] - boidCPUCoords[1]) / boidCount;
 
+#ifdef REDUCED_LUT_USAGE
+	// FIXME: Only works for BoidCPUs less than MAX_VELOCITY * 2
+	int4 initialSpeed = -MAX_VELOCITY + boidCPUID;
+#else
 	// This could be used to add some variance to the velocities of the boids
-	// but it can't be used because everything breaks
-//	int16_fp velStep = (MAX_VELOCITY + MAX_VELOCITY) / boidCount;
+	int16_fp velStep = int16_fp(MAX_VELOCITY + MAX_VELOCITY) / boidCount;
+#endif
 
 	boidCreationLoop: for (int i = 0; i < boidCount; i++) {
-		Vector velocity = Vector(MAX_VELOCITY, MAX_VELOCITY);
-
-		// This would introduce some variance into the positions of the boids
-		// but can't be used because everything breaks
-//		int16_fp xPos = (widthStep * i) + boidCPUCoords[0] + 1;
-//		if (int4((xPos/boidCPUID)<<4) < 0) xPos += boidCPUID;
+#ifdef REDUCED_LUT_USAGE
+		Vector velocity = Vector(initialSpeed, -initialSpeed);
 
 		Vector position = Vector((widthStep * i) + boidCPUCoords[0] + 1,
 				(heightStep * i) + boidCPUCoords[1] + 1);
+#else
+		Vector velocity = Vector(-MAX_VELOCITY + (velStep * i) + boidCPUID,
+				MAX_VELOCITY - (velStep * i));
+
+		// This would introduce some variance into the positions of the boids
+		int16_fp xPos = (widthStep * i) + boidCPUCoords[0] + 1;
+		if (int4(xPos) < 0) xPos = xPos + boidCPUID + boidCPUID + boidCPUID;
+
+		Vector position = Vector(xPos, (heightStep * i) + boidCPUCoords[1] + 1);
+#endif
+
 		boidID = ((boidCPUID - 1) * boidCount) + i + 1;
 
 		Boid boid = Boid(boidID, position, velocity);
@@ -261,22 +301,51 @@ void simulationSetup() {
 	sendAck(CMD_SIM_SETUP);
 }
 
-/**
+/******************************************************************************/
+/*
  * Send this BoidCPU's boids to its neighbouring BoidCPUs so they can use them
  * in calculating neighbours for their boids. Splits the data to be sent into
  * multiple messages if it exceeds the maximum command data size.
- */
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void sendBoidsToNeighbours() {
 	std::cout << "-Sending boids to neighbouring BoidCPUs..." << std::endl;
 
 	packBoidsForSending(CMD_MULTICAST, CMD_NBR_REPLY);
+
+#ifndef REDUCED_LUT_USAGE
+	// If there is just one BoidCPU - should not happen (often) if LUT usage
+	// is reduced as at least 2 BoidCPUs can fit on a single Atlys board
+	// This is quite a costly operation.
+	if (distinctNeighbourCount == 0) {
+		addOwnBoidsToNbrListZero: for (int i = 0; i < boidCount; i++) {
+			possibleBoidNeighbours[possibleNeighbourCount] = boids[i];
+			possibleNeighbourCount++;
+		}
+
+		calculateBoidNeighbours();
+
+		// Send ACK signal
+		sendAck(MODE_CALC_NBRS);
+	}
+#endif
 }
 
-/**
+/******************************************************************************/
+/*
  * When boids are received from neighbouring BoidCPUs, process them and add
  * them to a list of possible neighbouring boids. These are used to calculate
  * the neighbours of boids contained within this BoidCPU.
- */
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void processNeighbouringBoids() {
 	// Before processing first response, add own boids to list
 	if (distinctNeighbourCounter == 0) {
@@ -300,9 +369,9 @@ void processNeighbouringBoids() {
 		// Don't go beyond the edge of the array
 		if (possibleNeighbourCount != MAX_NEIGHBOURING_BOIDS) {
 			possibleNeighbourCount++;
-		}// else {
-		//	break;
-		//}
+		} else {
+			break;
+		}
 	}
 
 	// If no further messages are expected, then process it
@@ -321,12 +390,18 @@ void processNeighbouringBoids() {
 	}
 }
 
-/**
+/******************************************************************************/
+/*
  * This is called when the BoidCPUs are instructed to calculate the next
  * positions of the boids. It was in the neighbour search stage, but it became
  * complex to determine when all the boids from neighbours had been received
  * due to splitting of data over multiple messages and replicated neighbours.
- */
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void calculateBoidNeighbours() {
 	outerCalcBoidNbrsLoop: for (int i = 0; i < boidCount; i++) {
 		uint8 boidNeighbourCount = 0;
@@ -335,18 +410,9 @@ void calculateBoidNeighbours() {
 				int32_fp boidSeparation = Vector::squaredDistanceBetween(
 						boids[i].position, possibleBoidNeighbours[j].position);
 
-
-
 				if (boidSeparation < VISION_RADIUS_SQUARED) {
 					boidNeighbourList[i][boidNeighbourCount] =
 							&possibleBoidNeighbours[j];
-
-					//					if (boidSeparation < SEP_RAIDUS_SQUARED) {
-					//						boidsWithinSepDist[i][boidNeighbourCount] = true;
-					//					} else {
-					//						boidsWithinSepDist[i][boidNeighbourCount] = false;
-					//					}
-					//
 					boidNeighbourCount++;
 				}
 			}
@@ -360,6 +426,19 @@ void calculateBoidNeighbours() {
 	distinctNeighbourCounter = 0;
 }
 
+/******************************************************************************/
+/*
+ * Iterates through the boids contained in this BoidCPU and updates their
+ * position based on the model of flocking birds used. If, after a boid is
+ * updated, its new position is outside the simulation area, the boid's
+ * position is wrapped around. When all the boids have been updated an ACK is
+ * issued.
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void calcNextBoidPositions() {
 	std::cout << "-Calculating next boid positions..." << std::endl;
 
@@ -384,8 +463,16 @@ void calcNextBoidPositions() {
 	sendAck(MODE_POS_BOIDS);
 }
 
-#ifdef LOAD_BAL
-// If overloaded, signal the controller
+#ifdef LOAD_BALANCING_ENABLED
+/******************************************************************************/
+/*
+ * If overloaded, signal the controller
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void evaluateLoad() {
 	if (boidCount > BOID_THRESHOLD) {
 		std::cout << "-Load balancing..." << std::endl;
@@ -397,6 +484,15 @@ void evaluateLoad() {
 	}
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void loadBalance() {
 	int16 edgeChanges = (int16)inputData[CMD_HEADER_LEN + 0];
 
@@ -439,6 +535,17 @@ void loadBalance() {
 }
 #endif
 
+/******************************************************************************/
+/*
+ * Sends information about the boids contained within this BoidCPU to the
+ * BoidGPU for drawing. Before this is done any boids that arrived during the
+ * transfer stage of the simulation are committed.
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void updateDisplay() {
 	if (queuedBoidsCounter > 0) {
 		commitAcceptedBoids();
@@ -455,6 +562,15 @@ void updateDisplay() {
 //- Boid Transmission and Acceptance -------------------------------------------
 //==============================================================================
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void calculateEscapedBoids() {
 	std::cout << "-Transferring boids..." << std::endl;
 
@@ -483,10 +599,17 @@ void calculateEscapedBoids() {
 	}
 }
 
-/**
+/******************************************************************************/
+/*
  * Checks if the supplied boid is beyond the supplied BoidCPU edge. Can handle
  * compound edge bearings such as NORTHWEST.
- */
+ *
+ * @param	boid	Description
+ * @param	edge	Description
+ *
+ * @return 			True if the boid is beyond the edge, false otherwise
+ *
+ ******************************************************************************/
 bool isBoidBeyond(Boid boid, uint8 edge) {
 	bool result;
 
@@ -511,10 +634,17 @@ bool isBoidBeyond(Boid boid, uint8 edge) {
 	return result;
 }
 
-/**
+/******************************************************************************/
+/*
  * Checks if the supplied boid is beyond the supplied BoidCPU edge. Can only
  * handle singular edge bearings e.g. NORTH.
- */
+ *
+ * @param	boid	Description
+ * @param	edge	Description
+ *
+ * @return 			True if the boid is beyond the edge, false otherwise
+ *
+ ******************************************************************************/
 bool isBoidBeyondSingle(Boid boid, uint8 edge) {
 	int16_fp coordinate;
 	bool result;
@@ -561,9 +691,16 @@ bool isBoidBeyondSingle(Boid boid, uint8 edge) {
 	return result;
 }
 
-/**
+/******************************************************************************/
+/*
  * Checks if the BoidCPU has a neighbour at the specified bearing
- */
+ *
+ * @param	bearing	Description
+ *
+ * @return 			True if the BoidCPU has a neighbour at the specified
+ * 					bearing, false otherwise
+ *
+ ******************************************************************************/
 bool isNeighbourTo(uint16 bearing) {
 	if (neighbouringBoidCPUs[bearing] > 0) {
 		return true;
@@ -572,6 +709,17 @@ bool isNeighbourTo(uint16 bearing) {
 	}
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ * @param	recipientIDs	Description
+ * @param	count			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 	// First transmit all the boids
 	boidTransmitLoop: for (int i = 0; i < count; i++) {
@@ -597,8 +745,7 @@ void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 	// Then delete the boids from the BoidCPUs own boid list
 	outerBoidRemovalLoop: for (int i = 0; i < count; i++) {
 		bool boidFound = false;
-		//  j < boidCount - 1 as list is decremented by 1
-		// TODO: Avoid using indexes as these will change - use IDs
+		//  'j < boidCount - 1' used as list is decremented by 1
 		innerBoidRemovalLoop: for (int j = 0; j < boidCount - 1; j++) {
 			if (boids[j].id == boidIDs[i]) {
 				boidFound = true;
@@ -615,6 +762,15 @@ void transmitBoids(uint16 *boidIDs, uint8 *recipientIDs, uint8 count) {
 	sendAck(MODE_TRAN_BOIDS);
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void acceptBoid() {
 	// TODO: Replace 5 with BOID_DATA_LENGTH when using common transmission
 	if (queuedBoidsCounter < (MAX_QUEUED_BOIDS - 1)) {
@@ -626,6 +782,15 @@ void acceptBoid() {
 	}
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void commitAcceptedBoids() {
 	std::cout << "-Committing accepted boids..." << std::endl;
 
@@ -652,6 +817,15 @@ void commitAcceptedBoids() {
 //- Supporting functions -----------------------------------------------------//
 //============================================================================//
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void printStateOfBoidCPUBoids() {
 	boidStatePrintLoop: for (int i = 0; i < boidCount; i++) {
 		std::cout << "Boid " << boids[i].id << " has position [" <<
@@ -661,11 +835,29 @@ void printStateOfBoidCPUBoids() {
 	}
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void sendAck(uint8 type) {
 	outputBody[0] = type;
 	generateOutput(1, CONTROLLER_ID, CMD_ACK, outputBody);
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 Boid parsePackedBoid(uint8 offset) {
 	uint8 index = CMD_HEADER_LEN + (BOID_DATA_LENGTH * offset);
 
@@ -686,6 +878,15 @@ Boid parsePackedBoid(uint8 offset) {
 	return Boid(bID, position, velocity);
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void packBoidsForSending(uint32 to, uint32 msg_type) {
 	if (boidCount > 0) {
 		// The first bit of the body is used to indicate the number of messages
@@ -778,6 +979,15 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 	}
 }
 
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
 	if (outputCount > MAX_OUTPUT_CMDS - 1) {
 		std::cout << "Cannot send message, output buffer is full (" <<
@@ -804,6 +1014,15 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
  *
  * TODO: Would it be better to return as soon as true is set?
  */
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 bool fromNeighbour() {
 	bool result = false;
 
@@ -821,6 +1040,15 @@ bool fromNeighbour() {
 /**
  * Parses the supplied command and prints it out to the terminal
  */
+/******************************************************************************/
+/*
+ * Description
+ *
+ * @param	boidIDs			Description
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void printCommand(bool send, uint32 *data) {
 	if (send) {
 		if (data[CMD_TO] == CONTROLLER_ID) {
@@ -960,10 +1188,14 @@ void Boid::update(void) {
 
 	velocity.add(acceleration);
 
+#ifdef REDUCED_LUT_USAGE
 	int32_fp mag = velocity.mag();
 	if (mag > MAX_VELOCITY) {
 		velocity.setMag(MAX_VELOCITY);
 	}
+#else
+	velocity.limit(MAX_VELOCITY);
+#endif
 
 	position.add(velocity);
 	acceleration.mul(0);
@@ -980,7 +1212,10 @@ Vector Boid::align(void) {
 	total.div(boidNeighbourCount);
 	total.setMag(MAX_VELOCITY);
 	Vector steer = Vector::sub(total, velocity);
-	//    steer.limit(MAX_FORCE);
+
+#ifndef REDUCED_LUT_USAGE
+	steer.limit(MAX_FORCE);
+#endif
 
 	return steer;
 }
@@ -998,7 +1233,10 @@ Vector Boid::separate(void) {
 	total.div(boidNeighbourCount);
 	total.setMag(MAX_VELOCITY);
 	Vector steer = Vector::sub(total, velocity);
-	//    steer.limit(MAX_FORCE);
+
+#ifndef REDUCED_LUT_USAGE
+	steer.limit(MAX_FORCE);
+#endif
 
 	return steer;
 }
@@ -1014,7 +1252,10 @@ Vector Boid::cohesion(void) {
 	Vector desired = Vector::sub(total, position);
 	desired.setMag(MAX_VELOCITY);
 	Vector steer = Vector::sub(desired, velocity);
-	//    steer.limit(MAX_FORCE);
+
+#ifndef REDUCED_LUT_USAGE
+	steer.limit(MAX_FORCE);
+#endif
 	return steer;
 
 }
@@ -1089,6 +1330,15 @@ void Vector::setMag(int16_fp newMag) {
 	normalise();
 	mul(newMag);
 }
+
+#ifndef REDUCED_LUT_USAGE
+void Vector::limit(int16_fp max) {
+	int16_fp m = mag();
+    if (m > max) {
+    	setMag(max);
+    }
+}
+#endif
 
 void Vector::normalise() {
 	int16_fp magnitude = mag();

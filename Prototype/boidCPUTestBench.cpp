@@ -1,7 +1,7 @@
 #include "boidCPU.h"
 
 // Globals
-uint32 tbOutputData[20][MAX_CMD_LEN];
+uint32 tbOutputData[20000][MAX_CMD_LEN];
 uint32 tbInputData[MAX_INPUT_CMDS][MAX_CMD_LEN];
 uint32 tbOutputCount = 0;
 uint32 tbInputCount = 0;
@@ -45,7 +45,7 @@ int main() {
     testSimulationSetup();
 
     // Then repeat these commands every time step
-    for (int i = 0; i < 3; i++ ) {
+    for (int i = 0; i < 2000; i++ ) {
 		testNeighbourSearch();
 		simulateNeighbourResponse();
 		testCalcNextBoidPos();
@@ -114,7 +114,7 @@ void testSimulationSetup() {
     tbDataLength = 17;
 
     uint32 newID;
-    uint32 initialBoidCount = 10;
+    uint32 initialBoidCount = 20;
     uint32 distinctNeighbourCount = 1;
 
     // BoidCPU #3
@@ -257,12 +257,15 @@ void simulateNeighbourResponse() {
 	tbData[26] = 5242960;
 	tbData[27] = 29 + 10;
 
-//	tbCreateCommand(28, 99, 4, CMD_NBR_REPLY, tbData);
+	int number = 0 + rand() / (RAND_MAX / (9 - 0) + 1);
+	tbData[0] = 1;
 
-	tbData[0] = 0;
-//	tbData[1] = 3145856;
-//	tbData[2] = 5242960;
-//	tbData[3] = 30 + 10;
+	tbCreateCommand(1 + (number * 3), 99, 4, CMD_NBR_REPLY, tbData);
+
+	tbData[0] = 1;
+	tbData[1] = 3145856;
+	tbData[2] = 5242960;
+	tbData[3] = 30 + 10;
 
 	tbCreateCommand(1, 99, 4, CMD_NBR_REPLY, tbData);
 }
@@ -345,6 +348,14 @@ void processNeighbourReply() {
 
 		Vector v = Vector(((int32_fp)((int32)velocity >> 16)) >> 4,
 				((int32_fp)((int16)velocity)) >> 4);
+
+		if ((v.x > MAX_VELOCITY) || (v.x < -MAX_VELOCITY)) {
+			std::cerr << "ERROR: x vel" << std::endl;
+		}
+
+		if ((v.y > MAX_VELOCITY) || (v.y < -MAX_VELOCITY)) {
+			std::cerr << "ERROR: y vel" << std::endl;
+		}
 
         Boid b = Boid((uint16)tbInputData[tbInputCount][CMD_HEADER_LEN + (BOID_DATA_LENGTH * i) + 3], p, v);
         tbBoids[i] = b;
