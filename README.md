@@ -1,5 +1,5 @@
-FPGA Flocking Birds Simulator
-=============================
+FPGA Implementation of Flocking Birds
+=====================================
 
 A final-year university project to produce a scalable flocking birds simulator implemented across multiple FPGAs outputting to a HD monitor. The simulation is based on the flocking birds algorithm proposed by [Craig Reynolds](http://www.red3d.com/cwr/boids/).
 
