@@ -1275,44 +1275,107 @@ void Boid::printBoidInfo() {
 }
 
 //==============================================================================
-// Vector ======================================================================
+// Vector Class ================================================================
 //==============================================================================
 
-// Constructors ////////////////////////////////////////////////////////////////
+/******************************************************************************/
+/*
+ * Constructor for a vector when no initial values for the vector components 
+ * are supplied. Here, the components are initialised to 0. 
+ *
+ * @param	None
+ *
+ ******************************************************************************/
 Vector::Vector() {
 	x = 0;
 	y = 0;
 }
 
+/******************************************************************************/
+/*
+ * Constructor for a 2-dimensional vector when the initial values for the vector 
+ * components are supplied. 
+ *
+ * @param	x_	The initial x-value of the vector
+ * @param	y_	The initial y-value of the vector
+ *
+ ******************************************************************************/
 Vector::Vector(int16_fp x_, int16_fp y_) {
 	x = x_;
 	y = y_;
 }
 
-// Basic Operations ////////////////////////////////////////////////////////////
+/******************************************************************************/
+/*
+ * Adds the supplied value to the current vector. 
+ *
+ * @param	n	The value to add to the current vector
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Vector::add(Vector v) {
 	x = x + v.x;
 	y = y + v.y;
 }
 
+/******************************************************************************/
+/*
+ * Multiplies the current vector by the supplied value. Multiplication in 
+ * hardware can be expensive, but is used here as it is less expensive when 
+ * using fixed point values. 
+ *
+ * @param	n	The value to multiply the current vector by
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Vector::mul(int16_fp n) {
 	x = x * n;
 	y = y * n;
 }
 
-// Input is always positive
+/******************************************************************************/
+/*
+ * Divides the current vector by the supplied value. Ensure that the input is 
+ * always positive. Division in hardware is typically expensive, but is used 
+ * here as it is less expensive when using fixed point values. 
+ *
+ * @param	n	The value to divide the current vector by
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Vector::div(int16_fp n) {
 	x = x / n;
 	y = y / n;
 }
 
-// Static Operations /////////////////////////////////////////////////////////
+/******************************************************************************/
+/*
+ * Subtracts two vectors and returns the result.
+ *
+ * @param	v1	One of the vectors to subtract
+ * @param	v2	The other vector to subtract
+ *
+ * @return 		The difference between the two input vectors
+ *
+ ******************************************************************************/
 Vector Vector::sub(Vector v1, Vector v2) {
 	return Vector(v1.x - v2.x, v1.y - v2.y);
 }
 
-// Calculate the squared distance between two vectors - used to avoid use of
-// doubles and square roots, which are expensive in hardware.
+/******************************************************************************/
+/*
+ * Calculates the squared distance between two vectors - used to avoid use of
+ * doubles and square roots, which are expensive in hardware.
+ *
+ * @param	v1	One of the vectors to determine the distance between
+ * @param	v2	The other vector to determine the distance between
+ *
+ * @return 		The squared distance between the two input vectors
+ *
+ ******************************************************************************/
 int32_fp Vector::squaredDistanceBetween(Vector v1, Vector v2) {
 	int32_fp xPart = v1.x - v2.x;
 	int32_fp yPart = v1.y - v2.y;
@@ -1320,17 +1383,46 @@ int32_fp Vector::squaredDistanceBetween(Vector v1, Vector v2) {
 	return (xPart*xPart) + (yPart*yPart);
 }
 
-// Advanced Operations /////////////////////////////////////////////////////////
+/******************************************************************************/
+/*
+ * Calculate the magnitude of the current vector. Typically uses the square 
+ * root operation, which is expensive in hardware. Here, a fixed point square 
+ * root operation is used, which is less expensive than an integer version. 
+ *
+ * @param	None
+ *
+ * @return 		The magnitude of the current vector. 
+ *
+ ******************************************************************************/
 int16_fp Vector::mag() {
 	int32_fp result = (x*x + y*y);
 	return hls::sqrt(result);
 }
 
+/******************************************************************************/
+/*
+ * Set the magnitude (length) of the current vector to the supplied value.
+ *
+ * @param	newMag	The value to set the magnitude of the vector to
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Vector::setMag(int16_fp newMag) {
 	normalise();
 	mul(newMag);
 }
 
+/******************************************************************************/
+/*
+ * Limit the length of a vector to the specified value. If the length of the 
+ * vector is less than this value, the vector remains unchanged. 
+ *
+ * @param	max	The value to limit the vector to
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 #ifndef REDUCED_LUT_USAGE
 void Vector::limit(int16_fp max) {
 	int16_fp m = mag();
@@ -1340,6 +1432,18 @@ void Vector::limit(int16_fp max) {
 }
 #endif
 
+/******************************************************************************/
+/*
+ * Normalises the current vector. This creates a unit vector (length of 1) that  
+ * has the same direction as the original vector. 
+ *
+ * @TODO	If the vector is of length 0, leave the vector unchanged
+ * 
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Vector::normalise() {
 	int16_fp magnitude = mag();
 
