@@ -1151,9 +1151,18 @@ void printCommand(bool send, uint32 *data) {
 ////////////////////////////////////////////////////////////////////////////////
 
 //==============================================================================
-// Boid ========================================================================
+// Boid Class ==================================================================
 //==============================================================================
 
+/******************************************************************************/
+/*
+ * The constructor for the Boid class used when no initial values for the boid 
+ * parameters are supplied. In this situation, all parameters are initialised 
+ * to 0.
+ *
+ * @param	None
+ *
+ ******************************************************************************/
 Boid::Boid() {
 	id = 0;
 
@@ -1164,6 +1173,16 @@ Boid::Boid() {
 	boidNeighbourCount = 0;
 }
 
+/******************************************************************************/
+/*
+ * The constructor for the Boid class used when initial values for the boid 
+ * parameters are supplied. 
+ *
+ * @param	_boidID         The ID of the boid
+ * @param	initPosition    The (absolute) initial position of the boid
+ * @param	initVelocity    The initial velocity of the boid
+ *
+ ******************************************************************************/
 Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
 	id = _boidID;
 
@@ -1177,6 +1196,19 @@ Boid::Boid(uint16 _boidID, Vector initPosition, Vector initVelocity) {
 	printBoidInfo();
 }
 
+/******************************************************************************/
+/*
+ * Updates the position of the current boid by applying the alignment, cohesion 
+ * and separation behaviours defined by Craig Reynolds. 
+ * 
+ * The actual implementation used is based examples in 'The Nature of Code' by 
+ * Daniel Shiffman: http://natureofcode.com/book/chapter-6-autonomous-agents/
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Boid::update(void) {
 	std::cout << "Updating boid #" << id << std::endl;
 
@@ -1202,6 +1234,23 @@ void Boid::update(void) {
 	printBoidInfo();
 }
 
+/******************************************************************************/
+/*
+ * The alignment behaviour of boids. Leads to boids pointing in the same 
+ * direction as their neighbouring boids. 
+ * 
+ * If the logic of the implementation needs reducing the resulting steering 
+ * vector is not limited in terms of turning force. This causes the boids to 
+ * turn instantaneously rather than gradually.  
+ * 
+ * Based examples in 'The Nature of Code' by Daniel Shiffman: 
+ *  http://natureofcode.com/book/chapter-6-autonomous-agents/
+ *
+ * @param	None
+ *
+ * @return 	        A steering vector indicating the change needed to align
+ *
+ ******************************************************************************/
 Vector Boid::align(void) {
 	Vector total;
 
@@ -1220,6 +1269,23 @@ Vector Boid::align(void) {
 	return steer;
 }
 
+/******************************************************************************/
+/*
+ * The separation behaviour of boids. Leads to boids moving away from one 
+ * another if they are too close to any neighbouring boids. 
+ * 
+ * If the logic of the implementation needs reducing the resulting steering 
+ * vector is not limited in terms of turning force. This causes the boids to 
+ * turn instantaneously rather than gradually.  
+ * 
+ * Based examples in 'The Nature of Code' by Daniel Shiffman: 
+ *  http://natureofcode.com/book/chapter-6-autonomous-agents/
+ *
+ * @param	None
+ *
+ * @return 	        A steering vector indicating the change needed to separate
+ *
+ ******************************************************************************/
 Vector Boid::separate(void) {
 	Vector total;
 	Vector diff;
@@ -1241,6 +1307,23 @@ Vector Boid::separate(void) {
 	return steer;
 }
 
+/******************************************************************************/
+/*
+ * The cohesion behaviour of boids. Leads to boids grouping by making each boid 
+ * move towards the centre of mass of its neighbouring boids. 
+ * 
+ * If the logic of the implementation needs reducing the resulting steering 
+ * vector is not limited in terms of turning force. This causes the boids to 
+ * turn instantaneously rather than gradually.  
+ * 
+ * Based examples in 'The Nature of Code' by Daniel Shiffman: 
+ *  http://natureofcode.com/book/chapter-6-autonomous-agents/
+ *
+ * @param	None
+ *
+ * @return 	        A steering vector indicating the change needed to cohese
+ *
+ ******************************************************************************/
 Vector Boid::cohesion(void) {
 	Vector total;
 
@@ -1260,11 +1343,40 @@ Vector Boid::cohesion(void) {
 
 }
 
+/******************************************************************************/
+/*
+ * Set the neighbour details for the current boid. Used when the neighbours of 
+ * a boid are being calculated (which is done every simulation step). 
+ * 
+ * It was not possible for a Boid instance to contain a list of its neighbours. 
+ * Therefore, each BoidCPU contains a list of neighbours for each boid it 
+ * contains. Each boid needs to know at what index its neighbours are held in 
+ * this structure and how many neighbours it has (to avoid reading beyond the 
+ * edge of the arrary). This method is used to supply the current boid with 
+ * that information. 
+ *
+ * @param	neighbourIndex	The index of the current boid's neighbours in the 
+ *                          parent BoiCPU's neighbour data structure
+ * @param	neighbourCount	The number of neighbours the current boid has
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Boid::setNeighbourDetails(uint8 neighbourIndex, uint8 neighbourCount) {
 	boidNeighbourIndex = neighbourIndex;
 	boidNeighbourCount = neighbourCount;
 }
 
+/******************************************************************************/
+/*
+ * Print out the state of the current boid to standard output. Used during 
+ * debugging, not possible when synthesised to FPGA core.
+ *
+ * @param	None
+ *
+ * @return 	None
+ *
+ ******************************************************************************/
 void Boid::printBoidInfo() {
 	std::cout << "==========Info for Boid " << id << "==========" << std::endl;
 	std::cout << "Boid Position: [" << position.x << " " << position.y << "]"
