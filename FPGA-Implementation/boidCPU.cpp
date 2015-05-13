@@ -819,9 +819,9 @@ void commitAcceptedBoids() {
 
 /******************************************************************************/
 /*
- * Description
+ * A debug function used to print the state of a BoidCPUs boids.
  *
- * @param	boidIDs			Description
+ * @param	None
  *
  * @return 	None
  *
@@ -837,9 +837,11 @@ void printStateOfBoidCPUBoids() {
 
 /******************************************************************************/
 /*
- * Description
+ * Sends an acknowledgement (ACK) message with the current state of the 
+ * simulation. Used by the BoidMaster to synchronise the state of the 
+ * simulation.
  *
- * @param	boidIDs			Description
+ * @param	type		The state of the simulation to acknowledge
  *
  * @return 	None
  *
@@ -851,11 +853,12 @@ void sendAck(uint8 type) {
 
 /******************************************************************************/
 /*
- * Description
+ * Parses a recived boid that was packed for transmission. Returns a Boid 
+ * instance derived from the packed boid data. 
  *
- * @param	boidIDs			Description
+ * @param	offset		The start of the boid data in the input array
  *
- * @return 	None
+ * @return 	            A Boid instance of the parsed boid data
  *
  ******************************************************************************/
 Boid parsePackedBoid(uint8 offset) {
@@ -880,9 +883,18 @@ Boid parsePackedBoid(uint8 offset) {
 
 /******************************************************************************/
 /*
- * Description
+ * Uses bitshifting to reduce the amount of data that is communicated. This is 
+ * done by packing the boid data, which is currently 16 bits each, into the 32 
+ * bit fields used when communicating over the AXI-bus. Splits the boids of a 
+ * BoidCPU across multiple messages if they do not fit in one and can encode 
+ * negative and fixed-point values. If the BoidCPU contains no boids, an empty 
+ * message is sent so the recipient knows this. 
+ * 
+ * TODO: Currently sends all boids of a BoidCPU (for neighbour search and 
+ * BoidGPU update), enhance to specify what boids to send (for boid transfer)
  *
- * @param	boidIDs			Description
+ * @param	to			The recipient of the message
+ * @param	msg_type	The type of message to send
  *
  * @return 	None
  *
@@ -981,9 +993,16 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
 
 /******************************************************************************/
 /*
- * Description
+ * Takes data to be transmitted and places it in an queue of data. This queue 
+ * is processed, i.e. the elements sent, when the control of the program 
+ * returns to the top-level function. This is because no other function has 
+ * access to the input and output ports. If the output queue is full, the 
+ * new data is not added.
  *
- * @param	boidIDs			Description
+ * @param	len			The length of the message body
+ * @param	to			The recipient of the message
+ * @param	type		The type of the message (defined in boidCPU.h)
+ * @param	data		The message data
  *
  * @return 	None
  *
@@ -1007,20 +1026,17 @@ void generateOutput(uint32 len, uint32 to, uint32 type, uint32 *data) {
 	}
 }
 
-/**
+/******************************************************************************/
+/*
  * Iterate through the list of neighbouring BoidCPUs to determine whether the
  * message received was from one of the neighbours. Return true if it was and
  * return false otherwise.
  *
  * TODO: Would it be better to return as soon as true is set?
- */
-/******************************************************************************/
-/*
- * Description
  *
- * @param	boidIDs			Description
+ * @param	None
  *
- * @return 	None
+ * @return 	        True if the message was from a neighbour, false otherwise
  *
  ******************************************************************************/
 bool fromNeighbour() {
@@ -1037,14 +1053,12 @@ bool fromNeighbour() {
 	return result;
 }
 
-/**
- * Parses the supplied command and prints it out to the terminal
- */
 /******************************************************************************/
 /*
- * Description
+ * Parses a message and prints it out to the standard output.
  *
- * @param	boidIDs			Description
+ * @param	send			True if the message is being sent, false otherwise
+ * @param	data			The array containing the message
  *
  * @return 	None
  *
