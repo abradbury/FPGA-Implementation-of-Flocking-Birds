@@ -120,6 +120,7 @@
 #define SOUTHWEST               6   // Index of the BoidCPU to the southwest
 #define WEST                    7   // Index of the BoidCPU to the west
 
+// Indexes used when bitshifting the edge changes for load balancing a BoidCPU
 #define NORTH_IDX   12          // The index of the north edge change (load bal)
 #define EAST_IDX    8           // The index of the east edge change (load bal)
 #define SOUTH_IDX   4           // The index of the south edge change (load bal)

@@ -727,10 +727,10 @@ bool isBoidBeyondSingle(Boid boid, uint8 edge) {
 /*
  * Checks if the BoidCPU has a neighbour at the specified bearing
  *
- * @param   bearing From NORTHWEST (0) around a compass to WEST (7)
+ * @param   bearing     From NORTHWEST (0) around a compass to WEST (7)
  *
- * @return          True if the BoidCPU has a neighbour at the specified
- *                  bearing, false otherwise
+ * @return              True if the BoidCPU has a neighbour at the specified
+ *                       bearing, false otherwise
  *
  ******************************************************************************/
 bool isNeighbourTo(uint16 bearing) {
@@ -881,7 +881,7 @@ void printStateOfBoidCPUBoids() {
  * simulation. Used by the BoidMaster to synchronise the state of the 
  * simulation.
  *
- * @param   type        The state of the simulation to acknowledge
+ * @param   type    The state of the simulation to acknowledge
  *
  * @return  None
  *
@@ -896,9 +896,9 @@ void sendAck(uint8 type) {
  * Parses a recived boid that was packed for transmission. Returns a Boid 
  * instance derived from the packed boid data. 
  *
- * @param   offset      The start of the boid data in the input array
+ * @param   offset  The start of the boid data in the input array
  *
- * @return              A Boid instance of the parsed boid data
+ * @return          A Boid instance of the parsed boid data
  *
  ******************************************************************************/
 Boid parsePackedBoid(uint8 offset) {
@@ -1039,10 +1039,10 @@ void packBoidsForSending(uint32 to, uint32 msg_type) {
  * access to the input and output ports. If the output queue is full, the 
  * new data is not added.
  *
- * @param   len         The length of the message body
- * @param   to          The recipient of the message
- * @param   type        The type of the message (defined in boidCPU.h)
- * @param   data        The message data
+ * @param   len     The length of the message body
+ * @param   to      The recipient of the message
+ * @param   type    The type of the message (defined in boidCPU.h)
+ * @param   data    The message data
  *
  * @return  None
  *
@@ -1097,13 +1097,13 @@ bool fromNeighbour() {
 /*
  * Parses a message and prints it out to the standard output.
  *
- * @param   send            True if the message is being sent, false otherwise
- * @param   data            The array containing the message
+ * @param   send    True if the message is being sent, false otherwise
+ * @param   data    The array containing the message
  *
  * @return  None
  *
  ******************************************************************************/
-void printCommand(bool send, uint32 *data) {
+ void printCommand(bool send, uint32 *data) {
     if (send) {
         if (data[CMD_TO] == CONTROLLER_ID) {
             std::cout << "-> TX, BoidCPU #" << boidCPUID << " sent command to controller: ";

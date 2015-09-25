@@ -24,6 +24,7 @@
 // #define LOAD_BALANCING_ENABLED   true    // Define to enable load balancing
 
 // TODO: Test with load balancing commented out
+// TODO: Move definations to header file
 
 #define MAX_BOIDCPUS            32      // TODO: Decide on a suitable value
 #define MAX_GATEKEEPERS         16      // TODO: Decide on a suitable value
@@ -31,6 +32,7 @@
 #define SIMULATION_WIDTH        1280    // The pixel width of the simulation
 #define SIMULATION_HEIGHT       720     // The pixel height of the simulation
 
+// Indexes used when bitshifting the edge changes for load balancing a BoidCPU
 #define NORTH_IDX   12          // The index of the north edge change (load bal)
 #define EAST_IDX    8           // The index of the east edge change (load bal)
 #define SOUTH_IDX   4           // The index of the south edge change (load bal)
@@ -67,16 +69,7 @@ void printCommand(bool send, uint32 *data);
 void createCommand(uint32 len, uint32 to, uint32 from, uint32 type,
         uint32 *data);
 
-/**************************** Variable Definitions ****************************/
-
-uint32 outputData[MAX_OUTPUT_CMDS][MAX_CMD_LEN];
-uint32 inputData[MAX_CMD_LEN];
-uint32 outputCount = 0;
-
-uint32 data[MAX_CMD_BODY_LEN];
-uint32 to;
-uint32 from = CONTROLLER_ID;
-uint32 dataLength = 0;
+/**************************** Struct Definitions ****************************/
 
 struct BoidCPU {
     uint8 boidCPUID;
@@ -100,22 +93,40 @@ struct AckStruct {
     bool recieved;
     bool loadBalancing;
 };
+#endif
 
+/**************************** Variable Definitions ****************************/
+
+uint32 outputData[MAX_OUTPUT_CMDS][MAX_CMD_LEN];
+uint32 inputData[MAX_CMD_LEN];
+uint32 outputCount = 0;
+
+uint32 data[MAX_CMD_BODY_LEN];
+uint32 to;
+uint32 from = CONTROLLER_ID;
+uint32 dataLength = 0;
+
+#ifdef LOAD_BALANCING_ENABLED
 AckStruct ackList[MAX_GATEKEEPERS];
 #endif
 
-uint8 state = CMD_PING;
-uint8 ackCount = 0;
+uint8 state = CMD_PING;                     // The current simulation state
+uint8 ackCount = 0;                         // The number of ACKs received
 uint8 gatekeeperCount = 0;
 uint8 boidCPUCount = 0;
+
+// Array of BoidCPU structs used to store BoidCPU information during setup and
+// used to calculate how load should be balanced. Ideally, the simulation would
+// be decentralised and the BoidMaster would need not know this information.
 BoidCPU boidCPUs[MAX_BOIDCPUS];
 
-uint12 simulationGridHeight = 0;
-uint12 simulationGridWidth  = 0;
+uint12 simulationGridHeight = 0;            // The simulation height in BoidCPUs
+uint12 simulationGridWidth  = 0;            // The simulation width in BoidCPUs
 uint8 gridAssignment[MAX_BOIDCPUS][MAX_BOIDCPUS];
 
-uint32 boidCount = 100;
+uint32 boidCount = 100;                     // Initial num of simulation boids
 
+// Controls main infinite loop, only false if HLS TestBench is being used
 bool continueOperation = true;
 
 /******************************************************************************/
@@ -226,25 +237,30 @@ void boidMaster(hls::stream<uint32> &input, hls::stream<uint32> &output) {
 
 /******************************************************************************/
 /*
- * Description 
+ * Processes user-inputted data such as simulation parameters (flock size, 
+ * simulation size, flock rule weightings). 
+ * 
+ * TODO: Make more of the parameters user customisable 
  *
- * @param   None    The value to limit the vector to
+ * @param   None
  *
  * @return  None
  *
  ******************************************************************************/
 void processUserData() {
-    // TODO: Create user -> boidMaster process
     boidCount = inputData[CMD_HEADER_LEN + 0];
 
     state = CMD_SIM_SETUP;
     setupSimulation();
 }
 
-/**
+/******************************************************************************/
+/*
  * A ping reply will be sent by the Gatekeeper responsible for the BoidCPUs it
  * serves. The reply will contain the number of BoidCPUs that are served by the
- * Gatekeeper.
+ * Gatekeeper. The Gatekeepers know the number of BoidCPUs they control as the 
+ * AXI stream to each BoidCPU has to be hard-coded/configured before the 
+ * bitstream is generated.  
  *
  * First, a BoidCPU is created for each BoidCPU served by the Gatekeeper. These
  * created BoidCPUs are linked with the Gatekeeper's ID and given an ID based
@@ -252,7 +268,12 @@ void processUserData() {
  *
  * Then, when all the ping replies have been received (how to know this is
  * another matter), the simulation setup is calculated.
- */
+ *
+ * @param   None
+ *
+ * @return  None
+ *
+ ******************************************************************************/
 void processPingReply() {
 #ifdef LOAD_BALANCING_ENABLED
     ackList[gatekeeperCount].gatekeeperID = inputData[CMD_FROM];
@@ -270,7 +291,8 @@ void processPingReply() {
     }
 }
 
-/**
+/******************************************************************************/
+/*
  * Sets up the simulation based on the discovered BoidCPUs.
  *
  * First, the initial boid counts for each BoidCPU is calculated and supplied
@@ -281,11 +303,29 @@ void processPingReply() {
  * done by finding the closest two multiples of the boidCPU count. The larger
  * multiple is assigned to the width as most monitors are wider than tall.
  *
- * Then, the coordinates are defined.
+ * Then, the pixel coordinates of each BoidCPU are calculated, with BoidCPUs on 
+ * the last row/column taking any remainder if the division is not exact. If 
+ * any of the BoidCPUs would be minimal after this initialisation, ensure the 
+ * BoidMaster knows about this.
+ * 
+ * A BoidCPU's neighbouring BoidCPUs are calculated an each BoidCPU is supplied 
+ * with a list of neighbour IDs. Ideally those BoidCPUs served by the same
+ * Gatekeeper will be placed as neighbours. The index of the list corresponds 
+ * to the location of the neighbour in relation to the BoidCPU:
+ * 
+ *    [0        , 1    , 2        , 3   , 4        , 5    , 6        , 7   ]
+ *    [NORTHWEST, NORTH, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST]
  *
- * Finally, neighbours are supplied. Ideally those BoidCPUs served by the same
- * Gatekeeper will be placed as neighbours.
- */
+ * Finally, the number of distinct neighbours is calculated for each BoidCPU. 
+ * This is needed on small simulations (number of BoidCPUs < 8) as BoidCPUs 
+ * wait until they have received messages from all neighbours during the boid
+ * neighbour stage of the simulation.
+ *
+ * @param   None
+ *
+ * @return  None
+ *
+ ******************************************************************************/
 void setupSimulation() {
     // Define initial boids counts
     uint12 boidsPerBoidCPU = boidCount / boidCPUCount;
@@ -432,6 +472,19 @@ void setupSimulation() {
     issueSetupInformation();
 }
 
+/******************************************************************************/
+/*
+ * Determines the two cloest multiples of a number. For example, the closest 
+ * multiples of 12 are 3 and 4. Used to determine how the BoidCPUs should be 
+ * arranged on the simulation grid. The larger value is assigned to the width. 
+ *
+ * @param   height  A pointer to where the first resulting digit will be stored
+ * @param   width   A pointer to where the second resulting digit will be stored
+ * @param   number  The number to find the closest multiples of
+ *
+ * @return  None
+ *
+ ******************************************************************************/
 void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
     uint8 difference = -1;
 
@@ -449,10 +502,16 @@ void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
     }
 }
 
-/**
+/******************************************************************************/
+/*
  * Process a received ACK. Typically this moves the simulation on to the next
- * stage. When an ACK is received mark that gatekeeper as having send its ACK
- * and increment the ACK counter.
+ * stage when the ACKs for all gatekeepers have been received. When an ACK is 
+ * received mark that gatekeeper as having sent its ACK and increment the ACK 
+ * counter.
+ * 
+ * The gatekeepers, receive ACKs from their BoidCPUs and issue a collective ACK 
+ * to the BoidMaster when they have received all the ACKs from their BoidCPUs. 
+ * This reduces the communications costs of the simulation. 
  *
  * In load balancing, BoidCPUs send an ACK if they do not need to load balance.
  * A BoidCPU that does need to load balance will send a load balance request,
@@ -463,9 +522,13 @@ void closestMultiples(uint12 *height, uint12 *width, uint8 number) {
  * messages have been received, this ACK is only counted if the gatekeeper it
  * is from does not have any affected BoidCPUs. Otherwise, it is ignored. For
  * gatekeepers that have affected BoidCPUs, another ACK will be sent.
- */
+ *
+ * @param   None
+ * 
+ * @return  None
+ *
+ ******************************************************************************/
 void processAck() {
-
     if (inputData[CMD_FROM] == BOIDGPU_ID) {
         state = MODE_CALC_NBRS;
         issueCalcNbrsMode();
@@ -529,15 +592,36 @@ void processAck() {
     }
 }
 
+/******************************************************************************/
+/*
+ * Process a load balancing request from a BoidCPU and inform all affected 
+ * BoidCPUs of any boundary changes. The edge/bound changes for a BoidCPU are 
+ * encoded in a 16-bit integer to reduce communciations costs. 
+ * 
+ * Currently, a simplistic, centralised load balancing approach is used. Here, 
+ * when a BoidCPU signals that it is overloaded, the BoidMaster instructs it 
+ * to reduce its free edges by 1 step size. A free edge is an edge that is not 
+ * common with the simulation edges. The step size the size of a boid's vision 
+ * radius. As an example, in a simulation with 4x4 BoidCPUs, if the BoidCPU in 
+ * the top left decreases its free edges (right and bottom), all other BoidCPUs 
+ * on the same row and column also need to adjust their bounds. This is not 
+ * scalable, but ensures that a BoidCPU will always have a single neighbour 
+ * beyond each edge, reducing the problem complexity. 
+ * 
+ * For a description of how load balancing was incorporated into the ACK model 
+ * of synchronisation used in this simulation, please see the comments for the 
+ * processAck() method. 
+ * 
+ * TODO: Only able to deal with a single overloaded BoidCPU per time step
+ * TODO: Does not utilise the BoidCPU minimal information
+ *
+ * @param   None
+ * 
+ * @return  None
+ *
+ ******************************************************************************/
 #ifdef LOAD_BALANCING_ENABLED
-/**
- * Calculate the boundary changes for the overloaded BoidCPU and the other
- * BoidCPUs that are affected by this change. A step size is the same as the
- * vision radius of a boid.
- */
 void processLoadData() {
-    // TODO: Utilise the minimal BoidCPU information
-
     // Get info about BoidCPU making request
     uint8 x = boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].x;
     uint8 y = boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].y;
@@ -575,7 +659,6 @@ void processLoadData() {
 
     // Determine changes for other, affected BoidCPUs
     for (int i = 0; i < boidCPUCount; i++) {
-
         int16 affectedBoidCPUEdgeChanges = 0;
         std::cout << "BoidCPU #" << boidCPUs[i].boidCPUID << ": ";
 
@@ -665,13 +748,21 @@ void processLoadData() {
     }
 }
 
-/**
+/******************************************************************************/
+/*
  * When a BoidCPU reports that it is minimal, update the BoidMaster's knowledge
  * of the BoidCPU. This is used in load balancing when determining the bound
  * changes to do to balance the load.
  *
  * 0 = minimal width, 1 = minimal height, 2 = minimal height and width
- */
+ * 
+ * TODO: First 'if' conditional should be negated as matching 0 (width)?
+ *
+ * @param   None
+ * 
+ * @return  None
+ *
+ ******************************************************************************/
 void updateMinimalBoidCPUsList() {
     if (inputData[CMD_HEADER_LEN]) {
         boidCPUs[inputData[CMD_FROM] - FIRST_BOIDCPU_ID].minimalWidth = true;
@@ -876,10 +967,10 @@ void killSimulation() {
  * access to the input and output ports. If the output queue is full, the 
  * new data is not added.
  *
- * @param   len         The length of the message body
- * @param   to          The ID of the recipient of the message
- * @param   type        The type of the message (defined in boidMaster.h)
- * @param   data        The message data
+ * @param   len     The length of the message body
+ * @param   to      The ID of the recipient of the message
+ * @param   type    The type of the message (defined in boidMaster.h)
+ * @param   data    The message data
  *
  * @return  None
  *
@@ -907,8 +998,8 @@ void createCommand(uint32 len, uint32 to, uint32 from, uint32 type, uint32 *data
 /*
  * Parses a message and prints it out to the standard output.
  *
- * @param   send            True if the message is being sent, false otherwise
- * @param   data            The array containing the message
+ * @param   send    True if the message is being sent, false otherwise
+ * @param   data    The array containing the message
  *
  * @return  None
  *
