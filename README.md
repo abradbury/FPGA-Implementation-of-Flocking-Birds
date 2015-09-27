@@ -5,7 +5,7 @@ A scalable multi-FPGA implementation of flocking birds developed for a final yea
 
 Based on the *boids* model of flocking birds presented by [Craig Reynolds](http://www.red3d.com/cwr/boids/) and built on the scalability optimisations developed by [Andrews et al.](http://www-users.cs.york.ac.uk/susan/bib/ss/nonstd/alife08a.pdf) The simulation space is segemented into regions that are managed by *BoidCPU*s. As a boid moves around the regions it is transferred between BoidCPUs. Each BoidCPU is responsible for the updating and control of anny boids that lie within its bounds. The whole simulation is controlled using the BoidMaster. The gatekeeper component lies in the MicroBlaze processor of each FPGA and is responsibel for routing or dropping messages, as appropriate.
 
-![GIF showing 30 flocking on 1 BoidCPU on 1 FPGA](../doc/img/flocking.gif)
+![GIF showing 30 flocking on 1 BoidCPU on 1 FPGA](doc/img/flocking.gif)
 
 Python Simulator
 ----------------
